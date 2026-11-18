@@ -21,8 +21,8 @@ export const dustSettings = {
   enabled: true,
   /** 濃度：粒子數量與不透明度的倍率 */
   density: 1,
-  /** 大小：粒子大小的倍率 */
-  size: 1,
+  /** 大小：粒子大小的倍率（1 = 下面寫的原始值） */
+  size: 0.6,
   /** 風速：粒子速度的倍率 */
   wind: 1,
 };

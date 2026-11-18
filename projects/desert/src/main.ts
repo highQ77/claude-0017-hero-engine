@@ -10,7 +10,9 @@ import { Transform, create, load, previewScene } from '@engine/scene';
 import { MeshRenderer, OrbitControl } from '@engine/render';
 import { assets, ecs, engine, scenes } from './engine';
 import { spawnDust } from './dust';
+import { addGodrays } from './godrays';
 import { spawnGhosts } from './ghosts';
+import { animateSails } from './sails';
 import { createSurface } from './ground';
 import { syncFxPanel } from './postfx-panel';
 
@@ -70,6 +72,8 @@ await Promise.all(
     old.dispose();
   }),
 );
+// 船帆隨風擺動（sails.ts）
+for (const mesh of meshes) if (bakedName(mesh) === 'Ship_Sails') animateSails(mesh);
 
 // 場景：內容在場景檔 public/scenes/main.xml（攝影機、燈光、沙漠幽靈船模型 models/ghost_ship_desert/ghost_ship_desert.glb）；存檔後開著的遊戲會自動重新載入
 // 地表射線（幽靈的影子用）：地形整理成高度圖，船身、船帆的三角形轉成世界座標（ground.ts）
@@ -108,6 +112,8 @@ scenes.register(
           fog: false, // 月亮在霧的範圍外，不能被霧蓋掉
         });
         spawned.add('moon', FaceCamera, { camera: spawned.entities.get('camera') ?? null });
+        // 月光光束：從船身、桅杆、船帆的縫隙透出來的放射狀光束（godrays.ts）
+        addGodrays(world, moon!);
       }
       // 幽靈：在船的周圍飄來飄去（ghosts.ts）
       // 影子沿著場景的「太陽」平行光照射的方向（它的 -Z）投在地面、船身上；在場景編輯器轉動太陽，影子方向也會跟著變

@@ -14,8 +14,8 @@
 
   <UILabel fontSize="28" fontWeight="bold" color="#ffffff">desert</UILabel>
 
-  <!-- ───────── 右：後製調控面板 ───────── -->
-  <UILayout id="fxPanel" position="absolute" top="16" right="16" bottom="16" width="300" padding="12" gap="10"
+  <!-- ───────── 右：後製調控面板（預設收合，按右上角「後製調整」展開） ───────── -->
+  <UILayout id="fxPanel" hidden="true" position="absolute" top="16" right="16" bottom="16" width="300" padding="12" gap="10"
             background="rgba(12,15,24,0.88)" radius="10">
     <UILayout dir="h" align="center" gap="6">
       <UILabel flex="1" fontSize="16" fontWeight="bold" color="#ffffff">後製調整</UILabel>
@@ -107,6 +107,18 @@
         <UISlider id="aoIntensity" min="0" max="3" step="0.05" showValue="true" onInput="fx"/>
       </UILayout>
 
+      <!-- 月光光束（自訂後製，設定在 src/godrays.ts） -->
+      <UILayout style="group">
+        <UIToggle id="godrays" text="月光光束（god rays）" onChange="godrays"/>
+        <UILabel style="hint">月光從船身、船帆的縫隙透出來</UILabel>
+        <UILabel style="field">強度</UILabel>
+        <UISlider id="godrayIntensity" min="0" max="2" step="0.01" showValue="true" onInput="godrays"/>
+        <UILabel style="field">長度</UILabel>
+        <UISlider id="godrayLength" min="0" max="1" step="0.01" showValue="true" onInput="godrays"/>
+        <UILabel style="field">衰減</UILabel>
+        <UISlider id="godrayDecay" min="0.9" max="1" step="0.001" showValue="true" onInput="godrays"/>
+      </UILayout>
+
       <!-- 沙塵（不是後製，是粒子；設定在 src/dust.ts） -->
       <UILayout style="group">
         <UIToggle id="dust" text="沙塵" onChange="dust"/>
@@ -135,5 +147,5 @@
   </UILayout>
 
   <!-- 收合後只留一顆按鈕 -->
-  <UIButton id="fxShow" text="後製調整" position="absolute" top="16" right="16" hidden="true" onClick="fxShow"/>
+  <UIButton id="fxShow" text="後製調整" position="absolute" top="16" right="16" onClick="fxShow"/>
 </UI>

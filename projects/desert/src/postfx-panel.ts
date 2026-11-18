@@ -9,6 +9,7 @@ import { Color } from '@engine/math';
 import type { PostFxSettings } from '@engine/postfx';
 import type { UICheckBox, UILabel, UISelect, UISlider } from '@engine/ui2d';
 import { DUST_DEFAULTS, dustSettings } from './dust';
+import { GODRAY_DEFAULTS, godraySettings } from './godrays';
 import { engine, postfx, ui } from './engine';
 
 type S = PostFxSettings;
@@ -85,6 +86,7 @@ function syncControls(): void {
   ui.require<UISlider>('tintAmount').value = amount;
   showTint();
   syncDust();
+  syncGodrays();
 }
 
 // ───────── 沙塵（粒子，不是後製；dust.ts 的 dustSettings） ─────────
@@ -101,6 +103,22 @@ function applyDust(): void {
   dustSettings.density = ui.require<UISlider>('dustDensity').value;
   dustSettings.size = ui.require<UISlider>('dustSize').value;
   dustSettings.wind = ui.require<UISlider>('dustWind').value;
+}
+
+// ───────── 月光光束（自訂後製；godrays.ts 的 godraySettings） ─────────
+
+function syncGodrays(): void {
+  ui.require<UICheckBox>('godrays').checked = godraySettings.enabled;
+  ui.require<UISlider>('godrayIntensity').value = godraySettings.intensity;
+  ui.require<UISlider>('godrayLength').value = godraySettings.length;
+  ui.require<UISlider>('godrayDecay').value = godraySettings.decay;
+}
+
+function applyGodrays(): void {
+  godraySettings.enabled = ui.require<UICheckBox>('godrays').checked;
+  godraySettings.intensity = ui.require<UISlider>('godrayIntensity').value;
+  godraySettings.length = ui.require<UISlider>('godrayLength').value;
+  godraySettings.decay = ui.require<UISlider>('godrayDecay').value;
 }
 
 /** 控制項 → postfx.settings（色偏只在動到色偏滑桿時才改，避免換算誤差改掉場景檔原本的顏色） */
@@ -145,9 +163,11 @@ ui.setHandlers({
       else target[k] = v;
     }
     Object.assign(dustSettings, DUST_DEFAULTS);
+    Object.assign(godraySettings, GODRAY_DEFAULTS);
     syncControls();
   },
   dust: () => applyDust(),
+  godrays: () => applyGodrays(),
   fxHide: () => setPanelOpen(false),
   fxShow: () => setPanelOpen(true),
 });

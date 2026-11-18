@@ -20,8 +20,10 @@ const CENTER = new Vector3(3, 0, 0);
 const ORBIT_YAW = MathUtils.degToRad(28);
 /** 幽靈的亮度：超過光暈門檻（場景檔 bloom 的 threshold = 2.5）一點點，身體會帶一圈淡淡的光 */
 const GHOST_BRIGHTNESS = 3;
-/** 影子的大小（公尺，半徑；邊緣是漸層，看起來會小一點） */
-const SHADOW_SIZE = 2.8;
+/** 幽靈的大小（倍率；原本是 1.6） */
+const GHOST_SCALE = 1.1;
+/** 影子的大小（公尺，半徑；邊緣是漸層，看起來會小一點）：跟著幽靈的大小縮放 */
+const SHADOW_SIZE = 2.8 * (GHOST_SCALE / 1.6);
 /** 影子最深的不透明度（幽靈是半透明的，影子也淡一點） */
 const SHADOW_OPACITY = 0.5;
 
@@ -217,7 +219,7 @@ ecs.each('ghost-wander', [Transform, Ghost], (_e, t, g, time) => {
   math.lookAt(t, orbitPoint(g, g.angle + Math.sign(g.speed) * 0.05, ahead));
   // 身體微微伸縮，像在呼吸
   const s = 1 + Math.sin(g.time * 2.4 + g.phase) * 0.06;
-  t.scale.set(1.6 / s, 1.6 * s, 1.6 / s);
+  t.scale.set(GHOST_SCALE / s, GHOST_SCALE * s, GHOST_SCALE / s);
   placeShadow(g, t.position);
 });
 
