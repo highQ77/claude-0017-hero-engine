@@ -1,0 +1,26 @@
+<!--
+  範例：劇情對話
+  用途：疊加在遊戲上（screens.open('dialogue')），半透明背景蓋住整個畫面
+  版面尺寸：滿版（auto × auto），對話框貼齊下方
+  用到：UIImport（共用主題）、UIDialogue（頭像、名字、逐字打字、多樣式文字）＋ UIChoice、UIRichText、UIImage、UIToast
+  點對話框跳過打字／下一句（onNext），選項觸發 onChoose；這個範例把兩者都接到 dialogueNext / dialogueChoose
+-->
+<UI width="auto" height="auto" padding="20" justify="end" align="center" background="rgba(0,0,0,0.4)">
+  <UIImport src="theme.xml"/>
+  <UIToast placement="top"/>
+
+  <UILayout width="96%" maxWidth="680" gap="10">
+    <!-- 目前的任務（膠囊） -->
+    <UILayout style="chip" self="start">
+      <UIIcon name="flag" size="14" color="#9acd32"/>
+      <UIRichText fontSize="13" color="#d4dcc6">任務：[b]森林裡的怪物[/b] · 獎勵 [color=#ffd75e][b]200[/b][/color]</UIRichText>
+      <UIImage src="coin.png" width="18"/>
+    </UILayout>
+    <UIDialogue id="talk" speaker="村長" portrait="banner.svg" autoplay="true" speed="40" nameColor="#ffd75e"
+                onNext="dialogueNext" onChoose="dialogueChoose">勇者，你終於來了！最近[color=#ff6b6b]森林裡的怪物[/color]越來越多，村民都不敢出門……
+      <UIChoice value="accept">交給我吧！</UIChoice>
+      <UIChoice value="reward">有什麼獎勵？</UIChoice>
+      <UIChoice value="leave">我再考慮一下</UIChoice>
+    </UIDialogue>
+  </UILayout>
+</UI>

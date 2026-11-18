@@ -1,0 +1,12 @@
+<!--
+  介面檔：可以用 UI 編輯器（/ui-editor.html）編輯
+  版面尺寸：滿版（auto × auto）；固定大小可以寫 <UI width="800" height="600">，寬滿版高固定可以寫 <UI width="auto" height="300">
+-->
+<UI width="auto" height="auto" padding="24" gap="10" align="start">
+  <UILabel fontSize="28" fontWeight="bold" color="#ffffff">__PROJECT_NAME__</UILabel>
+  <UILabel fontSize="14" color="#b8c0ae">用 Hero Engine 建立的空專案：修改 src/main.ts 與 public/ui/scene.xml 開始製作遊戲（外掛設定在 src/engine.ts）。</UILabel>
+  <UILayout dir="h" gap="10" align="center">
+    <UIButton text="點我" onClick="hello" width="110"/>
+    <UILabel id="clicks" fontSize="14" color="#c8f07a">還沒點過</UILabel>
+  </UILayout>
+</UI>

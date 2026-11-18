@@ -1,0 +1,10 @@
+{
+  // 這個專案的 TypeScript 設定：沿用引擎根目錄的設定（@engine 的路徑、嚴格檢查）。
+  // 單獨用 VS Code 打開這個資料夾時，程式碼提示也找得到 @engine/...
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // import.meta.env、import.meta.glob 等 Vite 功能的型別
+    "types": ["vite/client"]
+  },
+  "include": ["src"]
+}

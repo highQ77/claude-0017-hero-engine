@@ -1,0 +1,222 @@
+/**
+ * 著色器編輯器的預覽：用 three.js 和引擎的 ShaderLibrary（和遊戲同一套），
+ * 節點圖轉成 shaderGraphDefinition 後建立材質，所以預覽看到的就是遊戲裡的樣子。
+ *
+ * - 主預覽：球體、立方體、圓環、平面 3D、平面 2D（滿版），拖曳旋轉、滾輪縮放
+ * - 節點縮圖：共用一個離屏的 three.js 繪製器，每個節點畫一次滿版方塊，再複製到節點上的 2D 畫布
+ */
+import * as THREE from 'three';
+import { ShaderLibrary, type CustomMaterial, type ShaderDefinition } from '../../shaders';
+import { type ShaderGraphFile, ShaderGraphTextures, shaderGraphDefinition } from '../../shaders/graph';
+
+/** 預覽網格 */
+export type PreviewMesh = 'sphere' | 'cube' | 'torus' | 'plane' | 'quad';
+
+/** 預覽網格的選項（選單用） */
+export const PREVIEW_MESHES: readonly [PreviewMesh, string][] = [
+  ['sphere', '球體'],
+  ['cube', '立方體'],
+  ['torus', '圓環'],
+  ['plane', '平面 3D'],
+  ['quad', '平面 2D'],
+];
+
+function geometry(mesh: PreviewMesh): THREE.BufferGeometry {
+  switch (mesh) {
+    case 'cube':
+      return new THREE.BoxGeometry(1.5, 1.5, 1.5, 32, 32, 32);
+    case 'torus':
+      return new THREE.TorusGeometry(0.72, 0.32, 48, 128);
+    case 'plane':
+      return new THREE.PlaneGeometry(2, 2, 160, 160).rotateX(-Math.PI / 2); // 朝上，像地面
+    case 'quad':
+      return new THREE.PlaneGeometry(2, 2);
+    default:
+      return new THREE.SphereGeometry(1, 96, 64);
+  }
+}
+
+/** 編譯錯誤：three.js 編譯失敗時 renderer.debug.onShaderError 收到的訊息 */
+function shaderErrors(gl: WebGLRenderingContext, program: WebGLProgram): string {
+  const parts: string[] = [];
+  for (const s of gl.getAttachedShaders(program) ?? []) {
+    const log = gl.getShaderInfoLog(s)?.trim();
+    if (log)
+      parts.push(`${gl.getShaderParameter(s, gl.SHADER_TYPE) === gl.VERTEX_SHADER ? '頂點' : '片段'}著色器：${log}`);
+  }
+  const link = gl.getProgramInfoLog(program)?.trim();
+  if (link && !parts.length) parts.push(`連結：${link}`);
+  return parts.join('\n');
+}
+
+/** 共用的著色器庫與貼圖（主預覽、縮圖都用） */
+const library = new ShaderLibrary();
+const textures = new ShaderGraphTextures();
+
+/** 節點圖 → 自訂著色器的定義（用預覽共用的貼圖；編輯器的 GLSL 分頁也用這份，只編譯一次） */
+export const graphDefinition = (file: ShaderGraphFile, target?: { nodeId: number; port: string }) =>
+  shaderGraphDefinition(file, target ? `thumb${target.nodeId}` : 'preview', { target, textures });
+
+/** 每幀共用的狀態：時間、滑鼠 */
+export interface PreviewState {
+  time: number;
+  mouse: THREE.Vector2;
+}
+
+/** 主預覽 */
+export class MainPreview {
+  readonly renderer: THREE.WebGLRenderer;
+  private readonly scene = new THREE.Scene();
+  private readonly camera = new THREE.PerspectiveCamera(43, 1, 0.1, 50);
+  private readonly ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
+  private readonly mesh: THREE.Mesh;
+  private material: CustomMaterial | null = null;
+  private lastError = '';
+  /** 攝影機：繞原點旋轉 */
+  readonly cam = { yaw: 0.7, pitch: 0.35, dist: 3.4, auto: true };
+  meshKind: PreviewMesh = 'sphere';
+
+  constructor(readonly canvas: HTMLCanvasElement) {
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.debug.onShaderError = (gl, program) => {
+      this.lastError = shaderErrors(gl, program) || '著色器編譯失敗';
+    };
+    this.mesh = new THREE.Mesh(geometry('sphere'));
+    this.mesh.frustumCulled = false;
+    this.scene.add(this.mesh);
+    this.ortho.position.z = 1;
+  }
+
+  /** 換預覽網格 */
+  setMesh(kind: PreviewMesh): void {
+    if (kind === this.meshKind) return;
+    this.meshKind = kind;
+    this.mesh.geometry.dispose();
+    this.mesh.geometry = geometry(kind);
+  }
+
+  /** 換成這份定義（graphDefinition 產生的）：回傳錯誤訊息（空字串代表成功） */
+  setDefinition(def: ShaderDefinition): string {
+    let next: CustomMaterial;
+    try {
+      next = library.createFromDefinition(def);
+    } catch (error) {
+      return (error as Error).message;
+    }
+    // 先編譯一次，看看 GPU 接不接受
+    this.lastError = '';
+    const old = this.mesh.material;
+    this.mesh.material = next;
+    this.renderer.compile(this.scene, this.meshKind === 'quad' ? this.ortho : this.camera);
+    if (this.lastError) {
+      this.mesh.material = old;
+      next.dispose();
+      return this.lastError;
+    }
+    this.material?.dispose();
+    this.material = next;
+    return '';
+  }
+
+  /** 畫一幀 */
+  render(state: PreviewState, dt: number): void {
+    const canvas = this.canvas;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
+    const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) this.renderer.setSize(w, h, false);
+    library.builtins.uTime.value = state.time;
+    library.builtins.uResolution.value.set(w, h);
+    if (!this.material) {
+      this.renderer.clear();
+      return;
+    }
+    const u = this.material.uniforms;
+    u.uMouse.value.copy(state.mouse);
+    if (this.meshKind === 'quad') {
+      u.uAspect.value = w / h;
+      this.renderer.render(this.scene, this.ortho);
+      return;
+    }
+    u.uAspect.value = 1;
+    const cam = this.cam;
+    if (cam.auto) cam.yaw += dt * 0.35;
+    const cp = Math.cos(cam.pitch);
+    this.camera.position.set(
+      cam.dist * cp * Math.sin(cam.yaw),
+      cam.dist * Math.sin(cam.pitch),
+      cam.dist * cp * Math.cos(cam.yaw),
+    );
+    this.camera.lookAt(0, 0, 0);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.render(this.scene, this.camera);
+  }
+}
+
+/** 節點縮圖的大小（像素） */
+export const THUMB_PX = 160;
+
+/** 節點縮圖：一個離屏繪製器畫所有節點 */
+export class ThumbnailRenderer {
+  private readonly renderer: THREE.WebGLRenderer;
+  private readonly scene = new THREE.Scene();
+  private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
+  private readonly quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+  private readonly materials = new Map<number, CustomMaterial>();
+  private failed = false;
+
+  constructor() {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = THUMB_PX;
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, preserveDrawingBuffer: true });
+    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.debug.onShaderError = () => {
+      this.failed = true;
+    };
+    this.quad.frustumCulled = false;
+    this.scene.add(this.quad);
+    this.camera.position.z = 1;
+  }
+
+  /** 更新某個節點的縮圖材質（port 是要顯示的輸出）；編譯失敗時那個節點不顯示 */
+  set(file: ShaderGraphFile, nodeId: number, port: string): void {
+    this.remove(nodeId);
+    try {
+      const m = library.createFromDefinition(graphDefinition(file, { nodeId, port }));
+      this.failed = false;
+      this.quad.material = m;
+      this.renderer.compile(this.scene, this.camera);
+      if (this.failed) m.dispose();
+      else this.materials.set(nodeId, m);
+    } catch {
+      /* 這個節點目前無法預覽（例如上游有循環） */
+    }
+  }
+
+  /** 移除某個節點的縮圖材質 */
+  remove(nodeId: number): void {
+    this.materials.get(nodeId)?.dispose();
+    this.materials.delete(nodeId);
+  }
+
+  /** 只保留這些節點 */
+  keep(ids: Set<number>): void {
+    for (const id of [...this.materials.keys()]) if (!ids.has(id)) this.remove(id);
+  }
+
+  /** 畫一個節點的縮圖到 2D 畫布 */
+  draw(nodeId: number, ctx: CanvasRenderingContext2D, state: PreviewState): void {
+    const m = this.materials.get(nodeId);
+    if (!m) {
+      ctx.clearRect(0, 0, THUMB_PX, THUMB_PX);
+      return;
+    }
+    m.uniforms.uMouse.value.copy(state.mouse);
+    this.quad.material = m;
+    this.renderer.render(this.scene, this.camera);
+    ctx.clearRect(0, 0, THUMB_PX, THUMB_PX);
+    ctx.drawImage(this.renderer.domElement, 0, 0);
+  }
+}

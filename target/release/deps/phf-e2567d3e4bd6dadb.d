@@ -1,0 +1,11 @@
+/Users/highquality/Desktop/ClaudeNotes/claude-0017/.tauri/target/release/deps/libphf-e2567d3e4bd6dadb.rmeta: /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/lib.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/map.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/ordered_map.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/ordered_set.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/set.rs
+
+/Users/highquality/Desktop/ClaudeNotes/claude-0017/.tauri/target/release/deps/libphf-e2567d3e4bd6dadb.rlib: /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/lib.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/map.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/ordered_map.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/ordered_set.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/set.rs
+
+/Users/highquality/Desktop/ClaudeNotes/claude-0017/.tauri/target/release/deps/phf-e2567d3e4bd6dadb.d: /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/lib.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/map.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/ordered_map.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/ordered_set.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/set.rs
+
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/lib.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/map.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/ordered_map.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/ordered_set.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.13.1/src/set.rs:

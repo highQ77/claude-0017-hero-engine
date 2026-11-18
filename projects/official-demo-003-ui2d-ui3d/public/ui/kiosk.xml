@@ -1,0 +1,16 @@
+<!--
+  3D 空間裡的商店看板（UIPanel3D 的 src）。和 2D 介面一樣的 XML、一樣的元件，畫在 3D 平面上。
+  按鈕的 onClick 由 main.ts 的 ui3d.setHandlers 處理。
+-->
+<UI width="360" height="300" padding="16" gap="10" background="#1b2418" radius="16" border="3 #9acd32">
+  <UILayout dir="h" align="center" gap="8">
+    <UIIcon name="coin" size="26" color="#ffd75e"/>
+    <UILabel fontSize="24" fontWeight="bold" color="#c8f07a" flex="1">方塊商店</UILabel>
+    <UILabel id="money" fontSize="20" fontWeight="bold" color="#ffd75e">100</UILabel>
+  </UILayout>
+  <UILabel fontSize="14" color="#c6cdbb">買一個方塊，會從天上掉下來。</UILabel>
+  <UIButton text="紅色方塊　10 金幣" onClick="buyRed" padding="10 14" fontSize="16" background="#5a2626" hoverBackground="#7a3333" color="#ffd0d0" radius="10"/>
+  <UIButton text="藍色方塊　20 金幣" onClick="buyBlue" padding="10 14" fontSize="16" background="#1f3f5a" hoverBackground="#2a5577" color="#d0ecff" radius="10"/>
+  <UIButton text="金色方塊　50 金幣" onClick="buyGold" padding="10 14" fontSize="16" background="#5a4a1a" hoverBackground="#7a6522" color="#fff1c2" radius="10"/>
+  <UIButton text="把錢補滿" onClick="refill" padding="6 10" fontSize="13" self="end"/>
+</UI>

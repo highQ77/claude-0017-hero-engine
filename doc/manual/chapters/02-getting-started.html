@@ -1,0 +1,221 @@
+<!-- group: 入門 -->
+<h1>開始使用</h1>
+<p class="lead">安裝套件、建立第一個專案、在瀏覽器裡預覽，最後打包成可以發佈的網站。</p>
+
+<h2>安裝</h2>
+<p>需要 Node.js 18 以上。在引擎的根目錄安裝套件：</p>
+<script type="text/plain" class="example" data-lang="sh" data-readonly data-title="安裝套件">
+npm install
+</script>
+
+<h2>專案指令</h2>
+<p>引擎和遊戲分開放：引擎在 <code>src/</code>，每個遊戲是 <code>projects/</code> 底下的一個資料夾。用 <code>node hero</code> 管理專案：</p>
+<script type="text/plain" class="example" data-lang="sh" data-readonly data-title="node hero 指令">
+node hero create my-game    # 建立空專案 → projects/my-game/
+node hero select my-game    # 選擇要預覽、打包的專案
+node hero select            # 不給名稱：列出所有專案，● 是目前選擇的
+node hero remove my-game    # 刪除專案（projects/my-game/、dist/my-game/、.tauri/my-game/）；要輸入專案名稱確認，無法復原
+node hero dev               # 預覽遊戲，並提供專案入口頁與 3D 場景、介面、著色器、音效編輯器（網址見下方「開發網址」）
+node hero build             # 格式與程式檢查 + 型別檢查 + 測試 + 打包 → dist/my-game/web/
+node hero build --mac       # 再包成 macOS App → dist/my-game/mac/my-game.app（需要 Rust）
+node hero doc               # 開啟這本使用手冊
+node hero api               # 產生引擎所有可用的 API 列表 → tips/api.txt
+</script>
+<div class="tip">
+  <p>開發伺服器開著時，也可以在入口頁 <code>/portal</code> 用滑鼠做同樣的事：點專案就是 <code>node hero select</code>（開發伺服器會自動換成那個專案），「＋ 新增專案」是 <code>node hero create</code>，垃圾桶是 <code>node hero remove</code>（一樣要輸入專案名稱確認；預設專案 <code>official-demo-000-start</code> 不能刪）。鉛筆可以編輯專案說明（存在專案 <code>src/main.ts</code> 開頭註解的第一行）。每個編輯器頁首的「專案」會回到入口頁。</p>
+</div>
+<h2>開發網址</h2>
+<p>執行指令後，在瀏覽器打開下面的網址。<code>node hero dev</code> 開的是目前選擇的專案（<code>node hero select</code>），入口頁與四個編輯器只在開發時提供，不會打包到遊戲裡：</p>
+<table>
+  <thead><tr><th>指令</th><th>網址</th><th>內容</th></tr></thead>
+  <tbody>
+    <tr><td rowspan="6"><code>node hero dev</code></td><td><code>http://localhost:5173</code></td><td>遊戲進行畫面</td></tr>
+    <tr><td><code>http://localhost:5173/portal</code></td><td>專案選擇的入口頁：點一下切換專案（同 <code>node hero select</code>，開發伺服器會自動換成那個專案），也可以新增、刪除專案（同 <code>node hero create</code>／<code>remove</code>）與編輯專案說明</td></tr>
+    <tr><td><code>http://localhost:5173/s3d-editor</code></td><td><a href="#/scene-editor">遊戲 3D 編輯器</a>（3D 場景編輯器）：編輯場景檔與預製物件</td></tr>
+    <tr><td><code>http://localhost:5173/ui-editor</code></td><td><a href="#/ui-editor">遊戲 2D 介面編輯器</a>（UI 編輯器）：編輯 2D 介面檔</td></tr>
+    <tr><td><code>http://localhost:5173/shader-editor</code></td><td><a href="#/shader-editor">著色器編輯器</a>：用節點組合自訂著色器</td></tr>
+    <tr><td><code>http://localhost:5173/se-editor</code></td><td><a href="#/se-editor">音效編輯器</a>：合成遊戲音效</td></tr>
+    <tr><td><code>node hero doc</code></td><td><code>http://localhost:5174</code></td><td>引擎的手冊與 API（就是這本使用手冊與 API 參考）</td></tr>
+  </tbody>
+</table>
+<div class="tip">
+  <p>編輯器的網址後面加不加 <code>.html</code> 都可以（例如 <code>/s3d-editor.html</code>）。兩個指令可以同時開；連接埠被其他程式占用時會自動換下一個（例如 5175），以終端機顯示的網址為準。</p>
+</div>
+<p>暫時改用別的專案，不想切換選擇時，可以用環境變數：</p>
+<script type="text/plain" class="example" data-lang="sh" data-readonly data-title="指定專案">
+PROJECT=official-demo-000-start node hero dev
+PROJECT=official-demo-000-start npx vite build      # 只打包，跳過型別檢查和測試
+PROJECT=official-demo-000-start npx vite preview    # 在本機看打包後的結果
+</script>
+
+<h2>程式碼格式</h2>
+<p>引擎和遊戲程式用 <a href="https://biomejs.dev/" target="_blank" rel="noopener">Biome</a> 統一格式（2 格縮排、單引號、分號、每行最多 120 字元）並檢查常見錯誤，設定在根目錄的 <code>biome.json</code>。<code>node hero build</code> 會先檢查，格式不符就停止：</p>
+<script type="text/plain" class="example" data-lang="sh" data-readonly data-title="格式與檢查">
+npm run fix       # 自動排好格式、套用安全的修正（存檔前或打包失敗時執行）
+npm run format    # 只排格式
+npm run lint      # 只檢查程式（列出錯誤與提醒）
+npm run check     # 和打包時一樣的檢查，不修改檔案
+</script>
+<div class="tip">
+  <p>編輯器裝 Biome 的外掛（VS Code：Biome），設定「存檔時格式化」，就不用手動執行。</p>
+</div>
+
+<h2>專案的資料夾</h2>
+<script type="text/plain" class="example" data-lang="text" data-readonly data-title="projects/my-game/">
+projects/my-game/
+├── index.html          頁面（載入 src/main.ts）
+├── tsconfig.json       TypeScript 設定（單獨用 VS Code 打開這個資料夾時，也有 @engine 的程式碼提示）
+├── src/
+│   ├── engine.ts       引擎與外掛設定（要用哪些外掛、建立時的設定）
+│   └── main.ts         遊戲程式
+└── public/             靜態檔案（網址從根目錄起算）
+    ├── scenes/
+    │   └── main.xml    場景檔：攝影機、燈光、方塊（3D 場景編輯器編輯的就是這個資料夾）
+    ├── prefabs/        預製物件（3D 場景編輯器「存成預製物件」時建立）
+    ├── ui/
+    │   └── scene.xml   2D 介面檔（UI 編輯器編輯的就是這個資料夾）
+    ├── sounds/         音效
+    ├── textures/       貼圖
+    └── models/         模型（glTF）
+</script>
+<h2>引用引擎</h2>
+<p>遊戲程式用 <code>@engine/模組</code> 引用引擎，例如 <code>import { Engine } from '@engine/core'</code>；也可以用總入口 <code>import * as hero from '@engine'</code>（所有模組都在 <code>hero</code> 底下，打包時只包含用到的部分）。向量、四元數、顏色從 <code>@engine/math</code> 引用（<code>import { Vector3, Quaternion } from '@engine/math'</code>，就是 three.js 的類別）；常用的攝影機、燈光、網格、材質、貼圖不用 three.js 也能建立（見<a href="#/render">繪製</a>的「簡潔的寫法」）。</p>
+
+<h2>engine.ts：外掛設定</h2>
+<p><code>node hero create</code> 產生的專案把引擎和外掛放在 <code>src/engine.ts</code>，遊戲程式（<code>main.ts</code> 和其他檔案）從那裡引用：</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="src/engine.ts（節錄）">
+export const engine = new Engine();
+
+/** 安裝外掛並回傳它（一行就能建立、安裝、匯出） */
+function use<T extends Plugin>(plugin: T): T {
+  engine.use(plugin);
+  return plugin;
+}
+
+export const ecs = use(new EcsPlugin());
+export const scenePlugin = use(new ScenePlugin());
+export const scenes = scenePlugin.scenes;          // 常用的物件另外匯出短名稱
+export const render = use(new RenderPlugin({ background: 0x15181f, shadows: true }));
+// export const postfx = use(new PostProcessingPlugin({ bloom: { enabled: true } }));
+export const audioPlugin = use(new AudioPlugin());
+export const audio = audioPlugin.audio;
+// …
+// export const physicsPlugin = use(await PhysicsPlugin.create({ gravity: { x: 0, y: -9.81, z: 0 } }));
+// export const physics = physicsPlugin.physics;
+// …
+export const uiPlugin = use(await UIPlugin.create({ scene: 'ui/scene.xml' }));
+export const ui = uiPlugin.ui;
+export const inputPlugin = use(new InputPlugin());
+export const input = inputPlugin.input;
+
+export const world = ecs.world;
+</script>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="src/main.ts（節錄）">
+import { create, load, previewScene } from '@engine/scene';
+import { engine, scenes, ui } from './engine';
+
+ui.setHandlers({ hello: () => { /* 介面檔裡 onClick="hello" */ } });
+
+// 場景的內容在 public/scenes/main.xml（用 3D 場景編輯器編輯，存檔後開著的遊戲會自動重新載入）
+scenes.register(
+  create.sceneFromFile('main', await load.sceneFile('scenes/main.xml'), {
+    // 場景檔只放看得到、擺得出來的東西；遊戲邏輯在這裡依 id 加上去
+    setup(_world, spawned) {
+      spawned.add('box', Spin, { speed: 0.8 }); // 找不到這個 id 時只會警告，不會出錯
+    },
+  }),
+);
+scenes.load(previewScene() ?? 'main'); // 3D 場景編輯器按「預覽」時直接進入正在編輯的場景
+engine.start(); // 場景建好後才開始跑
+</script>
+<ul>
+  <li><strong>一行一個外掛，照順序安裝</strong>：有相依的在後面（例如介面要在繪製之後、輸入放最後），不要調換順序。</li>
+  <li><strong>預設開啟常用的</strong>：ECS、場景、繪製、資源、動畫、粒子、音效、腳本、AI、2D 介面、輸入。</li>
+  <li><strong>預設關閉、需要時取消註解</strong>（連同上面的 <code>import</code>）：著色器、後製（裝了之後畫面會套用色調映射，色調會和沒裝時不同）、3D 文字、物理（多下載約 2 MB）、3D 介面。註解掉的外掛不會安裝，打包時也不會包含。</li>
+  <li><strong>哪裡改設定</strong>：建立時就決定的（陰影、反鋸齒、物理的初始設定…）改 <code>engine.ts</code>；執行中可以改的（背景顏色、後製效果、音量、介面的事件處理…）在 <code>main.ts</code> 改，例如 <code>render.scene.background = new Color('#203040')</code>、<code>ui.setHandlers({ start: … })</code>、<code>ui3d.setHandlers({ buy: … })</code>。</li>
+  <li><strong>匯出的名稱</strong>：外掛叫 <code>xxxPlugin</code>（很少直接用），常用的物件用短名稱：<code>world</code>（遊戲世界）、<code>ui</code>（介面）、<code>audio</code>（音效）、<code>scenes</code>（場景管理）、<code>hierarchy</code>（父子關係）、<code>input</code>（輸入）、<code>physics</code>（物理）、<code>tweens</code>（補間）、<code>assets</code>（資源）、<code>scripts</code>（腳本）；外掛本身就是常用 API 的直接用短名稱：<code>ecs</code>、<code>render</code>、<code>postfx</code>、<code>ai</code>、<code>ui3d</code>。遊戲程式（包括系統裡）直接引用它們，例如 <code>import { audio } from './engine'</code>，就能 <code>audio.play('sounds/jump.wav')</code>。</li>
+</ul>
+<p>多人連線和小地圖需要額外的設定，不在範本裡；要用時加在 <code>engine.ts</code> 對應的位置：</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="加上連線、小地圖">
+import { BroadcastChannelTransport, NetworkClient, NetworkPlugin } from '@engine/network';
+import { MinimapPlugin } from '@engine/ui2d';
+
+// 放在 scene 之後：同一個瀏覽器的分頁互連（跨電腦用 WebSocketTransport，見「更多模組」的「多人連線」）
+const client = new NetworkClient({ transport: new BroadcastChannelTransport('my-game') });
+export const net = use(new NetworkPlugin(client, { sendRate: 20 }));
+
+// 放在 ui 之後：介面檔裡 <UIMinimap id="minimap"/> 顯示小地圖，follow 是跟著誰（例如玩家）
+export const minimap = use(new MinimapPlugin({ minimap: 'minimap', follow: () => player }));
+</script>
+
+<h2>第一個遊戲</h2>
+<p>這是 <code>node hero create</code> 產生的範本內容：一個會旋轉的方塊，加上一個 2D 按鈕。按 <kbd>▶ 執行</kbd> 看看，再試著修改：</p>
+<ul>
+  <li>把 <code>speed: 0.8</code> 改成 <code>3</code>，方塊轉得更快</li>
+  <li>把 <code>'#9acd32'</code> 改成 <code>'#ff6b6b'</code>，方塊變成紅色</li>
+  <li>把 <code>{ box: 1 }</code> 換成 <code>{ torusKnot: [0.5, 0.18] }</code></li>
+</ul>
+<div class="note">
+  <p>和範本只差一個地方：範本把介面寫成檔案 <code>public/ui/scene.xml</code>，這裡用 <code>ui.loadString()</code> 直接載入 XML 字串。<code>'./engine'</code> 是手冊準備好的（見下面的「手冊範例的 engine.ts」）。</p>
+</div>
+<script type="text/plain" class="example" data-lang="ts" data-title="第一個遊戲" data-height="340">
+import { define } from '@engine/ecs';
+import { Transform, math } from '@engine/scene';
+import { OrbitControl, spawn } from '@engine/render';
+import type { UILabel } from '@engine/ui2d';
+import { ecs, engine, ui, world } from './engine';
+
+/** 會自己旋轉的物件（每秒幾弧度） */
+const Spin = define.component('Spin', () => ({ speed: 1 }));
+
+// 系統：每幀讓所有有 Transform 和 Spin 的實體旋轉
+ecs.each('spin', [Transform, Spin], (_e, t, s, time) => math.rotate(t, [0, s.speed * time.delta, 0]));
+
+// 2D 介面：XML 裡的 onClick="hello" 會呼叫 hello
+ui.loadString(`
+  <UI padding="16" align="start" gap="8">
+    <UIButton text="按我" onClick="hello"/>
+    <UILabel id="clicks" color="#c8f07a">還沒點</UILabel>
+  </UI>`);
+let clicks = 0;
+ui.setHandlers({ hello: () => ui.get<UILabel>('clicks')?.setText(`點了 ${++clicks} 次`) });
+
+// 場景：攝影機、燈光、一個旋轉的方塊（幾何、材質用描述，不用自己建立 three.js 物件）
+const camera = spawn.camera(world, { position: [0, 1.5, 4], target: [0, 0, 0], fov: 55 });
+world.add(camera, OrbitControl, { minDistance: 2, maxDistance: 12 }); // 用滑鼠拖曳轉動、滾輪縮放
+spawn.defaultLights(world);
+const box = spawn.mesh(world, { geometry: { box: 1 }, material: { standard: { color: '#9acd32', roughness: 0.4 } } });
+world.add(box, Spin, { speed: 0.8 });
+
+engine.start();
+</script>
+
+<h2>手冊範例的 engine.ts</h2>
+<p>手冊的範例和遊戲專案的 <code>main.ts</code> 一樣，用 <code>import { engine, world, ui, … } from './engine'</code> 取用引擎和外掛，不用自己建立：手冊已經準備好一份 <code>engine.ts</code>（<code>doc/manual/engine.ts</code>），每次按「執行」都會重新建立，範例之間不會互相影響。範例可以直接複製到專案的 <code>main.ts</code>。</p>
+<p>它把所有外掛都裝上（多人連線、小地圖除外），匯出的名稱和專案的 <code>engine.ts</code> 一樣：</p>
+<table>
+  <thead><tr><th>名稱</th><th>是什麼</th></tr></thead>
+  <tbody>
+    <tr><td><code>engine</code>、<code>world</code></td><td>引擎、遊戲世界</td></tr>
+    <tr><td><code>ecs</code></td><td>系統：<code>ecs.each(…)</code>、<code>ecs.addSystem(…)</code></td></tr>
+    <tr><td><code>scenes</code>、<code>hierarchy</code></td><td>場景管理、父子關係</td></tr>
+    <tr><td><code>render</code></td><td>繪製（<code>render.scene</code>、<code>render.pick(…)</code>）；背景色 <code>0x15181f</code>、陰影開啟</td></tr>
+    <tr><td><code>postfx</code></td><td>後製特效；色調映射預設不使用（畫面和沒裝時一樣），要光暈寫 <code>postfx.settings.bloom.enabled = true</code></td></tr>
+    <tr><td><code>assets</code>、<code>tweens</code>、<code>audio</code></td><td>資源、補間、音效</td></tr>
+    <tr><td><code>physics</code>、<code>physicsPlugin</code></td><td>物理世界；<code>physicsPlugin.debug = true</code> 顯示碰撞形狀</td></tr>
+    <tr><td><code>scripts</code>、<code>ai</code></td><td>腳本、AI（行為樹、尋路）</td></tr>
+    <tr><td><code>shaders</code></td><td>著色器庫</td></tr>
+    <tr><td><code>ui</code>、<code>ui3d</code></td><td>2D 介面（沒有預先載入介面檔，範例用 <code>ui.loadString(…)</code>）、3D 介面面板</td></tr>
+    <tr><td><code>input</code></td><td>輸入</td></tr>
+  </tbody>
+</table>
+<p>另外 3D 文字、粒子也都已經安裝（<code>Text3D</code>、<code>ParticleEmitter</code> 元件直接用）。攝影機繞轉控制預設開啟：可以用滑鼠拖曳轉動畫面。</p>
+
+<h2>程式的基本步驟</h2>
+<ol>
+  <li><strong>建立外掛</strong>（專案裡在 <code>engine.ts</code>）：<code>new EcsPlugin()</code>、<code>new RenderPlugin()</code>…（需要非同步初始化的用 <code>await XxxPlugin.create()</code>，例如介面和物理）。</li>
+  <li><strong>安裝到引擎</strong>：<code>engine.use(外掛)</code>。有依賴關係的外掛要照順序安裝（例如繪製需要先有 <code>ecs</code>、<code>scene</code>），順序錯了會有錯誤訊息提醒。</li>
+  <li><strong>建立實體</strong>：<code>world.spawn(元件…)</code>（位置用 <code>Transform.at(x, y, z)</code>）；攝影機、燈光、網格、任意實體可以用 <code>spawn.camera</code>、<code>spawn.defaultLights</code>、<code>spawn.mesh</code>、<code>spawn.entity</code> 一行建立，可以一起指定位置、父節點（<code>parent</code>）、名稱（<code>name</code>），回傳建立的實體。</li>
+  <li><strong>寫遊戲邏輯</strong>：系統或腳本（<code>Script</code> 類別）。最常見的「每幀對某些實體做事」用 <code>ecs.each('名稱', [元件…], (實體, 元件資料…, time) => …)</code>；需要先準備資料、或要 <code>init</code>／<code>dispose</code> 的用 <code>ecs.addSystem</code>（見 <a href="#/ecs">ECS</a>）。</li>
+  <li><strong>開始</strong>：<code>engine.start()</code>。</li>
+</ol>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- 重複的底紋（bgFit="tile"） -->
+  <rect width="24" height="24" fill="#1a2016"/>
+  <path d="M0 24 L24 0" stroke="rgba(154,205,50,0.18)" stroke-width="2"/>
+  <circle cx="18" cy="18" r="1.5" fill="rgba(255,255,255,0.12)"/>
+</svg>

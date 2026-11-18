@@ -1,0 +1,128 @@
+<!--
+  official-demo-001-animation 的介面：左邊是說明面板（四個分頁），右邊透明、讓滑鼠操作 3D 畫面。
+  可以用 UI 編輯器（/ui-editor.html）編輯。程式在 src/main.ts（onClick、onChange 的處理函式）。
+-->
+<UI width="auto" height="auto" dir="h">
+  <UISkin for="UIButton" radius="8" padding="7 12" background="#2a3124" hoverBackground="#37402f" color="#e9f6d2" fontSize="13"/>
+  <UISkin for="UISlider" width="100%"/>
+  <UISkin for="UIToggle" fontSize="13" color="#e9f6d2"/>
+  <UIStyle name="tab" flex="1" padding="8 4" activeBackground="#9acd32" activeColor="#141a07" fontWeight="bold"/>
+  <UIStyle name="title" fontSize="17" fontWeight="bold" color="#c8f07a"/>
+  <UIStyle name="text" fontSize="13" color="#c6cdbb" lineHeight="1.5"/>
+  <UIStyle name="hint" fontSize="12" color="#8f9884" lineHeight="1.5"/>
+  <UIStyle name="field" fontSize="12" color="#e9f6d2"/>
+  <UIStyle name="code" fontSize="12" color="#ffd166" fontFamily="monospace" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+
+  <UILayout id="panel" width="340" padding="16" gap="12" background="rgba(14,17,12,0.9)">
+    <UILayout gap="2">
+      <UILabel fontSize="11" color="#8f9884">OFFICIAL DEMO 001</UILabel>
+      <UILabel fontSize="22" fontWeight="bold" color="#ffffff">動畫介紹</UILabel>
+    </UILayout>
+
+    <UILayout dir="h" gap="4">
+      <UIButton text="補間" style="tab" select="pages:tween"/>
+      <UIButton text="時間軸" style="tab" select="pages:timeline"/>
+      <UIButton text="模型動畫" style="tab" select="pages:clip"/>
+      <UIButton text="狀態機" style="tab" select="pages:fsm"/>
+    </UILayout>
+
+    <UIStackView id="pages" flex="1" transition="fade" onChange="page">
+      <!-- ① 補間 -->
+      <UIScrollView id="tween" gap="10">
+        <UILabel style="title">補間（Tween）</UILabel>
+        <UILabel style="text">把數字從現在的值，花一段時間變到目標值。緩動曲線決定「怎麼變過去」：一開始快還是慢、會不會超過再彈回來。</UILabel>
+        <UILabel style="code">tweens.to(位置, { x: 3 }, { duration: 2, easing: 'backOut' })</UILabel>
+        <UILabel style="hint">右邊每一顆球用不同的曲線，同時出發、同時到達：</UILabel>
+        <UIList id="easings" gap="3">
+          <UITemplate>
+            <UILayout dir="h" gap="8" align="center">
+              <UILayout width="10" height="10" radius="5" background="{color}"/>
+              <UILabel style="field">{name}</UILabel>
+              <UILabel style="hint" flex="1" textAlign="right">{note}</UILabel>
+            </UILayout>
+          </UITemplate>
+        </UIList>
+        <UILabel style="field">秒數</UILabel>
+        <UISlider id="duration" min="0.5" max="4" step="0.1" value="2" showValue="true" suffix=" 秒" onChange="tweenReplay"/>
+        <UILayout dir="h" gap="8" align="center">
+          <UIButton text="重新播放" onClick="tweenReplay"/>
+          <UIToggle id="yoyo" text="來回" checked="true" onChange="tweenReplay"/>
+        </UILayout>
+        <UILabel style="hint">任何數字都能補間：右邊的方塊同時補間了大小（scale）與顏色（color 的 r、g、b）。</UILabel>
+      </UIScrollView>
+
+      <!-- ② 時間軸 -->
+      <UIScrollView id="timeline" gap="10">
+        <UILabel style="title">時間軸（Timeline）</UILabel>
+        <UILabel style="text">把好幾段補間排在一起：一段接一段，或用 at: '&lt;' 和上一段同時開始；中間可以等待、呼叫函式。</UILabel>
+        <UILabel style="code">tweens.timeline().to(…).to(…, { at: '&lt;' }).call(…)</UILabel>
+        <UIList id="steps" gap="3">
+          <UITemplate>
+            <UILabel id="step{index}" style="field" padding="5 8" radius="6" background="rgba(255,255,255,0.04)">{text}</UILabel>
+          </UITemplate>
+        </UIList>
+        <UIProgressBar id="tlProgress" value="0" height="8" fill="#9acd32"/>
+        <UILayout dir="h" gap="8">
+          <UIButton text="播放" onClick="tlPlay"/>
+          <UIButton id="tlPause" text="暫停" onClick="tlPause"/>
+          <UIButton text="停在終點" onClick="tlEnd"/>
+        </UILayout>
+        <UILabel style="field">時間縮放（engine.time.timeScale）</UILabel>
+        <UISlider min="0.1" max="2" step="0.1" value="1" showValue="true" suffix="x" onInput="timeScale"/>
+      </UIScrollView>
+
+      <!-- ③ 模型動畫 -->
+      <UIScrollView id="clip" gap="10">
+        <UILabel style="title">模型動畫（Animator）</UILabel>
+        <UILabel style="text">左邊的機器人是用程式組的（create.group、create.mesh），動作用 create.clip 以資料寫成；右邊的是 glTF 模型檔，動畫跟著模型一起載入。</UILabel>
+        <UILabel style="code">create.clip('wave', { 'armR.rotation': { times, values } })</UILabel>
+        <UILabel style="field">程式做的機器人</UILabel>
+        <UISelect id="clipName" value="idle" onChange="clipPlay">
+          <UIOption value="idle">idle：待機</UIOption>
+          <UIOption value="wave">wave：揮手</UIOption>
+          <UIOption value="dance">dance：跳舞</UIOption>
+          <UIOption value="walk">walk：走路</UIOption>
+        </UISelect>
+        <UILabel style="field">模型檔的機器人（models/robot.gltf）</UILabel>
+        <UISelect id="modelClip" value="Idle" onChange="modelPlay">
+          <UIOption value="Idle">Idle</UIOption>
+          <UIOption value="Wave">Wave</UIOption>
+          <UIOption value="Spin">Spin</UIOption>
+        </UISelect>
+        <UILabel style="field">速度</UILabel>
+        <UISlider id="clipSpeed" min="0" max="3" step="0.1" value="1" showValue="true" suffix="x" onInput="clipSpeed"/>
+        <UILabel style="field">切換時的淡入淡出（fade）</UILabel>
+        <UISlider id="clipFade" min="0" max="1" step="0.05" value="0.3" showValue="true" suffix=" 秒" onInput="clipFade"/>
+        <UIToggle id="clipPaused" text="暫停" onChange="clipPause"/>
+        <UILabel id="clipInfo" style="hint">…</UILabel>
+      </UIScrollView>
+
+      <!-- ④ 狀態機 -->
+      <UIScrollView id="fsm" gap="10">
+        <UILabel style="title">動畫狀態機</UILabel>
+        <UILabel style="text">動作很多時，用狀態與轉換條件自動切換動畫：遊戲只要設定參數（速度）或觸發（跳躍），不用自己判斷該播哪一段。</UILabel>
+        <UILabel style="code">sm.params.speed = 0.8　　play.trigger(sm, 'jump')</UILabel>
+        <UILabel style="field">速度（params.speed）</UILabel>
+        <UISlider id="speed" min="0" max="1" step="0.01" value="0" showValue="true" onInput="speed"/>
+        <UIButton text="跳躍（空白鍵）" onClick="jump"/>
+        <UILayout gap="4" padding="10" background="rgba(255,255,255,0.04)" radius="8">
+          <UILabel style="hint">轉換條件（依順序檢查）</UILabel>
+          <UILabel id="rule0" style="field">任何狀態 → jump：觸發 jump</UILabel>
+          <UILabel id="rule1" style="field">jump → idle：播完</UILabel>
+          <UILabel id="rule2" style="field">idle → walk：speed &gt; 0.05</UILabel>
+          <UILabel id="rule3" style="field">walk → run：speed &gt; 0.6</UILabel>
+          <UILabel id="rule4" style="field">run → walk：speed ≤ 0.6</UILabel>
+          <UILabel id="rule5" style="field">walk → idle：speed ≤ 0.05</UILabel>
+        </UILayout>
+        <UILayout dir="h" gap="8" align="center">
+          <UILabel style="hint">目前的狀態</UILabel>
+          <UILabel id="state" fontSize="20" fontWeight="bold" color="#ffd166">idle</UILabel>
+        </UILayout>
+        <UILabel id="stateFrom" style="hint"> </UILabel>
+      </UIScrollView>
+    </UIStackView>
+
+    <UILabel style="hint">拖曳畫面轉動視角，滾輪縮放（先點一下畫面）</UILabel>
+  </UILayout>
+  <UIToast placement="top"/>
+</UI>

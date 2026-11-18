@@ -1,0 +1,73 @@
+<!--
+  範例：背包
+  用途：疊加的 modal 畫面（screens.open('inventory')），按關閉鈕或 Esc 回到遊戲
+  版面尺寸：滿版（auto × auto），視窗在中間（寬 94%，有最大寬度）
+  用到：UIImport（共用主題）、UIComponent（內嵌 coin-badge.xml）、UIList（grid）＋ UITemplate（程式用 ui.setItems('bag', 物品) 填入）、
+        UISlot（拖曳交換、稀有度）、UICooldown、UIBadge、tooltip、UITable／UIColumn／UIRow、UIScrollView、UIProgressBar、bgImage（tile）
+-->
+<!-- 視窗置中（遊戲裡由畫面管理器的 modal 置中；寫在這裡讓編輯器預覽也一樣） -->
+<UI width="auto" height="auto" align="center" justify="center" padding="16">
+  <UIImport src="theme.xml"/>
+
+  <UIWindow title="背包" width="94%" maxWidth="640" onClose="screen.close">
+    <!-- 上方摘要：金幣（共用的小元件）與負重 -->
+    <UILayout style="card" dir="h" align="center" gap="16" padding="10 14">
+      <UIComponent src="coin-badge.xml"/>
+      <UILayout dir="h" gap="8" align="center" flex="1">
+        <UILabel style="label">負重</UILabel>
+        <UIProgressBar value="34" max="50" flex="1" fill="#ffb347,#ff6b6b" showText="true" textFormat="{value} / {max} kg"/>
+      </UILayout>
+    </UILayout>
+
+    <UILayout dir="h" gap="14" align="start" wrap="true">
+      <!-- 左：裝備欄與物品格 -->
+      <UILayout gap="12" grow="1" basis="300">
+        <UILayout style="card">
+          <!-- 裝備格的 id 是 eq0～eq3、物品格是 bag0～bag9：src/screens.ts 依資料重畫（拖曳時交換資料） -->
+          <UILabel style="section">裝備（拖曳物品到格子上）</UILabel>
+          <UILayout dir="h" gap="8">
+            <UISlot id="eq0" iconName="sword" rarity="epic" onDrop="inventoryDrop" tooltipTitle="鐵劍" tooltip="攻擊 +12"/>
+            <UISlot id="eq1" iconName="shield" rarity="rare" onDrop="inventoryDrop" tooltipTitle="木盾" tooltip="防禦 +5"/>
+            <UISlot id="eq2" iconName="fire" rarity="legendary" onDrop="inventoryDrop" tooltipTitle="火球術" tooltip="冷卻 3 秒">
+              <UICooldown id="fireballCd" value="0.4"/>
+            </UISlot>
+            <UISlot id="eq3" iconName="potion" count="5" rarity="uncommon" onDrop="inventoryDrop" tooltipTitle="回復藥水" tooltip="回復 50 生命">
+              <UIBadge value="NEW"/>
+            </UISlot>
+          </UILayout>
+        </UILayout>
+        <UILayout style="card">
+          <UILabel style="section">物品</UILabel>
+          <UIList id="bag" type="grid" columns="5" gap="8" height="140" padding="8" radius="10"
+                  bgImage="pattern.svg" bgFit="tile" border="1 rgba(154,205,50,0.22)">
+            <UITemplate>
+              <UISlot id="bag{index}" iconName="{iconName}" count="{count}" rarity="{rarity}" tooltipTitle="{name}" tooltip="{desc}" onDrop="inventoryDrop"/>
+            </UITemplate>
+          </UIList>
+        </UILayout>
+      </UILayout>
+
+      <!-- 右：屬性表與說明 -->
+      <UILayout gap="12" grow="1" basis="220">
+        <UILayout style="card" padding="12 12 6">
+          <UILabel style="section">角色屬性</UILabel>
+          <UITable height="150" striped="true">
+            <UIColumn key="stat" title="屬性"/>
+            <UIColumn key="value" title="數值" width="70" align="right" sort="number"/>
+            <UIRow stat="攻擊" value="42"/>
+            <UIRow stat="防禦" value="18"/>
+            <UIRow stat="速度" value="7"/>
+            <UIRow stat="暴擊率" value="12"/>
+            <UIRow stat="生命" value="320"/>
+          </UITable>
+        </UILayout>
+        <UILayout style="card">
+          <UILabel style="section">說明</UILabel>
+          <UIScrollView height="86">
+            <UILabel style="hint" fontSize="13">在森林深處找到的背包，可以放 20 件物品。稀有度越高，邊框顏色越亮：一般（灰）、優良（綠）、稀有（藍）、史詩（紫）、傳說（橘）。把滑鼠停在物品上可以看到說明，拖曳物品可以交換位置。</UILabel>
+          </UIScrollView>
+        </UILayout>
+      </UILayout>
+    </UILayout>
+  </UIWindow>
+</UI>

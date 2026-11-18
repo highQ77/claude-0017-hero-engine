@@ -1,0 +1,186 @@
+<!--
+  official-demo-003-ui2d-ui3d 的介面：左邊是說明面板（四個分頁），右邊是疊在 3D 畫面上的 2D 介面（每一頁不同）。
+  右邊沒有背景的地方，滑鼠會穿透到 3D 畫面（可以轉動視角、點 3D 物件）。
+  可以用 UI 編輯器（/ui-editor.html）編輯。程式在 src/main.ts（onClick、onChange 的處理函式）。
+  3D 空間裡的商店看板在 ui/kiosk.xml；名牌、對話泡泡在 main.ts 裡直接寫 XML。
+-->
+<UI width="auto" height="auto" dir="h">
+  <UISkin for="UIButton" radius="8" padding="7 12" background="#2a3124" hoverBackground="#37402f" color="#e9f6d2" fontSize="13"/>
+  <UISkin for="UISlider" width="100%"/>
+  <UISkin for="UIToggle" fontSize="13" color="#e9f6d2"/>
+  <UISkin for="UIWindow" background="rgba(20,24,17,0.94)" radius="12"/>
+  <UIStyle name="tab" flex="1" padding="8 4" activeBackground="#9acd32" activeColor="#141a07" fontWeight="bold"/>
+  <UIStyle name="title" fontSize="17" fontWeight="bold" color="#c8f07a"/>
+  <UIStyle name="text" fontSize="13" color="#c6cdbb" lineHeight="1.5"/>
+  <UIStyle name="hint" fontSize="12" color="#8f9884" lineHeight="1.5"/>
+  <UIStyle name="field" fontSize="12" color="#e9f6d2"/>
+  <UIStyle name="codeBox" gap="3" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+  <UIStyle name="codeLine" fontSize="12" color="#ffd166" fontFamily="monospace"/>
+  <UIStyle name="box" gap="4" padding="10" background="rgba(255,255,255,0.04)" radius="8"/>
+  <!-- 疊在 3D 畫面上的一層：填滿右邊，本身沒有背景（滑鼠穿透） -->
+  <UIStyle name="layer" position="absolute" left="0" top="0" right="0" bottom="0" padding="16"/>
+  <UIStyle name="hudCard" padding="10 12" background="rgba(10,12,9,0.72)" radius="12" border="1 rgba(154,205,50,0.25)"/>
+
+  <!-- ───────── 左：說明面板 ───────── -->
+  <UILayout id="panel" width="340" padding="16" gap="12" background="rgba(14,17,12,0.92)">
+    <UILayout gap="2">
+      <UILabel fontSize="11" color="#8f9884">OFFICIAL DEMO 003</UILabel>
+      <UILabel fontSize="22" fontWeight="bold" color="#ffffff">2D 與 3D 介面</UILabel>
+    </UILayout>
+
+    <UILayout dir="h" gap="4">
+      <UIButton text="HUD" style="tab" select="pages:hud"/>
+      <UIButton text="背包" style="tab" select="pages:bag"/>
+      <UIButton text="3D 面板" style="tab" select="pages:panels"/>
+      <UIButton text="對話" style="tab" select="pages:talk"/>
+    </UILayout>
+
+    <UIStackView id="pages" flex="1" transition="fade" onChange="page">
+      <!-- ① HUD -->
+      <UIScrollView id="hud" gap="10">
+        <UILabel style="title">HUD：疊在遊戲上的 2D 介面</UILabel>
+        <UILabel style="text">介面用 XML 描述、由排版引擎（Yoga）算出位置，畫在一張貼圖上疊在 3D 畫面的最上層。沒有背景的地方，滑鼠會穿透到遊戲。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">ui.require&lt;UIProgressBar&gt;('hp').value = 50</UILabel>
+          <UILabel style="codeLine">ui.require&lt;UICooldown&gt;('cd1').start(2)</UILabel>
+          <UILabel style="codeLine">ui.toast('獲得金幣', { icon: 'coin' })</UILabel>
+        </UILayout>
+        <UILayout dir="h" gap="8" wrap="true">
+          <UIButton text="受到傷害" onClick="hurt"/>
+          <UIButton text="喝藥水" onClick="heal"/>
+          <UIButton text="撿到金幣" onClick="coin"/>
+        </UILayout>
+        <UILabel style="hint">技能：按 1～4 或點下方的技能格。技能會消耗魔力（藍條），冷卻中的格子會顯示扇形倒數。</UILabel>
+        <UILabel style="hint">血條減少時有白色殘影；進度條、文字改變時只重畫那一小塊。</UILabel>
+      </UIScrollView>
+
+      <!-- ② 背包與表格 -->
+      <UIScrollView id="bag" gap="10">
+        <UILabel style="title">背包與表格</UILabel>
+        <UILabel style="text">列表（UIList）用一個樣板（UITemplate）搭配資料陣列產生；表格（UITable）點標題排序、點一列選取。兩個視窗都可以拖曳標題列移動。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">ui.setItems('bag', 物品陣列)</UILabel>
+          <UILabel style="codeLine">table.setRows(資料)；table.sortBy('score', -1)</UILabel>
+        </UILayout>
+        <UILabel style="hint">點物品：3D 畫面顯示那個物品；把物品拖到別的格子：交換位置。</UILabel>
+        <UILayout dir="h" gap="8" wrap="true">
+          <UIButton text="獲得物品" onClick="addItem"/>
+          <UIButton text="依稀有度整理" onClick="sortItems"/>
+        </UILayout>
+        <UILayout dir="h" gap="8" wrap="true">
+          <UIButton text="更新分數" onClick="shuffleScores"/>
+          <UIButton text="重新打開視窗" onClick="openWindows"/>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="hint">表格選到的玩家</UILabel>
+          <UILabel id="picked" style="field">（點排行榜的一列）</UILabel>
+        </UILayout>
+      </UIScrollView>
+
+      <!-- ③ 3D 面板 -->
+      <UIScrollView id="panels" gap="10">
+        <UILabel style="title">3D 面板（UIPanel3D）</UILabel>
+        <UILabel style="text">同樣的 XML、同樣的元件，畫在 3D 空間裡的一塊平面上，一樣可以點擊。商店看板是固定的面板；角色頭上的名牌加了 billboard，永遠面向攝影機。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">UIPanel3D.with({ src: 'ui/kiosk.xml', worldWidth: 2 })</UILabel>
+          <UILabel style="codeLine">ui3d.uiOf(名牌)?.require('hp').value = 30</UILabel>
+        </UILayout>
+        <UILabel style="hint">點看板上的按鈕買方塊（3D 面板的事件用 ui3d.setHandlers）。</UILabel>
+        <UIToggle id="billboard" text="名牌面向攝影機（billboard）" checked="true" onChange="panelOptions"/>
+        <UIToggle id="depthTest" text="名牌會被前面的東西遮住（depthTest）" checked="true" onChange="panelOptions"/>
+        <UIToggle id="lit" text="看板受燈光影響（lit）" onChange="panelOptions"/>
+        <UILabel style="field">看板大小（worldWidth）</UILabel>
+        <UISlider id="kioskSize" min="1" max="3.5" step="0.1" value="2.2" showValue="true" suffix=" 公尺" onInput="panelOptions"/>
+        <UIButton text="大家受傷" onClick="hurtAll"/>
+      </UIScrollView>
+
+      <!-- ④ 對話 -->
+      <UIScrollView id="talk" gap="10">
+        <UILabel style="title">點 3D 角色開始對話</UILabel>
+        <UILabel style="text">點畫面上的村長（render.pick 找出點到的 3D 物件），下方出現 2D 的對話框：逐字顯示、可以選擇。村長頭上的泡泡是 3D 面板，點它也能開始對話。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">render.pick(input.pointer.ndcX, input.pointer.ndcY)</UILabel>
+          <UILabel style="codeLine">talk.say('…', { choices: [{ value, label }] })</UILabel>
+        </UILayout>
+        <UILabel style="hint">點對話框：打字中會直接顯示全部，顯示完換下一句。也可以按 E 開始對話。</UILabel>
+        <UILayout style="box">
+          <UILabel style="hint">任務狀態</UILabel>
+          <UILabel id="quest" style="field">還沒接任務</UILabel>
+        </UILayout>
+        <UIButton text="重新開始" onClick="resetTalk"/>
+      </UIScrollView>
+    </UIStackView>
+
+    <UILabel style="hint">拖曳畫面轉動視角，滾輪縮放（先點一下畫面）。按 ` 鍵顯示效能面板。</UILabel>
+  </UILayout>
+
+  <!-- ───────── 右：疊在 3D 畫面上的 2D 介面（每一頁顯示一層） ───────── -->
+  <UILayout id="stage" flex="1">
+    <!-- ① HUD：左上角色狀態、右上金幣與背包、下方技能列 -->
+    <UILayout id="hudLayer" style="layer" justify="between">
+      <UILayout dir="h" justify="between" align="start" gap="12">
+        <UILayout style="hudCard" dir="h" gap="10" align="center" width="270">
+          <UILayout width="44" height="44" radius="22" background="#2a3124" align="center" justify="center" border="2 #9acd32">
+            <UIIcon name="user" size="26" color="#9acd32"/>
+          </UILayout>
+          <UILayout flex="1" gap="5">
+            <UILabel style="field" fontWeight="bold">勇者　Lv.7</UILabel>
+            <UIProgressBar id="hp" value="80" max="100" width="100%" height="14" fill="#ff6b6b" showText="true" textFormat="{value} / {max}"/>
+            <UIProgressBar id="mp" value="60" max="100" width="100%" height="8" fill="#4cc9f0"/>
+          </UILayout>
+        </UILayout>
+        <UILayout style="hudCard" dir="h" gap="10" align="center">
+          <UIIcon name="coin" size="20" color="#ffd75e"/>
+          <UILabel id="coins" fontSize="18" fontWeight="bold" color="#ffd75e" minWidth="44">120</UILabel>
+          <UIButton text="背包" onClick="openBag">
+            <UIBadge id="bagBadge" value="2"/>
+          </UIButton>
+        </UILayout>
+      </UILayout>
+      <UILayout style="hudCard" dir="h" gap="10" self="center">
+        <UILayout align="center" gap="3">
+          <UISlot iconName="bolt" onClick="skill1" tooltipTitle="閃電" tooltip="跳起來。魔力 15，冷卻 2 秒"><UICooldown id="cd1"/></UISlot>
+          <UILabel style="hint">1</UILabel>
+        </UILayout>
+        <UILayout align="center" gap="3">
+          <UISlot iconName="star" onClick="skill2" tooltipTitle="旋風" tooltip="轉一圈。魔力 20，冷卻 3 秒"><UICooldown id="cd2"/></UISlot>
+          <UILabel style="hint">2</UILabel>
+        </UILayout>
+        <UILayout align="center" gap="3">
+          <UISlot iconName="shield" onClick="skill3" tooltipTitle="巨大化" tooltip="變大 2 秒。魔力 30，冷卻 5 秒"><UICooldown id="cd3"/></UISlot>
+          <UILabel style="hint">3</UILabel>
+        </UILayout>
+        <UILayout align="center" gap="3">
+          <UISlot iconName="heart" onClick="skill4" rarity="uncommon" tooltipTitle="治療" tooltip="回復 25 生命。魔力 25，冷卻 4 秒"><UICooldown id="cd4"/></UISlot>
+          <UILabel style="hint">4</UILabel>
+        </UILayout>
+      </UILayout>
+    </UILayout>
+
+    <!-- ② 背包與排行榜：兩個可以拖曳的視窗 -->
+    <UILayout id="bagLayer" style="layer" hidden="true">
+      <UIWindow id="bagWindow" title="背包" position="absolute" left="16" top="16" width="340">
+        <UIList id="items" type="grid" columns="5" gap="6">
+          <UITemplate>
+            <UISlot id="item{index}" iconName="{iconName}" count="{count}" rarity="{rarity}" tooltipTitle="{name}" tooltip="{desc}" onClick="pickItem" onDrop="dropItem"/>
+          </UITemplate>
+        </UIList>
+        <UILabel id="itemCount" style="hint">0 / 15</UILabel>
+      </UIWindow>
+      <UIWindow id="rankWindow" title="排行榜" position="absolute" right="16" top="16" width="300">
+        <UITable id="rank" height="220" onSelect="pickRow">
+          <UIColumn key="rank" title="#" width="40" align="center"/>
+          <UIColumn key="name" title="玩家"/>
+          <UIColumn key="score" title="分數" width="90" align="right" sort="number"/>
+        </UITable>
+      </UIWindow>
+    </UILayout>
+
+    <!-- ④ 對話框：在畫面下方 -->
+    <UILayout id="talkLayer" style="layer" justify="end" hidden="true">
+      <UIDialogue id="dialogue" speaker="村長" onNext="talkNext" onChoose="talkChoose" hidden="true"> </UIDialogue>
+    </UILayout>
+  </UILayout>
+
+  <UIToast placement="top"/>
+</UI>

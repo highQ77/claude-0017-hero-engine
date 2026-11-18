@@ -1,0 +1,43 @@
+<!--
+  範例：手機操作版面
+  用途：疊加在遊戲上（screens.open('mobile')），透明的地方可以點到遊戲
+  版面尺寸：滿版（auto × auto）：上方狀態與小地圖、下方搖桿與技能分別貼齊上下
+  用到：UIImport（共用主題）、UIFpsMeter（內建 FPS 顯示，滑鼠會穿透）、UIJoystick、UIMinimap（旋轉模式）、UISlot 快捷列 ＋ UICooldown、UIProgressBar（圓形與長條）、
+        UIToast、UIIcon、UIBadge、tooltip
+-->
+<UI width="auto" height="auto" padding="14">
+  <UIImport src="theme.xml"/>
+  <UIStyle name="stat" dir="h" gap="8" align="center"/>
+  <UIToast placement="top"/>
+
+  <!-- 上方：生命、體力、小地圖 -->
+  <UILayout dir="h" justify="between" align="start">
+    <UILayout style="panel" gap="8" width="210" padding="12 14">
+      <UILayout style="stat"><UIIcon name="heart" size="14" color="#ff6b6b"/><UIProgressBar value="76" flex="1" height="10" fill="#ff6b6b,#ffb347"/></UILayout>
+      <UILayout style="stat"><UIIcon name="bolt" size="14" color="#9acd32"/><UIProgressBar value="45" flex="1" height="10"/></UILayout>
+    </UILayout>
+    <UILayout align="end" gap="8">
+      <UIFpsMeter/>
+      <UIMinimap id="mobileMap" width="120" height="120" range="15" rotate="true"/>
+      <UIButton style="ghost" text="關閉範例" onClick="screen.close" padding="7 12" fontSize="13">
+        <UIIcon name="close" size="14" color="#9acd32"/>
+      </UIButton>
+    </UILayout>
+  </UILayout>
+
+  <UILayout flex="1"/>
+
+  <!-- 下方：搖桿、技能 -->
+  <UILayout dir="h" justify="between" align="end">
+    <UIJoystick id="mobileStick" width="130" height="130"/>
+    <UILayout dir="h" gap="10" align="end">
+      <UISlot iconName="potion" count="3" rarity="uncommon" onClick="mobileSkill" tooltip="回復藥水"><UIBadge value="3"/></UISlot>
+      <UISlot id="skill1" iconName="bolt" rarity="rare" onClick="mobileSkill" tooltip="閃電（冷卻 2 秒）"><UICooldown id="skill1Cd"/></UISlot>
+      <UILayout width="84" height="84">
+        <UISlot id="skill2" iconName="fire" rarity="legendary" width="84" height="84" onClick="mobileSkill" tooltip="大招（冷卻 5 秒）"><UICooldown id="skill2Cd"/></UISlot>
+        <UIProgressBar shape="radial" value="100" position="absolute" left="-7" top="-7" right="-7" bottom="-7" ringWidth="4" fill="#ffd75e"
+                       trackColor="rgba(0,0,0,0)" tooltip="大招充能完成"/>
+      </UILayout>
+    </UILayout>
+  </UILayout>
+</UI>

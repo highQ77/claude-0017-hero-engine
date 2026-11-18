@@ -1,0 +1,144 @@
+<!-- group: 核心 -->
+<h1>引擎與主迴圈</h1>
+<p class="lead"><code>Engine</code> 負責生命週期（開始、暫停、停止、銷毀）、每一幀的更新順序，以及外掛的安裝與移除。</p>
+
+<h2>生命週期</h2>
+<table>
+  <thead><tr><th>方法</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>start()</code></td><td>開始主迴圈（idle → running）</td></tr>
+    <tr><td><code>pause()</code>／<code>resume()</code></td><td>暫停、繼續。分頁被切到背景時會自動暫停（<code>pauseOnHidden</code>）</td></tr>
+    <tr><td><code>stop()</code></td><td>停止並回到 idle，之後可以再 <code>start()</code></td></tr>
+    <tr><td><code>stepFrame(秒)</code></td><td>暫停時往前推進一幀（除錯用）</td></tr>
+    <tr><td><code>destroy()</code></td><td>反向卸載所有外掛，引擎不能再使用</td></tr>
+    <tr><td><code>state</code></td><td><code>'idle' | 'running' | 'paused' | 'destroyed'</code></td></tr>
+  </tbody>
+</table>
+
+<h2>更新階段</h2>
+<p>每一幀依序執行五個階段。<code>fixedUpdate</code> 以固定步長執行（預設每秒 60 次），一幀裡可能執行 0 次或好幾次，適合物理；其他階段每幀執行一次。</p>
+<table>
+  <thead><tr><th>階段</th><th>適合做什麼</th></tr></thead>
+  <tbody>
+    <tr><td><code>input</code></td><td>讀取鍵盤、滑鼠、手把（輸入外掛在這裡結算）</td></tr>
+    <tr><td><code>fixedUpdate</code></td><td>物理模擬、需要固定時間間隔的邏輯</td></tr>
+    <tr><td><code>update</code></td><td>一般遊戲邏輯（預設）</td></tr>
+    <tr><td><code>lateUpdate</code></td><td>攝影機跟隨等，需要等其他物件移動完的事</td></tr>
+    <tr><td><code>render</code></td><td>繪製（繪製外掛在這裡畫出畫面）</td></tr>
+  </tbody>
+</table>
+<p>用 <code>engine.on(階段, 回呼, 優先度)</code> 直接掛在主迴圈上；回傳的函式可以取消註冊。同一階段裡優先度數字小的先執行。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="主迴圈與時間" data-height="140">
+import { Engine } from '@engine/core';
+
+const engine = new Engine({ fixedDelta: 1 / 30 }); // 固定步長：每秒 30 次
+
+let fixedCount = 0;
+engine.on('fixedUpdate', () => fixedCount++);
+
+let lastSecond = 0;
+const off = engine.on('update', (time) => {
+  // time.delta：這一幀經過幾秒；time.elapsed：遊戲開始後經過幾秒
+  if (Math.floor(time.elapsed) > lastSecond) {
+    lastSecond = Math.floor(time.elapsed);
+    console.log(`第 ${lastSecond} 秒：已經 ${time.frame} 幀、fixedUpdate ${fixedCount} 次、FPS ${Math.round(time.fps)}`);
+  }
+  if (time.elapsed > 5) {
+    off(); // 取消註冊
+    console.log('5 秒到了，停止印出');
+  }
+});
+
+engine.addListener('start', () => console.log('引擎開始'));
+engine.start();
+</script>
+
+<h2>時間</h2>
+<p><code>engine.time</code>（系統和回呼收到的 <code>time</code>）提供：</p>
+<table>
+  <thead><tr><th>屬性</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>delta</code></td><td>這一幀的間隔秒數（受時間縮放影響）</td></tr>
+    <tr><td><code>unscaledDelta</code></td><td>不受時間縮放影響的間隔（介面動畫用）</td></tr>
+    <tr><td><code>elapsed</code>／<code>unscaledElapsed</code></td><td>經過的總秒數</td></tr>
+    <tr><td><code>fixedDelta</code></td><td>固定步長</td></tr>
+    <tr><td><code>timeScale</code></td><td>時間縮放：0.5 是慢動作、2 是快轉、0 等於凍結遊戲時間</td></tr>
+    <tr><td><code>frame</code>、<code>fps</code></td><td>幀數、平滑後的每秒幀數</td></tr>
+  </tbody>
+</table>
+<p>下面的範例用時間縮放做慢動作：每兩秒在正常速度與 0.2 倍之間切換。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="時間縮放（慢動作）" data-height="300">
+import { Transform } from '@engine/scene';
+import { spawn } from '@engine/render';
+import { engine, world } from './engine';
+
+const camera = spawn.camera(world, { position: [0, 0, 6], target: [0, 0, 0] });
+spawn.light(world, { kind: 'hemisphere', intensity: 2 });
+
+const ball = world.require(spawn.mesh(world, { geometry: { sphere: [0.4, 32, 16] }, material: '#ffb347' }), Transform);
+
+engine.on('update', (time) => {
+  ball.position.x = Math.sin(time.elapsed * 3) * 2.5; // 用 elapsed：慢動作時位置也會變慢
+});
+
+setInterval(() => {
+  engine.time.timeScale = engine.time.timeScale === 1 ? 0.2 : 1;
+  console.log('timeScale =', engine.time.timeScale);
+}, 2000);
+
+engine.start();
+</script>
+
+<h2>設定</h2>
+<p><code>new Engine(設定)</code> 可以覆蓋預設值：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="引擎設定">
+const engine = new Engine({
+  fixedDelta: 1 / 60,    // 固定步長（秒）
+  timeScale: 1,          // 時間縮放
+  maxFixedSteps: 5,      // 一幀最多補幾次 fixedUpdate（避免卡頓後越來越慢）
+  maxDelta: 0.1,         // 單幀間隔上限（切回分頁時不會一次跳很遠）
+  pauseOnHidden: true,   // 分頁切到背景時自動暫停
+  debug: false,          // 在主控台印出外掛安裝等訊息
+});
+</script>
+
+<h2>外掛</h2>
+<p>外掛是有 <code>name</code> 與 <code>install(engine)</code> 的物件。引擎提供的功能（繪製、物理、介面…）都是外掛，自己的系統也可以寫成外掛，方便在不同遊戲間重複使用。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="自己寫一個外掛" data-height="120">
+import type { Engine, Plugin } from '@engine/core';
+import { engine } from './engine';
+
+/** 每秒印出一次 FPS 的外掛 */
+class FpsLogger implements Plugin {
+  readonly name = 'fps-logger';
+  private off: (() => void) | null = null;
+
+  install(engine: Engine): void {
+    let timer = 0;
+    this.off = engine.on('update', (time) => {
+      timer += time.unscaledDelta;
+      if (timer >= 1) {
+        timer = 0;
+        console.log(`FPS ${Math.round(time.fps)}`);
+      }
+    });
+  }
+
+  uninstall(): void {
+    this.off?.();
+  }
+}
+
+engine.use(new FpsLogger());
+engine.start();
+console.log('已安裝：', engine.hasPlugin('fps-logger'));
+setTimeout(() => {
+  engine.removePlugin('fps-logger');
+  console.log('3 秒後移除外掛，不再印出');
+}, 3000);
+</script>
+<ul>
+  <li><code>dependencies: ['ecs', 'render']</code>：宣告依賴的外掛，安裝時會檢查是否已經安裝。</li>
+  <li><code>engine.getPlugin&lt;RenderPlugin&gt;('render')</code>：取得其他外掛。</li>
+  <li>外掛要給遊戲用的物件，用屬性提供（例如 <code>inputPlugin.input</code>、<code>audioPlugin.audio</code>），遊戲專案在 <code>engine.ts</code> 匯出成短名稱；同時用 <code>world.setResource</code> 登記成資源，給其他外掛、套件取得（見下一章的「資源」）。</li>
+</ul>

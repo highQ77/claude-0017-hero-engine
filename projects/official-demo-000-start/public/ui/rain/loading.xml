@@ -1,0 +1,35 @@
+<!--
+  場景「rain」的資源載入頁面
+  用途：進入 rain 場景時由 SceneTransition 顯示（src/main.ts 的 transition.define('rain', { loading })）
+  版面尺寸：滿版（auto × auto）
+  這些 id 會自動更新：loadingTitle 場景名稱、loadingBar 進度（0～100）、loadingText 百分比、loadingItem 正在載入的檔案、loadingTip 提示
+  用到：UIImport（共用主題，用 ../ 引用上一層）、UIIcon、UIProgressBar
+-->
+<UI width="auto" height="auto" background="#140d08" align="center" justify="center" padding="24" gap="18">
+  <UIImport src="../theme.xml"/>
+
+  <UILayout dir="h" gap="10">
+    <UIIcon name="shield" size="34" color="#ffb347"/>
+    <UIIcon name="target" size="34" color="#ff6b6b"/>
+    <UIIcon name="shield" size="34" color="#ffd75e"/>
+  </UILayout>
+
+  <UILayout align="center" gap="6">
+    <UILabel style="section" color="#ffb347">第 2 站 · 載入中</UILabel>
+    <UILabel id="loadingTitle" fontSize="30" fontWeight="bold" color="#ffffff" textShadow="0 4 16 rgba(255,140,60,0.45)">方塊雨</UILabel>
+    <UILabel fontSize="13" color="#cdb29a" textAlign="center">球和箱子從天上掉下來，點它們會被踢飛</UILabel>
+  </UILayout>
+
+  <UILayout gap="8" width="80%" maxWidth="380">
+    <UIProgressBar id="loadingBar" value="0" max="100" width="100%" height="10" fill="#ff6b6b,#ffd75e" animate="0.15"/>
+    <UILayout dir="h" justify="between">
+      <UILabel id="loadingItem" fontSize="12" color="#8a7462" shrink="1"></UILabel>
+      <UILabel id="loadingText" fontSize="12" color="#ead2bd">0%</UILabel>
+    </UILayout>
+  </UILayout>
+
+  <UILayout style="chip" maxWidth="440">
+    <UIIcon name="info" size="14" color="#ffb347"/>
+    <UILabel id="loadingTip" fontSize="13" color="#ead2bd" shrink="1">提示</UILabel>
+  </UILayout>
+</UI>

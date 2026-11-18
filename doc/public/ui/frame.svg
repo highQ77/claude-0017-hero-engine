@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- 九宮格面板框：四角 16px（bgSlice="16"） -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c3524"/><stop offset="1" stop-color="#171c13"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="46" height="46" rx="10" fill="url(#g)" stroke="#9acd32" stroke-width="2"/>
+  <rect x="5" y="5" width="38" height="38" rx="7" fill="none" stroke="rgba(154,205,50,0.35)" stroke-width="1"/>
+  <g fill="#c8f07a">
+    <circle cx="8" cy="8" r="2.2"/><circle cx="40" cy="8" r="2.2"/><circle cx="8" cy="40" r="2.2"/><circle cx="40" cy="40" r="2.2"/>
+  </g>
+</svg>

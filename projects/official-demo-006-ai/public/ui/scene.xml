@@ -1,0 +1,150 @@
+<!--
+  official-demo-006-ai 的介面：左邊是說明面板（四個分頁），右邊是 3D 畫面。
+  可以用 UI 編輯器（/ui-editor.html）編輯。程式在 src/main.ts（onClick、onChange 的處理函式）。
+-->
+<UI width="auto" height="auto" dir="h">
+  <UISkin for="UIButton" radius="8" padding="7 12" background="#2a3124" hoverBackground="#37402f" color="#e9f6d2" fontSize="13"/>
+  <UISkin for="UISlider" width="100%"/>
+  <UISkin for="UIToggle" fontSize="13" color="#e9f6d2"/>
+  <UISkin for="UIProgressBar" width="100%" height="10" animate="0"/>
+  <UIStyle name="tab" flex="1" padding="8 4" activeBackground="#9acd32" activeColor="#141a07" fontWeight="bold"/>
+  <UIStyle name="title" fontSize="17" fontWeight="bold" color="#c8f07a"/>
+  <UIStyle name="text" fontSize="13" color="#c6cdbb" lineHeight="1.5"/>
+  <UIStyle name="hint" fontSize="12" color="#8f9884" lineHeight="1.5"/>
+  <UIStyle name="field" fontSize="12" color="#e9f6d2"/>
+  <UIStyle name="codeBox" gap="3" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+  <UIStyle name="codeLine" fontSize="12" color="#ffd166" fontFamily="monospace"/>
+  <UIStyle name="box" gap="4" padding="10" background="rgba(255,255,255,0.04)" radius="8"/>
+  <UIStyle name="stat" fontSize="20" fontWeight="bold" color="#ffd166"/>
+  <UIStyle name="rule" fontSize="12" color="#e9f6d2" padding="3 6" radius="5"/>
+
+  <!-- ───────── 左：說明面板 ───────── -->
+  <UILayout id="panel" width="340" padding="16" gap="12" background="rgba(14,17,12,0.92)">
+    <UILayout gap="2">
+      <UILabel fontSize="11" color="#8f9884">OFFICIAL DEMO 006</UILabel>
+      <UILabel fontSize="22" fontWeight="bold" color="#ffffff">AI 介紹</UILabel>
+    </UILayout>
+
+    <UILayout dir="h" gap="4">
+      <UIButton text="轉向" style="tab" select="pages:steering"/>
+      <UIButton text="找路" style="tab" select="pages:path"/>
+      <UIButton text="狀態機" style="tab" select="pages:fsm"/>
+      <UIButton text="行為樹" style="tab" select="pages:bt"/>
+    </UILayout>
+
+    <UIStackView id="pages" flex="1" transition="fade" onChange="page">
+      <!-- ① 轉向 -->
+      <UIScrollView id="steering" gap="10">
+        <UILabel style="title">轉向行為（Steering）</UILabel>
+        <UILabel style="text">角色不是直接瞬移到目標，而是算出一個「轉向力」慢慢改變速度：看起來會加速、轉彎、減速。加上保持距離（separation），一群角色就不會擠成一團。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">world.add(e, SteeringAgent, {</UILabel>
+          <UILabel style="codeLine">  mode: 'pursue', targetEntity: 目標 })</UILabel>
+        </UILayout>
+        <UILabel style="field">行為（mode）</UILabel>
+        <UISelect id="mode" value="pursue" onChange="steering">
+          <UIOption value="seek">seek：直直衝向目標</UIOption>
+          <UIOption value="arrive">arrive：接近時減速停下</UIOption>
+          <UIOption value="pursue">pursue：預測目標的位置追過去</UIOption>
+          <UIOption value="flee">flee：逃離目標</UIOption>
+          <UIOption value="evade">evade：預測目標的位置躲開</UIOption>
+          <UIOption value="wander">wander：隨意漫步</UIOption>
+        </UISelect>
+        <UILabel style="field">最快速度（maxSpeed）</UILabel>
+        <UISlider id="maxSpeed" min="0.5" max="8" step="0.1" value="3" showValue="true" onInput="steering"/>
+        <UILabel style="field">轉向力（maxForce：越小轉彎越慢）</UILabel>
+        <UISlider id="maxForce" min="1" max="30" step="1" value="8" showValue="true" onInput="steering"/>
+        <UILabel style="field">保持距離（separation）</UILabel>
+        <UISlider id="separation" min="0" max="5" step="0.1" value="1.5" showValue="true" onInput="steering"/>
+        <UIToggle id="followMouse" text="目標跟著滑鼠（關掉時自己繞圈）"/>
+        <UIToggle id="showVectors" text="畫出速度方向" checked="true"/>
+      </UIScrollView>
+
+      <!-- ② 找路 -->
+      <UIScrollView id="path" gap="10">
+        <UILabel style="title">找路（NavGrid + PathFollower）</UILabel>
+        <UILabel style="text">把地圖切成格子，標記哪些格子擋住，用 A* 找出最短路線。PathFollower 會自己找路、沿著路線走；目標移動時自動重新找路。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">grid.setArea(x1, z1, x2, z2, false)</UILabel>
+          <UILabel style="codeLine">ai.navGrid = grid</UILabel>
+          <UILabel style="codeLine">follower.destination = { x, y, z }</UILabel>
+        </UILayout>
+        <UILabel style="hint">點地面：藍色的角色走過去（繞過牆）；紅色的寵物跟著它（targetEntity）。</UILabel>
+        <UILayout dir="h" gap="8" wrap="true">
+          <UIButton text="重新產生牆" onClick="newMaze"/>
+          <UIToggle id="showGrid" text="顯示擋住的格子" onChange="showGrid"/>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="hint">找路狀態（follower.status）</UILabel>
+          <UILabel id="pathStatus" style="stat">idle</UILabel>
+          <UILabel id="pathInfo" style="field"> </UILabel>
+        </UILayout>
+      </UIScrollView>
+
+      <!-- ③ 狀態機 -->
+      <UIScrollView id="fsm" gap="10">
+        <UILabel style="title">有限狀態機（StateMachine）</UILabel>
+        <UILabel style="text">村民一次只會在一個狀態：每個狀態有自己要做的事，條件成立就換到下一個狀態。適合狀態清楚、數量不多的行為。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">new StateMachine(資料, 'work', {</UILabel>
+          <UILabel style="codeLine">  work: { update: () =&gt; 口渴 ? 'thirsty' : undefined } })</UILabel>
+        </UILayout>
+        <UILayout dir="h" gap="8" align="center">
+          <UILabel style="hint">目前的狀態</UILabel>
+          <UILabel id="fsmState" style="stat">work</UILabel>
+          <UILabel id="fsmTime" style="hint" flex="1" textAlign="right">0.0 秒</UILabel>
+        </UILayout>
+        <UILayout style="box" gap="2">
+          <UILabel id="rule0" style="rule">work 工作 → thirsty：口渴到 100</UILabel>
+          <UILabel id="rule1" style="rule">work 工作 → tired：體力低於 20</UILabel>
+          <UILabel id="rule2" style="rule">thirsty 去井邊 → drink：走到了</UILabel>
+          <UILabel id="rule3" style="rule">drink 喝水 → work：不渴了</UILabel>
+          <UILabel id="rule4" style="rule">tired 回家 → rest：走到了</UILabel>
+          <UILabel id="rule5" style="rule">rest 休息 → work：體力回滿</UILabel>
+        </UILayout>
+        <UILabel style="field">口渴</UILabel>
+        <UIProgressBar id="thirst" value="0" fill="#4cc9f0"/>
+        <UILabel style="field">體力</UILabel>
+        <UIProgressBar id="energy" value="100" fill="#9acd32"/>
+        <UILayout dir="h" gap="8" wrap="true">
+          <UIButton text="讓他口渴" onClick="makeThirsty"/>
+          <UIButton text="讓他累" onClick="makeTired"/>
+        </UILayout>
+        <UIToggle id="fast" text="時間 3 倍速" onChange="fast"/>
+      </UIScrollView>
+
+      <!-- ④ 行為樹 -->
+      <UIScrollView id="bt" gap="10">
+        <UILabel style="title">行為樹（BehaviorTree）</UILabel>
+        <UILabel style="text">由上往下依優先順序判斷：看得到玩家就追；追丟了就去最後看到的地方找一找；都沒有就巡邏。行為一多時比狀態機好維護。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">BT.selector(</UILabel>
+          <UILabel style="codeLine">  BT.sequence(看得到?, 追擊),</UILabel>
+          <UILabel style="codeLine">  BT.sequence(有線索?, 去查看, 等一下),</UILabel>
+          <UILabel style="codeLine">  巡邏)</UILabel>
+        </UILayout>
+        <UILabel style="hint">用 WASD 或方向鍵操作綠色的玩家，躲在牆後面守衛就看不到你；起點的綠色圓圈是安全區。被抓到會回到起點。</UILabel>
+        <UILayout style="box">
+          <UILabel style="hint">守衛 A 正在執行（tree.activePath）</UILabel>
+          <UILabel id="guard0" style="field" color="#ffb347">—</UILabel>
+          <UILabel style="hint">守衛 B</UILabel>
+          <UILabel id="guard1" style="field" color="#ff6b9a">—</UILabel>
+        </UILayout>
+        <UILayout dir="h" gap="16">
+          <UILayout gap="2">
+            <UILabel style="hint">被發現</UILabel>
+            <UILabel id="spotted" style="stat">0</UILabel>
+          </UILayout>
+          <UILayout gap="2">
+            <UILabel style="hint">被抓到</UILabel>
+            <UILabel id="caught" style="stat">0</UILabel>
+          </UILayout>
+        </UILayout>
+      </UIScrollView>
+    </UIStackView>
+
+    <UILabel style="hint">拖曳畫面轉動視角，滾輪縮放（先點一下畫面）。按 ` 鍵顯示效能面板。</UILabel>
+  </UILayout>
+
+  <UIToast placement="top"/>
+</UI>

@@ -1,0 +1,58 @@
+<!-- group: 入門 -->
+<h1>Hero Engine 是什麼</h1>
+<p class="lead">Hero Engine 是建立在 three.js 上的網頁遊戲引擎：用「實體＋元件」組合遊戲物件，用外掛加上繪製、物理、音效、介面等功能，2D 介面則用 XML 描述、由 Yoga 排版引擎自動排版。</p>
+
+<h2>這本手冊怎麼讀</h2>
+<p>每一章都有<strong>可以直接修改的範例</strong>。程式碼有語法高亮，點進去就能編輯：</p>
+<ul>
+  <li><strong>TypeScript 範例</strong>：按 <kbd>▶ 執行</kbd>（或在編輯器裡按 <kbd>Ctrl</kbd>／<kbd>⌘</kbd> + <kbd>Enter</kbd>），結果會顯示在下方的預覽框；<code>console.log</code> 的輸出與錯誤訊息顯示在預覽框底下。</li>
+  <li><strong>3D 畫面可以用滑鼠轉動</strong>：在預覽框裡拖曳轉動攝影機、右鍵（或 <kbd>Shift</kbd> + 拖曳）平移；先點一下畫面，滾輪才會縮放（捲動手冊時不會誤觸）。手機上用單指轉動、雙指縮放。</li>
+  <li><strong>XML 介面範例</strong>：邊打邊更新，不用按執行。按鈕的 <code>onClick</code> 等事件會印在下方，可以切換「手機／平板／全寬」看看 RWD 排版。</li>
+  <li>改壞了按 <kbd>還原</kbd> 回到原本的範例；<kbd>複製</kbd> 把程式碼貼到自己的專案。</li>
+</ul>
+<p>先試試看：把下面的 <code>text</code> 改成你的名字，或把 <code>background</code> 換成別的顏色。</p>
+<script type="text/plain" class="example" data-lang="xml" data-title="第一個介面" data-height="200">
+<UI align="center" justify="center" gap="12">
+  <UILabel fontSize="28" fontWeight="bold" color="#ffffff">哈囉，Hero Engine！</UILabel>
+  <UIButton text="按我" background="#9acd32" color="#141a07" onClick="hello"/>
+</UI>
+</script>
+
+<div class="tip">
+  <p>編輯器的快速鍵：<kbd>Tab</kbd>／<kbd>Shift</kbd> + <kbd>Tab</kbd> 縮排、<kbd>⌘</kbd> + <kbd>Z</kbd> 復原、<kbd>Esc</kbd> 離開編輯器。搜尋手冊按 <kbd>/</kbd>。</p>
+</div>
+
+<h2>引擎的組成</h2>
+<p>引擎核心很小，只負責主迴圈與外掛管理；其餘功能都是可以選擇安裝的外掛：</p>
+<table>
+  <thead><tr><th>模組</th><th>引用</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td>核心</td><td><code>@engine/core</code></td><td>引擎生命週期、主迴圈、時間</td></tr>
+    <tr><td>數學</td><td><code>@engine/math</code></td><td>向量、四元數、顏色（three.js 的數學類別）</td></tr>
+    <tr><td>實體與元件</td><td><code>@engine/ecs</code></td><td>World、元件、查詢、系統</td></tr>
+    <tr><td>場景</td><td><code>@engine/scene</code></td><td>位置旋轉縮放（Transform）、父子關係、場景切換、場景檔（XML／JSON）</td></tr>
+    <tr><td>繪製</td><td><code>@engine/render</code></td><td>攝影機、燈光、網格、點選物件</td></tr>
+    <tr><td>輸入</td><td><code>@engine/input</code></td><td>鍵盤、滑鼠、觸控、手把、動作對應</td></tr>
+    <tr><td>腳本</td><td><code>@engine/scripts</code></td><td>用類別寫物件的行為（類似 Unity 的 MonoBehaviour）</td></tr>
+    <tr><td>動畫</td><td><code>@engine/animation</code></td><td>補間動畫、時間軸、模型動畫與狀態機</td></tr>
+    <tr><td>物理</td><td><code>@engine/physics</code></td><td>剛體、碰撞體、射線（Rapier）</td></tr>
+    <tr><td>粒子</td><td><code>@engine/particles</code></td><td>火焰、煙霧、火花、爆炸</td></tr>
+    <tr><td>音效</td><td><code>@engine/audio</code></td><td>音效、背景音樂、3D 空間音效</td></tr>
+    <tr><td>資源</td><td><code>@engine/assets</code></td><td>載入模型、貼圖、音效、字型</td></tr>
+    <tr><td>2D 介面</td><td><code>@engine/ui2d</code></td><td>XML 介面、Yoga 排版、30 多種元件</td></tr>
+    <tr><td>更多</td><td><code>@engine/text3d</code>、<code>postfx</code>、<code>shaders</code>、<code>ai</code>、<code>network</code>、<code>ui3d</code>、<code>plugins</code></td><td>3D 文字、後製效果、著色器、AI、多人連線、3D 介面、套件</td></tr>
+  </tbody>
+</table>
+<p>開發時另外有四個網頁編輯器（<code>node hero dev</code> 時提供，不會打包到遊戲裡）：<a href="#/scene-editor">3D 場景編輯器</a>（<code>/s3d-editor</code>，編輯場景檔與預製物件）、<a href="#/ui-editor">UI 編輯器</a>（<code>/ui-editor</code>，編輯介面檔，和 3D 場景編輯器可以即時連動）、<a href="#/shader-editor">著色器編輯器</a>（<code>/shader-editor</code>）與<a href="#/se-editor">音效編輯器</a>（<code>/se-editor</code>）。另外 <code>/portal</code> 是入口頁，列出所有專案，點一下就能切換。完整網址見<a href="#/getting-started">開始使用</a>的「開發網址」。</p>
+
+<h2>章節導覽</h2>
+<div class="cards">
+  <a href="#/getting-started"><strong>開始使用</strong><span>建立專案、執行、第一個遊戲</span></a>
+  <a href="#/ecs"><strong>實體與元件</strong><span>引擎最重要的觀念</span></a>
+  <a href="#/scripts"><strong>腳本</strong><span>用類別替物件寫行為</span></a>
+  <a href="#/physics"><strong>物理</strong><span>掉落、碰撞、推動</span></a>
+  <a href="#/ui2d"><strong>2D 介面</strong><span>XML、排版、RWD、事件</span></a>
+  <a href="#/ui-reference"><strong>UI 元件參考</strong><span>每個元件的說明與範例</span></a>
+  <a href="#/scene-editor"><strong>3D 場景編輯器</strong><span>擺放物件、預覽遊戲、UI 層</span></a>
+  <a href="#/ui-editor"><strong>UI 編輯器</strong><span>視覺化編輯介面檔</span></a>
+</div>

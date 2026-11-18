@@ -1,0 +1,24 @@
+<Scene format="hero-scene" version="1">
+  <SceneUI src="ui/scene.xml"/>
+  <Entity id="camera" name="攝影機">
+    <Transform position="0 1.5 4" rotation="-20.556045 0 0"/>
+    <Camera fov="55"/>
+  </Entity>
+  <Entity id="sky-light" name="天空光">
+    <Transform position="0 1 0"/>
+    <Light kind="hemisphere" color="#cfe0ff" intensity="1.2" groundColor="#40342a"/>
+  </Entity>
+  <Entity id="sun" name="太陽">
+    <Transform position="3 6 4" rotation="-56.309932 22.588539 29.949082"/>
+    <Light intensity="2"/>
+  </Entity>
+  <Entity id="box" name="方塊">
+    <Transform/>
+    <MeshRenderer>
+      <geometry box="1"/>
+      <material>
+        <standard color="#9acd32" roughness="0.4"/>
+      </material>
+    </MeshRenderer>
+  </Entity>
+</Scene>

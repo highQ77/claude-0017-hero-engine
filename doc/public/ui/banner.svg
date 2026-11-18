@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+  <!-- 風景圖（bgFit="cover"） -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9a5a"/><stop offset="1" stop-color="#5b3a7a"/></linearGradient>
+  </defs>
+  <rect width="400" height="200" fill="url(#sky)"/>
+  <circle cx="300" cy="80" r="34" fill="#ffd27a"/>
+  <path d="M0 150 L80 95 L150 140 L230 80 L320 145 L400 110 L400 200 L0 200 Z" fill="#2e2448"/>
+  <path d="M0 175 L120 140 L210 170 L300 135 L400 165 L400 200 L0 200 Z" fill="#1b1530"/>
+</svg>

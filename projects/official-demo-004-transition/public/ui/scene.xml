@@ -1,0 +1,197 @@
+<!--
+  official-demo-004-transition 的介面：左邊是說明面板（四個分頁），右邊是疊在 3D 畫面上的 2D 介面（每一頁不同）。
+  關卡的載入頁面在 ui/loading-*.xml；疊加的對話視窗在 ui/notice.xml。
+  可以用 UI 編輯器（/ui-editor.html）編輯。程式在 src/main.ts（onClick、onChange 的處理函式）。
+-->
+<UI width="auto" height="auto" dir="h">
+  <UISkin for="UIButton" radius="8" padding="7 12" background="#2a3124" hoverBackground="#37402f" color="#e9f6d2" fontSize="13"/>
+  <UISkin for="UISlider" width="100%"/>
+  <UISkin for="UIToggle" fontSize="13" color="#e9f6d2"/>
+  <UIStyle name="tab" flex="1" padding="8 4" activeBackground="#9acd32" activeColor="#141a07" fontWeight="bold"/>
+  <UIStyle name="title" fontSize="17" fontWeight="bold" color="#c8f07a"/>
+  <UIStyle name="text" fontSize="13" color="#c6cdbb" lineHeight="1.5"/>
+  <UIStyle name="hint" fontSize="12" color="#8f9884" lineHeight="1.5"/>
+  <UIStyle name="field" fontSize="12" color="#e9f6d2"/>
+  <UIStyle name="codeBox" gap="3" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+  <UIStyle name="codeLine" fontSize="12" color="#ffd166" fontFamily="monospace"/>
+  <UIStyle name="box" gap="4" padding="10" background="rgba(255,255,255,0.04)" radius="8"/>
+  <UIStyle name="layer" position="absolute" left="0" top="0" right="0" bottom="0" padding="16"/>
+  <UIStyle name="hudCard" padding="10 14" background="rgba(10,12,9,0.72)" radius="12" border="1 rgba(154,205,50,0.25)"/>
+  <UIStyle name="card" flex="1" padding="24" gap="10" radius="16" justify="center" align="center"/>
+  <UIStyle name="cardTitle" fontSize="26" fontWeight="bold" color="#ffffff"/>
+  <UIStyle name="cardText" fontSize="14" color="rgba(255,255,255,0.85)" textAlign="center" lineHeight="1.5"/>
+
+  <!-- ───────── 左：說明面板 ───────── -->
+  <UILayout id="panel" width="340" padding="16" gap="12" background="rgba(14,17,12,0.92)">
+    <UILayout gap="2">
+      <UILabel fontSize="11" color="#8f9884">OFFICIAL DEMO 004</UILabel>
+      <UILabel fontSize="22" fontWeight="bold" color="#ffffff">轉場設計</UILabel>
+    </UILayout>
+
+    <UILayout dir="h" gap="4">
+      <UIButton text="場景" style="tab" select="pages:levels"/>
+      <UIButton text="介面" style="tab" select="pages:screens"/>
+      <UIButton text="鏡頭" style="tab" select="pages:camera"/>
+      <UIButton text="過場" style="tab" select="pages:cutscene"/>
+    </UILayout>
+
+    <UIStackView id="pages" flex="1" transition="fade" onChange="page">
+      <!-- ① 場景轉場 -->
+      <UIScrollView id="levels" gap="10">
+        <UILabel style="title">場景轉場（SceneTransition）</UILabel>
+        <UILabel style="text">換關卡時：淡出成黑色 → 顯示載入頁面、下載這一關的資源 → 切換 3D 場景 → 淡入。每一關可以有自己的載入頁面、提示與要先下載的檔案。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">transition.define('forest', { title, loading, assets, tips })</UILabel>
+          <UILabel style="codeLine">await transition.go('forest')</UILabel>
+        </UILayout>
+        <UILayout dir="h" gap="6">
+          <UIButton text="森林" onClick="goForest" flex="1"/>
+          <UIButton text="沙漠" onClick="goDesert" flex="1"/>
+          <UIButton text="雪地" onClick="goSnow" flex="1"/>
+        </UILayout>
+        <UILabel style="field">淡出淡入秒數（duration）</UILabel>
+        <UISlider id="fadeTime" min="0.1" max="1.5" step="0.05" value="0.35" showValue="true" suffix=" 秒" onInput="transitionOptions"/>
+        <UILabel style="field">載入頁面至少顯示（minLoadingTime）</UILabel>
+        <UISlider id="minLoading" min="0" max="3" step="0.1" value="0.8" showValue="true" suffix=" 秒" onInput="transitionOptions"/>
+        <UILabel style="field">淡出的顏色（color）</UILabel>
+        <UISelect id="fadeColor" value="#000000" onChange="transitionOptions">
+          <UIOption value="#000000">黑色</UIOption>
+          <UIOption value="#ffffff">白色（閃光）</UIOption>
+          <UIOption value="#3a1020">暗紅</UIOption>
+        </UISelect>
+        <UIToggle id="slowNet" text="模擬慢速網路（每個檔案多等 0.3 秒）" onChange="transitionOptions"/>
+        <UILayout style="box">
+          <UILabel style="hint">轉場事件（onChange、onProgress）</UILabel>
+          <UILabel id="transitionLog" style="field" lineHeight="1.6"> </UILabel>
+        </UILayout>
+      </UIScrollView>
+
+      <!-- ② 介面轉場 -->
+      <UIScrollView id="screens" gap="10">
+        <UILabel style="title">介面轉場</UILabel>
+        <UILabel style="text">換頁容器（UIStackView）切換時有動畫：slide 滑動、fade 淡入、none 直接換。也可以用滑鼠或手指左右滑動換頁。疊加的畫面用 UIScreenManager 打開、關閉。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">&lt;UIStackView transition="slide" swipe="true" indicator="dots"&gt;</UILabel>
+          <UILabel style="codeLine">screens.open('notice')；screens.back()</UILabel>
+        </UILayout>
+        <UILabel style="field">換頁動畫（transition）</UILabel>
+        <UISelect id="cardTransition" value="slide" onChange="cardTransition">
+          <UIOption value="slide">slide：滑動</UIOption>
+          <UIOption value="fade">fade：淡入</UIOption>
+          <UIOption value="none">none：直接換</UIOption>
+        </UISelect>
+        <UILayout dir="h" gap="8">
+          <UIButton text="上一張" onClick="cardPrev" flex="1"/>
+          <UIButton text="下一張" onClick="cardNext" flex="1"/>
+        </UILayout>
+        <UIButton text="打開疊加視窗（modal）" onClick="openNotice"/>
+        <UIButton text="提示訊息（toast）" onClick="toast"/>
+        <UILabel style="hint">右邊的卡片也可以直接拖曳左右滑動；點下面的圓點跳到那一張。</UILabel>
+      </UIScrollView>
+
+      <!-- ③ 鏡頭轉場 -->
+      <UIScrollView id="camera" gap="10">
+        <UILabel style="title">鏡頭轉場</UILabel>
+        <UILabel style="text">換視角的三種做法：直接切換（cut）、平滑移動（補間攝影機的位置與注視點）、淡出淡入切換（黑畫面時換位置）。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">tweens.to(位置, { x, y, z }, { easing })</UILabel>
+          <UILabel style="codeLine">ui.screenFader.set(透明度)</UILabel>
+          <UILabel style="codeLine">shakeCamera(world, 攝影機, 0.6)</UILabel>
+        </UILayout>
+        <UILabel style="field">切換方式</UILabel>
+        <UISelect id="camMode" value="smooth">
+          <UIOption value="smooth">平滑移動</UIOption>
+          <UIOption value="cut">直接切換</UIOption>
+          <UIOption value="fade">淡出淡入</UIOption>
+        </UISelect>
+        <UILabel style="field">緩動曲線（平滑移動）</UILabel>
+        <UISelect id="camEasing" value="cubicInOut">
+          <UIOption value="cubicInOut">cubicInOut：兩端慢</UIOption>
+          <UIOption value="linear">linear：等速</UIOption>
+          <UIOption value="expoOut">expoOut：衝過去再慢慢停</UIOption>
+          <UIOption value="backInOut">backInOut：超過一點再回來</UIOption>
+        </UISelect>
+        <UILabel style="field">秒數</UILabel>
+        <UISlider id="camTime" min="0.3" max="3" step="0.1" value="1.2" showValue="true" suffix=" 秒"/>
+        <UILayout dir="h" gap="6" wrap="true">
+          <UIButton text="全景" onClick="viewWide"/>
+          <UIButton text="塔" onClick="viewTower"/>
+          <UIButton text="房子" onClick="viewHouse"/>
+          <UIButton text="跟著車子" onClick="viewFollow"/>
+        </UILayout>
+        <UIButton text="畫面晃動（shakeCamera）" onClick="shake"/>
+      </UIScrollView>
+
+      <!-- ④ 過場動畫 -->
+      <UIScrollView id="cutscene" gap="10">
+        <UILabel style="title">過場動畫</UILabel>
+        <UILabel style="text">把淡出淡入、上下黑邊、字幕與鏡頭移動排在一條時間軸上，就是一段過場動畫。黑邊與字幕的切換都在黑畫面時做，不會看到介面跳動。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">tweens.timeline()</UILabel>
+          <UILabel style="codeLine">  .call(淡出).to(鏡頭, …).call(換字幕)</UILabel>
+        </UILayout>
+        <UIButton id="playCutscene" text="播放過場" onClick="playCutscene"/>
+        <UIButton text="略過（Esc）" onClick="skipCutscene"/>
+        <UIProgressBar id="cutsceneProgress" value="0" height="6" fill="#9acd32"/>
+        <UILabel style="hint">播放中按 Esc 或「略過」直接跳到結尾。</UILabel>
+      </UIScrollView>
+    </UIStackView>
+
+    <UILabel style="hint">按 ` 鍵顯示效能面板</UILabel>
+  </UILayout>
+
+  <!-- ───────── 右：疊在 3D 畫面上的 2D 介面（每一頁顯示一層） ───────── -->
+  <UILayout id="stage" flex="1">
+    <!-- ① 目前的關卡 -->
+    <UILayout id="levelsLayer" style="layer" align="start">
+      <UILayout style="hudCard" gap="2">
+        <UILabel style="hint">目前的關卡</UILabel>
+        <UILabel id="levelName" fontSize="20" fontWeight="bold" color="#ffffff">—</UILabel>
+      </UILayout>
+    </UILayout>
+
+    <!-- ② 卡片換頁 -->
+    <UILayout id="screensLayer" style="layer" align="center" justify="center" hidden="true">
+      <UIStackView id="cards" width="420" height="260" transition="slide" swipe="true" indicator="dots" onChange="cardChanged">
+        <UILayout style="card" background="#2f5f2a">
+          <UIIcon name="star" size="48" color="#c8f07a"/>
+          <UILabel style="cardTitle">第一張</UILabel>
+          <UILabel style="cardText">左右拖曳換頁，或按左邊的按鈕。</UILabel>
+        </UILayout>
+        <UILayout style="card" background="#1f4a6a">
+          <UIIcon name="gem" size="48" color="#9fe0ff"/>
+          <UILabel style="cardTitle">第二張</UILabel>
+          <UILabel style="cardText">slide 會依方向從左或右滑進來。</UILabel>
+        </UILayout>
+        <UILayout style="card" background="#5a3a1a">
+          <UIIcon name="fire" size="48" color="#ffc27a"/>
+          <UILabel style="cardTitle">第三張</UILabel>
+          <UILabel style="cardText">fade 適合同一個位置換內容。</UILabel>
+        </UILayout>
+        <UILayout style="card" background="#4a2a5a">
+          <UIIcon name="heart" size="48" color="#ffb3d9"/>
+          <UILabel style="cardTitle">第四張</UILabel>
+          <UILabel style="cardText">none 適合需要立刻反應的地方。</UILabel>
+        </UILayout>
+      </UIStackView>
+    </UILayout>
+
+    <!-- ③ 目前的視角 -->
+    <UILayout id="cameraLayer" style="layer" align="start" hidden="true">
+      <UILayout style="hudCard" gap="2">
+        <UILabel style="hint">目前的視角</UILabel>
+        <UILabel id="viewName" fontSize="20" fontWeight="bold" color="#ffffff">全景</UILabel>
+      </UILayout>
+    </UILayout>
+
+    <!-- ④ 過場：上下黑邊與字幕（只在黑畫面時切換顯示） -->
+    <UILayout id="cutsceneLayer" style="layer" padding="0" justify="between" hidden="true">
+      <UILayout id="barTop" height="70" background="#000000" hidden="true"/>
+      <UILayout id="barBottom" height="110" background="#000000" align="center" justify="center" padding="0 24" hidden="true">
+        <UILabel id="subtitle" fontSize="18" color="#ffffff" textAlign="center"> </UILabel>
+      </UILayout>
+    </UILayout>
+  </UILayout>
+
+  <UIToast placement="top"/>
+</UI>

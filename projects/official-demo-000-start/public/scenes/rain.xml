@@ -1,0 +1,146 @@
+<Scene format="hero-scene" version="1">
+  <SceneUI src="ui/scene.xml"/>
+  <SceneUI src="ui/rain/hud.xml"/>
+  <Settings background="#12151c">
+    <fog color="#12151c" near="16" far="42"/>
+  </Settings>
+  <Entity id="stage" name="舞台" prefab="prefabs/stage.xml"/>
+  <Entity id="ball-1" name="球 1" prefab="prefabs/ball.xml">
+    <Transform position="2.53 2.45 -0.5"/>
+  </Entity>
+  <Entity id="ball-2" name="球 2" prefab="prefabs/ball.xml">
+    <Transform position="1.66 5.19 -1.78"/>
+  </Entity>
+  <Entity id="ball-3" name="球 3" prefab="prefabs/ball.xml">
+    <Transform position="1.47 3.81 1.69"/>
+  </Entity>
+  <Entity id="ball-4" name="球 4" prefab="prefabs/ball.xml">
+    <Transform position="2.46 1.74 0.05"/>
+  </Entity>
+  <Entity id="ball-5" name="球 5" prefab="prefabs/ball.xml">
+    <Transform position="3.39 5.13 0.58"/>
+  </Entity>
+  <Entity id="ball-6" name="球 6" prefab="prefabs/ball.xml">
+    <Transform position="0.62 6.47 1.63"/>
+  </Entity>
+  <Entity id="ball-7" name="球 7" prefab="prefabs/ball.xml">
+    <Transform position="-1.02 3.01 1.35"/>
+  </Entity>
+  <Entity id="ball-8" name="球 8" prefab="prefabs/ball.xml">
+    <Transform position="-1.34 1.92 -0.81"/>
+  </Entity>
+  <Entity id="ball-9" name="球 9" prefab="prefabs/ball.xml">
+    <Transform position="-0.57 2.77 1.75"/>
+  </Entity>
+  <Entity id="ball-10" name="球 10" prefab="prefabs/ball.xml">
+    <Transform position="0.46 5.38 1.51"/>
+  </Entity>
+  <Entity id="ball-11" name="球 11" prefab="prefabs/ball.xml">
+    <Transform position="-3.53 2.64 0.24"/>
+  </Entity>
+  <Entity id="ball-12" name="球 12" prefab="prefabs/ball.xml">
+    <Transform position="0.07 3.53 -1.23"/>
+  </Entity>
+  <Entity id="ball-13" name="球 13" prefab="prefabs/ball.xml">
+    <Transform position="3.27 1.33 -0.54"/>
+  </Entity>
+  <Entity id="ball-14" name="球 14" prefab="prefabs/ball.xml">
+    <Transform position="-1.25 4.99 1.7"/>
+  </Entity>
+  <Entity id="ball-15" name="球 15" prefab="prefabs/ball.xml">
+    <Transform position="0.12 1.99 -0.38"/>
+  </Entity>
+  <Entity id="ball-16" name="球 16" prefab="prefabs/ball.xml">
+    <Transform position="-1.73 3.19 -0.3"/>
+  </Entity>
+  <Entity id="ball-17" name="球 17" prefab="prefabs/ball.xml">
+    <Transform position="-1.34 4.19 0.46"/>
+  </Entity>
+  <Entity id="ball-18" name="球 18" prefab="prefabs/ball.xml">
+    <Transform position="-2.13 6.44 -0.17"/>
+  </Entity>
+  <Entity id="ball-19" name="球 19" prefab="prefabs/ball.xml">
+    <Transform position="2.9 4.81 0.54"/>
+  </Entity>
+  <Entity id="ball-20" name="球 20" prefab="prefabs/ball.xml">
+    <Transform position="0.13 4.03 0.76"/>
+  </Entity>
+  <Entity id="ball-21" name="球 21" prefab="prefabs/ball.xml">
+    <Transform position="3.52 3.38 0.83"/>
+  </Entity>
+  <Entity id="ball-22" name="球 22" prefab="prefabs/ball.xml">
+    <Transform position="-1.99 4.52 -0.6"/>
+  </Entity>
+  <Entity id="ball-23" name="球 23" prefab="prefabs/ball.xml">
+    <Transform position="-1.36 3.35 1.18"/>
+  </Entity>
+  <Entity id="ball-24" name="球 24" prefab="prefabs/ball.xml">
+    <Transform position="3.02 1.67 1.28"/>
+  </Entity>
+  <Entity id="ball-25" name="球 25" prefab="prefabs/ball.xml">
+    <Transform position="-3.38 3.44 -1.39"/>
+  </Entity>
+  <Entity id="ball-26" name="球 26" prefab="prefabs/ball.xml">
+    <Transform position="-3.38 6.98 -1.12"/>
+  </Entity>
+  <Entity id="ball-27" name="球 27" prefab="prefabs/ball.xml">
+    <Transform position="1.06 1.87 -0.17"/>
+  </Entity>
+  <Entity id="ball-28" name="球 28" prefab="prefabs/ball.xml">
+    <Transform position="0.74 1.83 1.69"/>
+  </Entity>
+  <Entity id="ball-29" name="球 29" prefab="prefabs/ball.xml">
+    <Transform position="3.08 6.34 1.54"/>
+  </Entity>
+  <Entity id="ball-30" name="球 30" prefab="prefabs/ball.xml">
+    <Transform position="3.26 5.57 -0.9"/>
+  </Entity>
+  <Entity id="crate-1" name="箱子 1" prefab="prefabs/crate.xml">
+    <Transform position="-1.96 2 -0.5"/>
+  </Entity>
+  <Entity id="crate-2" name="箱子 2" prefab="prefabs/crate.xml">
+    <Transform position="-1.7 2.7 -1"/>
+  </Entity>
+  <Entity id="crate-3" name="箱子 3" prefab="prefabs/crate.xml">
+    <Transform position="0.47 3.4 -0.54"/>
+  </Entity>
+  <Entity id="crate-4" name="箱子 4" prefab="prefabs/crate.xml">
+    <Transform position="0.96 4.1 -0.02"/>
+  </Entity>
+  <Entity id="crate-5" name="箱子 5" prefab="prefabs/crate.xml">
+    <Transform position="0.75 4.8 -0.52"/>
+  </Entity>
+  <Entity id="crate-6" name="箱子 6" prefab="prefabs/crate.xml">
+    <Transform position="1.53 5.5 -0.53"/>
+  </Entity>
+  <Entity id="crate-7" name="箱子 7" prefab="prefabs/crate.xml">
+    <Transform position="-0.5 6.2 0.79"/>
+  </Entity>
+  <Entity id="crate-8" name="箱子 8" prefab="prefabs/crate.xml">
+    <Transform position="-1.53 6.9 -0.02"/>
+  </Entity>
+  <Entity id="crate-9" name="箱子 9" prefab="prefabs/crate.xml">
+    <Transform position="-1.99 7.6 0.83"/>
+  </Entity>
+  <Entity id="crate-10" name="箱子 10" prefab="prefabs/crate.xml">
+    <Transform position="0.55 8.3 0.84"/>
+  </Entity>
+  <Entity id="crate-11" name="箱子 11" prefab="prefabs/crate.xml">
+    <Transform position="-1.92 9 0.8"/>
+  </Entity>
+  <Entity id="crate-12" name="箱子 12" prefab="prefabs/crate.xml">
+    <Transform position="-1.25 9.7 0.94"/>
+  </Entity>
+  <Entity id="crate-13" name="箱子 13" prefab="prefabs/crate.xml">
+    <Transform position="0.26 10.4 0.36"/>
+  </Entity>
+  <Entity id="crate-14" name="箱子 14" prefab="prefabs/crate.xml">
+    <Transform position="-0.93 11.1 -0.55"/>
+  </Entity>
+  <Entity id="crate-15" name="箱子 15" prefab="prefabs/crate.xml">
+    <Transform position="-1.16 11.8 0.13"/>
+  </Entity>
+  <Entity id="crate-16" name="箱子 16" prefab="prefabs/crate.xml">
+    <Transform position="-1.79 12.5 0.54"/>
+  </Entity>
+</Scene>

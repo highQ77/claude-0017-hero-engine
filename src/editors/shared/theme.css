@@ -1,0 +1,632 @@
+/*
+ * 編輯器共用的外觀（UI 編輯器、3D 場景編輯器、著色器編輯器、音效編輯器、入口頁）。
+ * 開發伺服器把這份放進每個編輯器頁面的 <!-- editor-theme --> 位置（tools/project.ts），
+ * 在頁面自己的 <style> 之前：各編輯器只寫自己特有的部分，需要時可以覆蓋這裡。
+ *
+ * 色票：深色中性底 + yellowgreen 強調色。元件：按鈕、輸入框、下拉選單、分段按鈕、面板標題、分頁、
+ * 檔名標籤、快速鍵、捲軸，以及頁首的標誌與編輯器切換列。
+ */
+
+/* ───────── 色票 ───────── */
+:root {
+  color-scheme: dark;
+  --accent: #9acd32; /* yellowgreen */
+  --accent-hi: #b4e05a;
+  --accent-lo: #7aa828;
+  --accent-ink: #141a07; /* 強調色上的文字 */
+  --accent-a08: rgba(154, 205, 50, 0.08);
+  --accent-a15: rgba(154, 205, 50, 0.15);
+  --accent-a25: rgba(154, 205, 50, 0.25);
+  --accent-a40: rgba(154, 205, 50, 0.4);
+
+  --bg: #171a16; /* 最底層（畫面、節點圖、預覽區） */
+  --panel: #1e221c; /* 面板 */
+  --panel2: #252a23; /* 面板上的區塊 */
+  --raise: #2d332a; /* 按鈕 */
+  --raise-hi: #373e33;
+  --field: #1a1e18; /* 輸入框（比面板低一層） */
+  --line: #323a2f;
+  --line-hi: #444e3e;
+  --text: #eef1e9;
+  --text2: #c4cbba;
+  --muted: #939b87;
+  --error: #ff6b6b;
+  --warn: #ffb347;
+  --info: #8ecae6;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --control-h: 30px; /* 按鈕、輸入框的高度 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 60%);
+  --font: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* ───────── 基本 ───────── */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px / 1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+::selection {
+  background: var(--accent-a40);
+}
+[hidden] {
+  display: none !important;
+}
+.spacer {
+  flex: 1;
+}
+.muted {
+  color: var(--muted);
+}
+.mono {
+  font-family: var(--mono);
+}
+
+/* 捲軸：細、圓角、不搶眼 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-hi) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-hi);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #59654f;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ───────── 頁首 ───────── */
+header {
+  position: relative;
+  z-index: 30;
+  min-width: 0;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, #242920, #1d211b);
+  border-bottom: 1px solid var(--line);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.025) inset,
+    0 6px 18px rgba(0, 0, 0, 0.25);
+}
+/* 一排工具（兩排時第二排上面有分隔線） */
+.bar-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.bar-row::-webkit-scrollbar {
+  display: none;
+}
+.bar-row + .bar-row {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+.bar-row > * {
+  flex-shrink: 0;
+}
+.bar-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-right: 2px;
+}
+.divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  margin: 0 4px;
+  flex: none;
+}
+
+/* 標誌：每個編輯器同一種方塊，裡面是縮寫 */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-right: 4px;
+  flex: none;
+}
+.logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: linear-gradient(135deg, var(--accent-hi), var(--accent-lo));
+  color: var(--accent-ink);
+  font: 800 11px / 1 var(--font);
+  letter-spacing: -0.02em;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 4px 14px rgba(154, 205, 50, 0.25);
+}
+header h1 {
+  font-size: 14px;
+  font-weight: 650;
+  margin: 0;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* 編輯器切換列：UI／3D 場景／著色器（目前的編輯器亮起來） */
+.editor-nav {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  flex: none;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.editor-nav a {
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease);
+}
+.editor-nav a:hover {
+  background: var(--raise);
+  color: var(--text);
+}
+.editor-nav a[aria-current="page"] {
+  background: var(--raise-hi);
+  color: var(--accent-hi);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+}
+@media (max-width: 1100px) {
+  header h1 {
+    display: none;
+  }
+}
+
+/* 目前的檔案（檔名標籤；改過還沒存時後面有圓點） */
+.doc-name {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  font: 12px var(--mono);
+  color: var(--text2);
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-name.dirty::after {
+  content: " ●";
+  color: var(--warn);
+}
+
+/* ───────── 按鈕、輸入框、下拉選單 ───────── */
+button,
+select,
+input,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 5px 11px;
+  transition:
+    background-color 0.15s var(--ease),
+    border-color 0.15s var(--ease),
+    color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+button,
+select {
+  background-image: var(--sheen);
+  box-shadow: var(--shadow-sm);
+}
+button {
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover:not(:disabled) {
+  background-color: var(--raise-hi);
+  border-color: var(--line-hi);
+}
+button:active:not(:disabled) {
+  transform: translateY(0.5px);
+  box-shadow: none;
+}
+button:disabled {
+  opacity: 0.38;
+  cursor: default;
+  box-shadow: none;
+}
+/* 主要動作（儲存、放進場景）：強調色 */
+button.primary {
+  background-color: var(--accent);
+  background-image: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  border-color: var(--accent-lo);
+  color: var(--accent-ink);
+  font-weight: 650;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.25) inset,
+    0 2px 10px rgba(154, 205, 50, 0.18);
+}
+button.primary:hover:not(:disabled) {
+  background-color: var(--accent-hi);
+  background-image: none;
+  border-color: var(--accent);
+}
+/* 開關（顯示格線、框線…）：開著時淡淡的強調色 */
+button.on {
+  background-color: var(--accent-a15);
+  background-image: none;
+  border-color: var(--accent-a40);
+  color: var(--accent-hi);
+  font-weight: 600;
+}
+button.on:hover:not(:disabled) {
+  background-color: var(--accent-a25);
+  border-color: var(--accent);
+}
+/* 次要（只有文字） */
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text2);
+  box-shadow: none;
+}
+button.ghost:hover:not(:disabled) {
+  background: var(--raise);
+  color: var(--text);
+}
+/* 危險（刪除、清空） */
+button.danger:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+  background-color: rgba(255, 107, 107, 0.08);
+}
+/* 小按鈕 */
+button.small,
+.small-btn {
+  padding: 2px 9px;
+  font-size: 12px;
+}
+.icon-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text2);
+  box-shadow: none;
+}
+.icon-btn:hover:not(:disabled) {
+  background: var(--raise);
+  color: var(--text);
+}
+.icon-btn.on {
+  background: var(--accent-a15);
+  color: var(--accent-hi);
+  border-color: transparent;
+}
+
+input,
+textarea {
+  background-color: var(--field);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) inset;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #6c7563;
+}
+input:hover:not(:disabled):not(:focus),
+textarea:hover:not(:disabled):not(:focus) {
+  border-color: var(--line-hi);
+}
+:is(button, select, input, textarea):focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-a25);
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent-lo);
+}
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  box-shadow: none;
+}
+input[type="color"] {
+  padding: 0;
+  cursor: pointer;
+}
+select {
+  padding-right: 26px;
+  appearance: none;
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%), var(--sheen);
+  background-position:
+    calc(100% - 13px) 50%,
+    calc(100% - 9px) 50%,
+    0 0;
+  background-size:
+    4px 4px,
+    4px 4px,
+    100% 100%;
+  background-repeat: no-repeat;
+}
+select:hover:not(:disabled) {
+  border-color: var(--line-hi);
+}
+option,
+optgroup {
+  background: var(--panel2);
+  color: var(--text);
+}
+
+/* 分段按鈕（模式、控制器…）：一組按鈕選一個 */
+.group {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.group button {
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text2);
+  padding: 4px 12px;
+  box-shadow: none;
+  font-weight: 500;
+}
+.group button:hover:not(:disabled) {
+  background: var(--raise);
+  color: var(--text);
+}
+.group button.on {
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  color: var(--accent-ink);
+  font-weight: 650;
+  box-shadow: 0 1px 6px rgba(154, 205, 50, 0.3);
+}
+
+/* ───────── 面板 ───────── */
+aside {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+}
+aside.left {
+  border-right: 1px solid var(--line);
+}
+aside.right {
+  border-left: 1px solid var(--line);
+}
+/* 面板標題：左邊一條強調色 */
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 7px 10px 7px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.panel-head .title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 650;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.panel-head .title::before {
+  content: "";
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--accent);
+  flex: none;
+}
+.panel-head button {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}
+.empty {
+  color: var(--muted);
+  padding: 12px 8px;
+}
+
+/* 分頁（底線樣式） */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.tabs .tab {
+  flex: 1;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--muted);
+  padding: 10px 9px 8px;
+  font-weight: 600;
+  font-size: 12.5px;
+  border-bottom: 2px solid transparent;
+}
+.tabs .tab:hover:not(:disabled) {
+  background: var(--panel2);
+  color: var(--text);
+}
+.tabs .tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* 快速鍵 */
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  text-align: center;
+  font: 11px / 17px var(--mono);
+  color: var(--text2);
+  background: var(--raise);
+  border: 1px solid var(--line-hi);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+
+/* ───────── 對話框（shared/dialog.ts：取代瀏覽器的 alert／confirm／prompt） ───────── */
+.dlg-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 10, 7, 0.55);
+  backdrop-filter: blur(2px);
+  animation: dlg-fade 0.12s var(--ease);
+}
+.dlg-backdrop.closing {
+  opacity: 0;
+  transition: opacity 0.12s var(--ease);
+}
+.dlg {
+  width: min(440px, 100%);
+  padding: 18px 20px 16px;
+  background: linear-gradient(180deg, var(--panel2), var(--panel));
+  border: 1px solid var(--line-hi);
+  border-radius: 12px;
+  box-shadow:
+    var(--shadow-lg),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  animation: dlg-in 0.16s var(--ease);
+}
+.dlg-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 650;
+}
+.dlg-title::before {
+  content: "";
+  width: 3px;
+  height: 15px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.dlg-message {
+  color: var(--text2);
+  white-space: pre-line;
+  line-height: 1.6;
+}
+.dlg-message:empty {
+  display: none;
+}
+.dlg-input {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 7px 10px;
+  font-family: var(--mono);
+}
+.dlg-input.invalid {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.18);
+}
+.dlg-error {
+  min-height: 18px;
+  margin-top: 6px;
+  color: var(--error);
+  font-size: 12px;
+}
+.dlg-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.dlg-actions button {
+  min-width: 76px;
+}
+/* 危險動作的確定按鈕（刪除、覆蓋、放棄修改） */
+button.danger-fill {
+  background-color: #e5534b;
+  background-image: linear-gradient(180deg, #ef6a61, #e5534b);
+  border-color: #c94740;
+  color: #fff;
+  font-weight: 650;
+}
+button.danger-fill:hover:not(:disabled) {
+  background-color: #f0675f;
+  background-image: none;
+}
+@keyframes dlg-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dlg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}

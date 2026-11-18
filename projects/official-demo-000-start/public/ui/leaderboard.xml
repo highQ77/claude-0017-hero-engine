@@ -1,0 +1,54 @@
+<!--
+  範例：排行榜
+  用途：疊加的 modal 畫面（screens.open('leaderboard')），按關閉鈕或 Esc 回到遊戲
+  版面尺寸：滿版（auto × auto），視窗在中間（寬 94%，有最大寬度）
+  用到：UIImport（共用主題）、UIStackView（頁面堆疊）＋ 按鈕的 select／activeBackground（theme.xml 的 pill 樣式，不用寫程式的分頁）、
+        UITable／UIColumn／UIRow（點標題排序、點列選取）、UIProgressBar（圓形 radial）、UIRichText
+-->
+<!-- 視窗置中（遊戲裡由畫面管理器的 modal 置中；寫在這裡讓編輯器預覽也一樣） -->
+<UI width="auto" height="auto" align="center" justify="center" padding="16">
+  <UIImport src="theme.xml"/>
+
+  <UIWindow title="排行榜" width="94%" maxWidth="540" onClose="screen.close">
+    <!-- 賽季摘要 -->
+    <UILayout style="card" dir="h" gap="16" align="center">
+      <UIProgressBar shape="radial" value="68" width="72" height="72" ringWidth="8" fill="#9acd32,#4fd1c5" showText="true" fontSize="16"
+                     tooltip="賽季進度"/>
+      <UILayout gap="4" shrink="1">
+        <UILabel style="section">第 3 賽季 · 還剩 9 天</UILabel>
+        <UILabel style="heading">你的名次：第 12 名</UILabel>
+        <UIRichText fontSize="13" color="#b8c0ae">距離前十還差 [b][color=#ffd75e]340[/color][/b] 分 [icon=trophy color=#ffd75e]</UIRichText>
+      </UILayout>
+    </UILayout>
+
+    <!-- 分頁：按鈕的 select 對應下面 UIStackView 的頁面 id -->
+    <UILayout dir="h" gap="6">
+      <UIButton style="pill" text="今日" select="boards:today"/>
+      <UIButton style="pill" text="本週" select="boards:week"/>
+      <UIButton style="pill" text="總榜" select="boards:all"/>
+    </UILayout>
+    <UIStackView id="boards" value="today" transition="slide" swipe="true" indicator="dots" height="232">
+      <UITable id="today" height="200" onSelect="leaderboardSelect">
+        <UIColumn key="rank" title="#" width="44" align="center" sort="number"/>
+        <UIColumn key="name" title="玩家"/>
+        <UIColumn key="score" title="分數" width="90" align="right" sort="number"/>
+        <UIRow rank="1" name="小明" score="1280"/>
+        <UIRow rank="2" name="阿華" score="1150"/>
+        <UIRow rank="3" name="Bob" score="990"/>
+        <UIRow rank="4" name="小美" score="870"/>
+        <UIRow rank="5" name="Kai" score="760"/>
+        <UIRow rank="6" name="阿德" score="540"/>
+      </UITable>
+      <UITable id="week" height="200" onSelect="leaderboardSelect">
+        <UIColumn key="rank" title="#" width="44" align="center" sort="number"/>
+        <UIColumn key="name" title="玩家"/>
+        <UIColumn key="wins" title="勝場" width="70" align="right" sort="number"/>
+        <UIColumn key="score" title="分數" width="90" align="right" sort="number"/>
+        <UIRow rank="1" name="阿華" wins="31" score="8420"/>
+        <UIRow rank="2" name="小明" wins="28" score="8010"/>
+        <UIRow rank="3" name="Kai" wins="22" score="6650"/>
+      </UITable>
+      <UITable id="all" height="200" onSelect="leaderboardSelect" emptyText="總榜將在賽季結束時公布"/>
+    </UIStackView>
+  </UIWindow>
+</UI>

@@ -1,0 +1,30 @@
+<!--
+  3D 控制台：畫在 3D 世界裡的介面
+  用途：UIPanel3D 的面板（src/main.ts：component(UIPanel3D, { src: 'ui/kiosk.xml', worldWidth: 3 })）
+  版面尺寸：固定 480 × 215。UIPanel3D 沒有指定 width、height 時就用這裡的尺寸（面板的長寬比也跟著它），只要改這裡
+  寫法和 2D 介面完全一樣，可以點按鈕、拖滑桿；在 3D 裡字要大一點才看得清楚。
+-->
+<UI width="480" height="215">
+  <UIImport src="theme.xml"/>
+  <UIStyle name="kbtn" background="rgba(154,205,50,0.16)" hoverBackground="rgba(154,205,50,0.3)" pressedBackground="rgba(154,205,50,0.45)"
+           border="1 rgba(154,205,50,0.4)" radius="12" fontSize="18" fontWeight="bold" padding="12 16" color="#eef6df" flex="1"/>
+
+  <UILayout flex="1" padding="16 20" gap="12" background="rgba(12,16,11,0.9)" radius="20" border="2 rgba(154,205,50,0.55)">
+    <UILayout dir="h" justify="between" align="center">
+      <UILayout dir="h" gap="8" align="center">
+        <UIIcon name="target" size="22" color="#9acd32"/>
+        <UILabel fontSize="22" fontWeight="bold" color="#eef6df">3D 控制台</UILabel>
+      </UILayout>
+      <UILabel id="coins" fontSize="18" fontWeight="bold" color="#ffd75e">金幣 0</UILabel>
+    </UILayout>
+    <UILabel id="info" fontSize="15" color="#b8c0ae">這個面板在 3D 世界裡，可以直接點</UILabel>
+    <UILayout dir="h" gap="10">
+      <UIButton style="kbtn" text="全部跳起" onClick="panelJump"/>
+      <UIButton style="kbtn" text="炸掉方塊" onClick="panelExplode"/>
+    </UILayout>
+    <UILayout dir="h" gap="12" align="center">
+      <UILabel fontSize="16" color="#b8c0ae">方塊轉速</UILabel>
+      <UISlider id="spin" min="0" max="3" step="0.1" value="1" showValue="true" suffix="x" flex="1" onInput="panelSpin"/>
+    </UILayout>
+  </UILayout>
+</UI>

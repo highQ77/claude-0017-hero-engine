@@ -1,0 +1,166 @@
+<!--
+  official-demo-002-physics 的介面：左邊是說明面板（四個分頁），右邊透明、讓滑鼠操作 3D 畫面。
+  可以用 UI 編輯器（/ui-editor.html）編輯。程式在 src/main.ts（onClick、onChange 的處理函式）。
+-->
+<UI width="auto" height="auto" dir="h">
+  <UISkin for="UIButton" radius="8" padding="7 12" background="#2a3124" hoverBackground="#37402f" color="#e9f6d2" fontSize="13"/>
+  <UISkin for="UISlider" width="100%"/>
+  <UISkin for="UIToggle" fontSize="13" color="#e9f6d2"/>
+  <UIStyle name="tab" flex="1" padding="8 4" activeBackground="#9acd32" activeColor="#141a07" fontWeight="bold"/>
+  <UIStyle name="title" fontSize="17" fontWeight="bold" color="#c8f07a"/>
+  <UIStyle name="text" fontSize="13" color="#c6cdbb" lineHeight="1.5"/>
+  <UIStyle name="hint" fontSize="12" color="#8f9884" lineHeight="1.5"/>
+  <UIStyle name="field" fontSize="12" color="#e9f6d2"/>
+  <UIStyle name="code" fontSize="12" color="#ffd166" fontFamily="monospace" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+  <!-- 好幾行的程式碼：外框 + 每行一個標籤（文字裡的換行會被合併成空格） -->
+  <UIStyle name="codeBox" gap="3" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+  <UIStyle name="codeLine" fontSize="12" color="#ffd166" fontFamily="monospace"/>
+  <UIStyle name="box" gap="4" padding="10" background="rgba(255,255,255,0.04)" radius="8"/>
+  <UIStyle name="dot" width="10" height="10" radius="5"/>
+  <UIStyle name="stat" fontSize="20" fontWeight="bold" color="#ffd166"/>
+
+  <UILayout id="panel" width="340" padding="16" gap="12" background="rgba(14,17,12,0.9)">
+    <UILayout gap="2">
+      <UILabel fontSize="11" color="#8f9884">OFFICIAL DEMO 002</UILabel>
+      <UILabel fontSize="22" fontWeight="bold" color="#ffffff">物理介紹</UILabel>
+    </UILayout>
+
+    <UILayout dir="h" gap="4">
+      <UIButton text="剛體" style="tab" select="pages:bodies"/>
+      <UIButton text="材質" style="tab" select="pages:materials"/>
+      <UIButton text="施力" style="tab" select="pages:forces"/>
+      <UIButton text="碰撞事件" style="tab" select="pages:events"/>
+    </UILayout>
+
+    <UIStackView id="pages" flex="1" transition="fade" onChange="page">
+      <!-- ① 剛體種類 -->
+      <UIScrollView id="bodies" gap="10">
+        <UILabel style="title">剛體與碰撞體</UILabel>
+        <UILabel style="text">實體加上剛體（RigidBody）就交給物理模擬；碰撞體（Collider）決定它的形狀。只有碰撞體、沒有剛體的，就是不會動的地板或牆。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">world.add(e, RigidBody, { type: 'dynamic' })</UILabel>
+          <UILabel style="codeLine">world.add(e, Collider, { shape: 'sphere', radius: 0.3 })</UILabel>
+        </UILayout>
+        <UILayout style="box">
+          <UILayout dir="h" gap="8" align="center">
+            <UILayout style="dot" background="#ffb347"/>
+            <UILabel style="field">dynamic：受重力與碰撞影響（掉下來的東西）</UILabel>
+          </UILayout>
+          <UILayout dir="h" gap="8" align="center">
+            <UILayout style="dot" background="#8a9479"/>
+            <UILabel style="field">fixed：固定不動（柱子、斜坡）</UILabel>
+          </UILayout>
+          <UILayout dir="h" gap="8" align="center">
+            <UILayout style="dot" background="#4cc9f0"/>
+            <UILabel style="field">kinematic：由程式移動，會推開別人（擋板）</UILabel>
+          </UILayout>
+        </UILayout>
+        <UILabel style="field">形狀（Collider.shape）</UILabel>
+        <UISelect id="shape" value="mix">
+          <UIOption value="mix">混合</UIOption>
+          <UIOption value="box">box：方塊</UIOption>
+          <UIOption value="sphere">sphere：球</UIOption>
+          <UIOption value="capsule">capsule：膠囊</UIOption>
+          <UIOption value="cylinder">cylinder：圓柱</UIOption>
+        </UISelect>
+        <UILayout dir="h" gap="8">
+          <UIButton text="丟下 10 個" onClick="drop"/>
+          <UIButton text="清除" onClick="clear"/>
+        </UILayout>
+        <UIToggle id="sweep" text="擋板轉動（kinematic）" checked="true"/>
+        <UILayout dir="h" gap="8" align="center">
+          <UILabel style="hint">場上的 dynamic 剛體</UILabel>
+          <UILabel id="bodyCount" style="stat">0</UILabel>
+        </UILayout>
+      </UIScrollView>
+
+      <!-- ② 材質：彈性與摩擦 -->
+      <UIScrollView id="materials" gap="10">
+        <UILabel style="title">彈性與摩擦</UILabel>
+        <UILabel style="text">碰撞體的 restitution 決定會不會彈起來（0 不彈、1 幾乎不損失），friction 決定會不會滑動。</UILabel>
+        <UILabel style="code">Collider.with({ restitution: 0.9, friction: 0.2 })</UILabel>
+        <UILabel style="hint">左邊三顆球的彈性：</UILabel>
+        <UIList id="bounceList" gap="3">
+          <UITemplate>
+            <UILayout dir="h" gap="8" align="center">
+              <UILayout style="dot" background="{color}"/>
+              <UILabel style="field">restitution {value}</UILabel>
+              <UILabel style="hint" flex="1" textAlign="right">{note}</UILabel>
+            </UILayout>
+          </UITemplate>
+        </UIList>
+        <UILabel style="hint">右邊三條滑道上的箱子的摩擦（斜坡約 20°）：</UILabel>
+        <UIList id="frictionList" gap="3">
+          <UITemplate>
+            <UILayout dir="h" gap="8" align="center">
+              <UILayout style="dot" background="{color}"/>
+              <UILabel style="field">friction {value}</UILabel>
+              <UILabel style="hint" flex="1" textAlign="right">{note}</UILabel>
+            </UILayout>
+          </UITemplate>
+        </UIList>
+        <UILabel style="hint">兩個物體碰撞時，彈性與摩擦取兩邊的平均，所以地墊、滑道也設成和球、箱子一樣的值。</UILabel>
+        <UILabel style="field">重力（physics.gravity.y）</UILabel>
+        <UISlider id="gravity" min="1" max="20" step="0.5" value="9.8" showValue="true" prefix="-" suffix=" m/s²" onInput="gravity"/>
+        <UIButton text="重新開始" onClick="restart"/>
+      </UIScrollView>
+
+      <!-- ③ 施力與射線 -->
+      <UIScrollView id="forces" gap="10">
+        <UILabel style="title">施力與射線</UILabel>
+        <UILabel style="text">直接改速度、施加衝量（瞬間的力），或從某一點發出射線，看看打到什麼。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">physics.setLinearVelocity(球, 方向 × 速度)</UILabel>
+          <UILabel style="codeLine">physics.applyImpulse(e, { x, y, z })</UILabel>
+          <UILabel style="codeLine">physics.raycast(起點, 方向)</UILabel>
+        </UILayout>
+        <UILabel style="hint">點一下畫面：從攝影機射出一顆球（拖曳是轉動視角）。滑鼠移過的地方會畫出射線打到的點和表面的方向（法線）。</UILabel>
+        <UILabel style="field">射出的速度</UILabel>
+        <UISlider id="shotSpeed" min="5" max="40" step="1" value="20" showValue="true" suffix=" m/s"/>
+        <UILayout dir="h" gap="8">
+          <UIButton text="爆炸（applyImpulse）" onClick="explode"/>
+          <UIButton text="重建牆" onClick="rebuild"/>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="hint">射線打到（physics.raycast）</UILabel>
+          <UILabel id="rayInfo" style="field">（把滑鼠移到畫面上）</UILabel>
+        </UILayout>
+      </UIScrollView>
+
+      <!-- ④ 碰撞事件、感應器、碰撞群組 -->
+      <UIScrollView id="events" gap="10">
+        <UILabel style="title">碰撞事件與感應器</UILabel>
+        <UILabel style="text">碰撞開始、結束時會收到事件。感應器（sensor）只偵測重疊、不會擋住東西，適合做觸發區域；碰撞群組（groups）決定誰和誰會碰撞。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">physics.onCollision((ev) => …)</UILabel>
+          <UILabel style="codeLine">Collider.with({ sensor: true })</UILabel>
+          <UILabel style="codeLine">collision.groups([自己], [會碰的])</UILabel>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="field">青色球落在藍板上，滾進左邊的綠色感應區就回收。</UILabel>
+          <UILabel style="field">橘色球不在藍板的碰撞群組裡，會直接穿過去，撞到下面的彈跳球。</UILabel>
+        </UILayout>
+        <UILayout dir="h" gap="16">
+          <UILayout gap="2">
+            <UILabel style="hint">撞到彈跳球</UILabel>
+            <UILabel id="bumpCount" style="stat">0</UILabel>
+          </UILayout>
+          <UILayout gap="2">
+            <UILabel style="hint">進入感應區</UILabel>
+            <UILabel id="sensorCount" style="stat">0</UILabel>
+          </UILayout>
+        </UILayout>
+        <UIToggle id="spout" text="一直落下球" checked="true"/>
+        <UIToggle id="groups" text="藍板只擋青色球（碰撞群組）" checked="true" onChange="groups"/>
+        <UILayout style="box">
+          <UILabel style="hint">最近的事件</UILabel>
+          <UILabel id="eventLog" style="field" lineHeight="1.6"> </UILabel>
+        </UILayout>
+      </UIScrollView>
+    </UIStackView>
+
+    <UIToggle id="debug" text="顯示碰撞形狀（physicsPlugin.debug）" onChange="debug"/>
+    <UILabel style="hint">拖曳畫面轉動視角，滾輪縮放（先點一下畫面）</UILabel>
+  </UILayout>
+  <UIToast placement="top"/>
+</UI>

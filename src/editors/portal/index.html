@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hero Engine 入口</title>
+    <!-- editor-theme -->
+    <style>
+      /* 共用的色票、按鈕、標誌、編輯器切換列在 shared/theme.css；這裡只放入口頁自己的 */
+      body { display: block; background: radial-gradient(120% 90% at 50% 40%, #20261d 0%, var(--bg) 55%, #0e100d 100%); }
+
+      /* ───────── 背景：3D 幾何物件 ───────── */
+      #bg { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+      .vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(80% 70% at 50% 50%, transparent 40%, rgba(5, 6, 4, 0.65) 100%); }
+
+      /* ───────── 置中的對話框（毛玻璃） ───────── */
+      .stage { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px 16px; overflow: auto; }
+      .dialog {
+        position: relative;
+        width: min(560px, 100%);
+        max-height: calc(100vh - 48px);
+        display: flex;
+        flex-direction: column;
+        border-radius: 18px;
+        background: linear-gradient(160deg, rgba(46, 54, 42, 0.52), rgba(20, 24, 18, 0.42));
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 0 0 1px rgba(0, 0, 0, 0.25);
+        backdrop-filter: blur(22px) saturate(160%);
+        -webkit-backdrop-filter: blur(22px) saturate(160%);
+        overflow: hidden;
+        animation: rise 0.6s var(--ease) both;
+      }
+      /* 上緣的反光 */
+      .dialog::before { content: ""; position: absolute; inset: 0 0 auto; height: 120px; pointer-events: none; background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent); }
+      @keyframes rise { from { opacity: 0; transform: translateY(14px) scale(0.98); } }
+
+      .dlg-head { display: flex; align-items: center; gap: 14px; padding: 22px 24px 16px; }
+      .dlg-head .logo { width: 40px; height: 40px; font-size: 15px; border-radius: 11px; flex: none; }
+      .dlg-head h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: 0.01em; }
+      .dlg-head > div { min-width: 0; flex: 1; }
+      .dlg-head .add { flex: none; align-self: flex-start; margin-top: 4px; background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.1); }
+      .dlg-head p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+
+      .list { list-style: none; margin: 0; padding: 4px 12px 12px; overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+      .item {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        height: auto;
+        text-align: left;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.025);
+        background-image: none;
+        box-shadow: none;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        cursor: pointer;
+        font: inherit;
+        transition: background 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease);
+      }
+      .item:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.08); transform: translateX(2px); }
+      .item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+      .item:disabled { cursor: default; }
+      .item .num { display: grid; place-items: center; height: 36px; border-radius: 9px; background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.06); font: 600 12.5px var(--mono); color: var(--text2); }
+      .item .name { display: block; font-weight: 650; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .item .summary { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .item .tag { font-size: 11px; font-weight: 650; padding: 2px 8px; border-radius: 999px; white-space: nowrap; color: var(--muted); }
+      .item.current { background: var(--accent-a15); border-color: var(--accent-a40); }
+      .item.current .num { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+      .item.current .tag { color: var(--accent-ink); background: var(--accent-hi); }
+      .item.busy { opacity: 1; background: var(--accent-a08); border-color: var(--accent-a25); }
+      .item.busy .tag { color: var(--accent-hi); background: none; }
+      .item.busy .tag::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border-radius: 50%; border: 2px solid var(--accent-a40); border-top-color: var(--accent-hi); animation: spin 0.8s linear infinite; }
+      .list.switching .item:not(.busy) { opacity: 0.45; }
+
+      /* 每一列右邊的動作按鈕（編輯說明、刪除）：平常淡淡的，滑過那一列時變清楚；預設專案沒有刪除 */
+      .list li { position: relative; }
+      .actions { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); display: flex; gap: 4px; }
+      .act {
+        width: 30px; height: 30px; padding: 0; display: grid; place-items: center;
+        border-radius: 8px; color: var(--muted); background: transparent; background-image: none; border-color: transparent; box-shadow: none;
+        opacity: 0.5; transition: opacity 0.15s var(--ease), color 0.15s var(--ease), background 0.15s var(--ease);
+      }
+      .act svg { width: 15px; height: 15px; }
+      .list li:hover .act, .act:focus-visible { opacity: 1; }
+      .act:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.12); }
+      .del:hover:not(:disabled) { color: var(--error); background: rgba(255, 107, 107, 0.12); border-color: rgba(255, 107, 107, 0.3); }
+      .list.switching .actions { visibility: hidden; }
+      .item .summary.empty { font-style: italic; opacity: 0.7; }
+      /* 剛建立的專案閃一下 */
+      .item.fresh { animation: fresh 1.6s var(--ease); }
+      @keyframes fresh { 0%, 30% { background: var(--accent-a25); border-color: var(--accent-a40); } }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      .dlg-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 18px; border-top: 1px solid rgba(255, 255, 255, 0.07); background: rgba(0, 0, 0, 0.12); }
+      .dlg-foot .editor-nav { background: rgba(0, 0, 0, 0.25); border-color: rgba(255, 255, 255, 0.07); }
+      .dlg-foot a.primary { display: inline-flex; align-items: center; height: var(--control-h); padding: 0 14px; border-radius: var(--radius-sm); text-decoration: none; font-weight: 650; color: var(--accent-ink); background: linear-gradient(180deg, var(--accent-hi), var(--accent)); border: 1px solid var(--accent-lo); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 2px 12px rgba(154, 205, 50, 0.25); }
+      .dlg-foot a.primary:hover { background: var(--accent-hi); }
+      .dlg-head code { font-family: var(--mono); font-size: 11.5px; color: var(--text2); }
+      /* 說明列兼狀態列：固定一行高，文字換掉時對話框大小不變（不會跳動） */
+      .status { height: 1.5em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; transition: color 0.2s var(--ease); }
+      .status.busy { color: var(--accent-hi); }
+      .status.error { color: var(--error); }
+
+      @media (max-width: 520px) {
+        .dlg-head { padding: 18px 16px 12px; flex-wrap: wrap; }
+        .list { padding: 4px 6px 10px; }
+        .dlg-foot { padding: 12px 16px 16px; }
+        .item { grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .dialog { animation: none; }
+        .item { transition: none; }
+        .item.fresh { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="bg" aria-hidden="true"></canvas>
+    <div class="vignette"></div>
+    <div class="stage">
+      <section class="dialog" role="dialog" aria-labelledby="title">
+        <div class="dlg-head">
+          <span class="logo">HE</span>
+          <div>
+            <h1 id="title">Hero Engine</h1>
+            <p id="status" class="status" role="status"></p>
+          </div>
+          <button id="addBtn" class="add" type="button" title="用範本建立空專案（同 node hero create）">＋ 新增專案</button>
+        </div>
+        <ul id="list" class="list" aria-label="專案"></ul>
+        <div class="dlg-foot">
+          <a class="primary" href="/" title="開啟目前專案的遊戲畫面">開啟遊戲 →</a>
+          <span class="spacer"></span>
+          <nav class="editor-nav" aria-label="編輯器">
+            <a href="/ui-editor.html" target="hero-ui-editor" title="UI 編輯器（另一個分頁）">UI</a>
+            <a href="/s3d-editor.html" target="hero-s3d-editor" title="3D 場景編輯器（另一個分頁）">3D 場景</a>
+            <a href="/shader-editor.html" target="hero-shader-editor" title="著色器編輯器（另一個分頁）">著色器</a>
+            <a href="/se-editor.html" target="hero-se-editor" title="音效編輯器（另一個分頁）">音效</a>
+          </nav>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="./editor.ts"></script>
+  </body>
+</html>

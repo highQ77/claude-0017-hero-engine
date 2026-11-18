@@ -1,0 +1,34 @@
+<!--
+  場景「orbit」的資源載入頁面
+  用途：進入 orbit 場景時由 SceneTransition 顯示（src/main.ts 的 transition.define('orbit', { loading })）
+  版面尺寸：滿版（auto × auto）
+  這些 id 會自動更新：loadingTitle 場景名稱、loadingBar 進度（0～100）、loadingText 百分比、loadingItem 正在載入的檔案、loadingTip 提示
+  用到：UIImport（共用主題，用 ../ 引用上一層）、UIIcon、UIProgressBar、bgImage（tile，用 ../ 引用上一層的圖片）
+-->
+<UI width="auto" height="auto" background="#0a0e16" bgImage="../pattern.svg" bgFit="tile" bgOpacity="0.35"
+    align="center" justify="center" padding="24" gap="18">
+  <UIImport src="../theme.xml"/>
+
+  <UILayout width="92" height="92" radius="46" align="center" justify="center" border="3 rgba(79,157,255,0.6)" background="rgba(79,157,255,0.1)">
+    <UIIcon name="target" size="40" color="#4f9dff"/>
+  </UILayout>
+
+  <UILayout align="center" gap="6">
+    <UILabel style="section" color="#8cc8ff">第 1 站 · 載入中</UILabel>
+    <UILabel id="loadingTitle" fontSize="30" fontWeight="bold" color="#ffffff" textShadow="0 4 16 rgba(79,157,255,0.45)">環繞軌道</UILabel>
+    <UILabel fontSize="13" color="#9fb3cc" textAlign="center">藍色方塊帶著月亮旋轉，撿起地上的金幣</UILabel>
+  </UILayout>
+
+  <UILayout gap="8" width="80%" maxWidth="380">
+    <UIProgressBar id="loadingBar" value="0" max="100" width="100%" height="10" fill="#4f9dff,#9acd32" animate="0.15"/>
+    <UILayout dir="h" justify="between">
+      <UILabel id="loadingItem" fontSize="12" color="#6f819a" shrink="1"></UILabel>
+      <UILabel id="loadingText" fontSize="12" color="#c8d6ea">0%</UILabel>
+    </UILayout>
+  </UILayout>
+
+  <UILayout style="chip" maxWidth="440">
+    <UIIcon name="info" size="14" color="#8cc8ff"/>
+    <UILabel id="loadingTip" fontSize="13" color="#c8d6ea" shrink="1">提示</UILabel>
+  </UILayout>
+</UI>

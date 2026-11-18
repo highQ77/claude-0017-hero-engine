@@ -1,0 +1,13 @@
+<!--
+  疊加的對話視窗（UIScreenManager 的 modal 畫面）：screens.open('notice') 打開，
+  關閉鈕的 onClose="screen.close" 是畫面管理器內建的處理函式（關閉自己所在的那一層）。
+-->
+<UI width="auto" height="auto" align="center" justify="center" padding="16">
+  <UIWindow title="公告" width="360" onClose="screen.close" background="rgba(20,24,17,0.97)" radius="12">
+    <UILayout gap="10" padding="4">
+      <UILabel fontSize="15" color="#e9f6d2" lineHeight="1.6">這是用 UIScreenManager 疊加的畫面：後面加了半透明背景，點不到下面的介面。</UILabel>
+      <UILabel fontSize="13" color="#8f9884" lineHeight="1.5">按「知道了」、右上角的關閉鈕或 Esc 關閉。</UILabel>
+      <UIButton text="知道了" onClick="screen.back" self="end" radius="8" padding="7 16" background="#9acd32" hoverBackground="#b4e05a" color="#141a07" fontWeight="bold"/>
+    </UILayout>
+  </UIWindow>
+</UI>

@@ -1,0 +1,149 @@
+<Scene format="hero-scene" version="1">
+  <SceneUI src="ui/scene.xml"/>
+  <SceneUI src="ui/orbit/hud.xml"/>
+  <Settings background="#12151c">
+    <fog color="#12151c" near="16" far="42"/>
+  </Settings>
+  <Entity id="stage" name="舞台" prefab="prefabs/stage.xml"/>
+  <Entity id="cube" name="玩家方塊">
+    <Transform/>
+    <MeshRenderer castShadow="true">
+      <geometry box="1"/>
+      <material>
+        <standard color="#4f9dff" roughness="0.4"/>
+      </material>
+    </MeshRenderer>
+    <RigidBody type="kinematic"/>
+    <Collider/>
+    <Entity id="moon" name="月亮">
+      <Transform position="1.6 0 0" scale="0.4 0.4 0.4"/>
+      <MeshRenderer castShadow="true">
+        <geometry sphere="0.5 64 48"/>
+        <material shaderGraph="shaders/lava.shader.json"/>
+      </MeshRenderer>
+      <Collider shape="sphere"/>
+    </Entity>
+    <Entity id="cube-light" name="方塊的光">
+      <Transform position="0 1.2 0"/>
+      <Light kind="point" color="#ff6a3d" intensity="8" distance="6"/>
+    </Entity>
+  </Entity>
+  <Entity id="pyramid" name="金字塔">
+    <Transform position="-2.8 -0.7 0"/>
+    <Model url="models/pyramid.gltf" castShadow="true"/>
+    <Animator/>
+    <RigidBody type="fixed"/>
+    <Collider halfExtents="0.7 0.75 0.7" offset="0 0.25 0"/>
+    <AudioSource url="sounds/hum.wav" volume="0.35" loop="true" playing="true" refDistance="1.5"/>
+    <Entity id="fire" name="火焰">
+      <Transform position="0 1.05 0"/>
+      <ParticleEmitter
+        rate="60"
+        spread="14.323945"
+        shape="circle"
+        radius="0.15"
+        acceleration="0 1.5 0"
+        sizeEnd="0.2"
+        color="#ffd36b"
+        colorEnd="#ff3a10"
+        opacity="0.9"
+        intensity="2.5"
+        lifetime="0.5 1"
+        speed="0.6 1.2"
+        size="0.25 0.4"
+        angularVelocity="-114.591559 114.591559"
+      />
+    </Entity>
+    <Entity id="smoke" name="煙">
+      <Transform position="0 1.5 0"/>
+      <ParticleEmitter
+        rate="12"
+        shape="circle"
+        radius="0.2"
+        acceleration="0.15 0.3 0"
+        drag="0.3"
+        sizeEnd="4"
+        color="#7a7a7a"
+        colorEnd="#3a3a3a"
+        opacity="0.45"
+        fadeIn="0.15"
+        blending="normal"
+        lifetime="2 3.5"
+        speed="0.3 0.6"
+        size="0.3 0.5"
+        rotation="0 360"
+        angularVelocity="-22.918312 22.918312"
+      />
+    </Entity>
+    <Entity id="pulse-ring" name="脈衝光環（著色器）">
+      <Transform position="0 -0.48 0" rotation="-90 0 0"/>
+      <MeshRenderer>
+        <geometry plane="3"/>
+        <material>
+          <standard
+            color="#ff8c26"
+            emissive="#ff8c26"
+            emissiveIntensity="0.6"
+            transparent="true"
+            opacity="0.35"
+          />
+        </material>
+      </MeshRenderer>
+    </Entity>
+  </Entity>
+  <Entity id="kiosk" name="3D 控制台">
+    <Transform position="-4.2 1.6 2.5"/>
+    <UIPanel3D src="ui/kiosk.xml" worldWidth="3" billboard="true"/>
+  </Entity>
+  <Entity id="hologram" name="全像投影（著色器）">
+    <Transform position="2.6 0.6 -2"/>
+    <MeshRenderer>
+      <geometry torusKnot="0.45 0.14"/>
+      <material>
+        <standard color="#46e0ff" emissive="#1a8fb0" transparent="true" opacity="0.6"/>
+      </material>
+    </MeshRenderer>
+  </Entity>
+  <Entity id="ball-1" name="球 1" prefab="prefabs/ball.xml">
+    <Transform position="2 1 0.84"/>
+  </Entity>
+  <Entity id="ball-2" name="球 2" prefab="prefabs/ball.xml">
+    <Transform position="2.58 1.8 -0.58"/>
+  </Entity>
+  <Entity id="ball-3" name="球 3" prefab="prefabs/ball.xml">
+    <Transform position="3.46 2.6 0.07"/>
+  </Entity>
+  <Entity id="ball-4" name="球 4" prefab="prefabs/ball.xml">
+    <Transform position="2.66 3.4 0.5"/>
+  </Entity>
+  <Entity id="ball-5" name="球 5" prefab="prefabs/ball.xml">
+    <Transform position="3.51 4.2 0.09"/>
+  </Entity>
+  <Entity id="ball-6" name="球 6" prefab="prefabs/ball.xml">
+    <Transform position="3.37 5 0.27"/>
+  </Entity>
+  <Entity id="coin-1" name="金幣 1" prefab="prefabs/coin.xml">
+    <Transform position="4.5 -0.75 0"/>
+  </Entity>
+  <Entity id="coin-2" name="金幣 2" prefab="prefabs/coin.xml">
+    <Transform position="3.18 -0.75 3.18"/>
+  </Entity>
+  <Entity id="coin-3" name="金幣 3" prefab="prefabs/coin.xml">
+    <Transform position="0 -0.75 4.5"/>
+  </Entity>
+  <Entity id="coin-4" name="金幣 4" prefab="prefabs/coin.xml">
+    <Transform position="-3.18 -0.75 3.18"/>
+  </Entity>
+  <Entity id="coin-5" name="金幣 5" prefab="prefabs/coin.xml">
+    <Transform position="-4.5 -0.75 0"/>
+  </Entity>
+  <Entity id="coin-6" name="金幣 6" prefab="prefabs/coin.xml">
+    <Transform position="-3.18 -0.75 -3.18"/>
+  </Entity>
+  <Entity id="coin-7" name="金幣 7" prefab="prefabs/coin.xml">
+    <Transform position="0 -0.75 -4.5"/>
+  </Entity>
+  <Entity id="coin-8" name="金幣 8" prefab="prefabs/coin.xml">
+    <Transform position="3.18 -0.75 -3.18"/>
+  </Entity>
+</Scene>

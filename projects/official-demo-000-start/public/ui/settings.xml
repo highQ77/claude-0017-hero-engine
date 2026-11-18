@@ -1,0 +1,80 @@
+<!--
+  範例：設定視窗
+  用途：疊加的 modal 畫面（screens.open('settings')），按關閉鈕或 Esc 回到遊戲
+  版面尺寸：滿版（auto × auto），視窗在中間（寬 94%，有最大寬度）
+  用到：UIImport（共用主題）、UIWindow、UITabs／UITab、UIToggle、UICheckBox、UIRadioButton、UISelect／UIOption（後製效果、反鋸齒）、
+        UISlider（水平與垂直）、UIProgressBar
+  控制項的強調色、字級來自 theme.xml 的 UISkin；事件處理函式和遊戲選單共用（setMusic、setMusicVolume、setPostfx、setEffect、setAntialias、setSpeed）
+-->
+<!-- 視窗置中（遊戲裡由畫面管理器的 modal 置中；寫在這裡讓編輯器預覽也一樣） -->
+<UI width="auto" height="auto" align="center" justify="center" padding="16">
+  <UIImport src="theme.xml"/>
+  <UIStyle name="eqBand" align="center" gap="6"/>
+
+  <UIWindow title="設定" width="94%" maxWidth="480" draggable="true" onClose="screen.close">
+    <UITabs value="0" transition="slide" swipe="true">
+      <UITab title="聲音" gap="12">
+        <UILayout style="card">
+          <UILayout style="row"><UILabel style="rowLabel">背景音樂</UILabel><UIToggle checked="true" onChange="setMusic"/></UILayout>
+          <UILayout style="row">
+            <UILabel style="rowLabel">音樂音量</UILabel>
+            <UISlider min="0" max="100" step="5" value="80" showValue="true" suffix="%" onInput="setMusicVolume" flex="1"/>
+          </UILayout>
+        </UILayout>
+        <UILayout style="card">
+          <UILabel style="section">等化器</UILabel>
+          <UILayout dir="h" gap="28" justify="center">
+            <UILayout style="eqBand"><UISlider orientation="vertical" length="104" value="60" tooltip="低音"/><UILabel style="hint">低</UILabel></UILayout>
+            <UILayout style="eqBand"><UISlider orientation="vertical" length="104" value="45" tooltip="中音"/><UILabel style="hint">中</UILabel></UILayout>
+            <UILayout style="eqBand"><UISlider orientation="vertical" length="104" value="70" tooltip="高音"/><UILabel style="hint">高</UILabel></UILayout>
+          </UILayout>
+        </UILayout>
+      </UITab>
+
+      <UITab title="畫面" gap="12">
+        <UILayout style="card">
+          <UILayout style="row" wrap="true">
+            <UILabel style="rowLabel">後製</UILabel>
+            <UIRadioButton group="example-postfx" value="標準" text="標準" checked="true" onChange="setPostfx"/>
+            <UIRadioButton group="example-postfx" value="電影感" text="電影感" onChange="setPostfx"/>
+            <UIRadioButton group="example-postfx" value="關閉" text="關閉" onChange="setPostfx"/>
+          </UILayout>
+          <UILayout style="row">
+            <UILabel style="rowLabel">畫面效果</UILabel>
+            <UISelect value="無" onChange="setEffect" flex="1">
+              <UIOption>無</UIOption><UIOption>色差</UIOption><UIOption>像素化</UIOption>
+            </UISelect>
+          </UILayout>
+          <UILayout style="row">
+            <UILabel style="rowLabel">反鋸齒</UILabel>
+            <UISelect id="settingsAa" value="auto" onChange="setAntialias" flex="1">
+              <UIOption value="auto">自動</UIOption>
+              <UIOption value="msaa">MSAA（多重取樣）</UIOption>
+              <UIOption value="smaa">SMAA（銳利）</UIOption>
+              <UIOption value="fxaa">FXAA（最省效能）</UIOption>
+              <UIOption value="none">關閉</UIOption>
+            </UISelect>
+          </UILayout>
+        </UILayout>
+        <UILayout style="card">
+          <UICheckBox text="顯示傷害數字" checked="true"/>
+          <UICheckBox text="垂直同步"/>
+        </UILayout>
+      </UITab>
+
+      <UITab title="遊戲" gap="12">
+        <UILayout style="card">
+          <UILayout style="row">
+            <UILabel style="rowLabel">遊戲速度</UILabel>
+            <UISlider min="0.25" max="2" step="0.25" value="1" showValue="true" suffix="x" onInput="setSpeed" flex="1"/>
+          </UILayout>
+          <UILayout style="row">
+            <UILabel style="rowLabel">存檔空間</UILabel>
+            <UIProgressBar value="62" flex="1" showText="true" textFormat="{value} / {max} MB"/>
+          </UILayout>
+        </UILayout>
+      </UITab>
+    </UITabs>
+    <UIButton style="primary" text="完成" onClick="screen.close"/>
+  </UIWindow>
+</UI>

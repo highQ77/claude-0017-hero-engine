@@ -1,0 +1,121 @@
+<!-- group: 遊戲邏輯 -->
+<h1>補間動畫</h1>
+<p class="lead">補間動畫（Tween）讓數值在一段時間內平滑地變到目標值：物件移動、縮放彈跳、介面淡入、數字跳動都用得到。<code>AnimationPlugin</code> 另外提供模型骨架動畫（<code>Animator</code>）與動畫狀態機。</p>
+
+<h2>基本用法</h2>
+<p>安裝 <code>AnimationPlugin</code> 後，從 <code>animationPlugin.tweens</code>、資源 <code>TweensKey</code> 或腳本的 <code>this.tweens</code> 取得補間管理器：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="tweens.to">
+// 任何物件的數字屬性都可以補間（Vector3、Color、自己的物件…）
+tweens.to(transform.position, { x: 3, y: 1 }, { duration: 0.5, easing: 'backOut' });
+tweens.fromTo(material, { opacity: 0 }, { opacity: 1 }, { duration: 1 });
+
+// 選項
+tweens.to(target, props, {
+  duration: 1,           // 秒
+  easing: 'quadOut',     // 緩動曲線（預設 quadOut）
+  delay: 0.2,            // 延遲
+  repeat: Infinity,      // 重複次數（不含第一次）
+  yoyo: true,            // 重複時來回播放
+  unscaled: false,       // true：不受時間縮放影響（介面動畫）
+  entity,                // 綁定實體：實體被銷毀時自動停止
+  onUpdate: () => {},
+  onComplete: () => {},
+});
+
+const tween = tweens.to(...);
+tween.pause(); tween.resume(); tween.stop();
+await tween.finished;                    // 等它播完（被中途停止時結果是 false）
+tweens.killTweensOf(transform.position); // 停止某個物件身上的所有補間
+</script>
+
+<h2>緩動曲線</h2>
+<p>同樣從左到右移動，不同的緩動曲線給人完全不同的感覺。按執行比較看看：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="緩動曲線比較" data-height="380">
+import { Color } from '@engine/math';
+import { Transform } from '@engine/scene';
+import { MeshRenderer, spawn } from '@engine/render';
+import type { EasingName } from '@engine/animation';
+import { Text3D } from '@engine/text3d';
+import { engine, tweens, world } from './engine';
+
+const camera = spawn.camera(world, { position: [0, 0, 10], target: [0, 0, 0], kind: 'orthographic', size: 4.2 });
+spawn.light(world, { kind: 'hemisphere', intensity: 2.5 });
+
+const easings: EasingName[] = ['linear', 'quadOut', 'cubicInOut', 'backOut', 'elasticOut', 'bounceOut', 'expoIn'];
+const geometry = { sphere: [0.22, 24, 12] };
+easings.forEach((name, i) => {
+  const y = 3 - i * 1;
+  // 名稱（Text3D 的 flat 模式：畫在畫布上的平面文字）
+  world.spawn(Transform.at(-3.2, y, 0), Text3D.with({ text: name, mode: 'flat', size: 0.32, color: 0xb8c0ae, align: 'right' }));
+
+  const ball = world.spawn(MeshRenderer.with({
+    geometry,
+    material: { standard: { color: new Color().setHSL(i / easings.length, 0.7, 0.6) } },
+  }));
+  const t = world.add(ball, Transform);
+  t.position.set(-2.6, y, 0);
+  tweens.to(t.position, { x: 4.6 }, { duration: 1.6, easing: name, repeat: Infinity, yoyo: true, delay: 0.3 });
+});
+
+engine.start();
+</script>
+<p>可以用的名稱：<code>linear</code>、<code>quadIn</code>／<code>quadOut</code>／<code>quadInOut</code>、<code>cubicIn</code>／<code>cubicOut</code>／<code>cubicInOut</code>、<code>sineIn</code>／<code>sineOut</code>／<code>sineInOut</code>、<code>expoIn</code>／<code>expoOut</code>、<code>backIn</code>／<code>backOut</code>／<code>backInOut</code>、<code>elasticOut</code>、<code>bounceIn</code>／<code>bounceOut</code>；也可以傳入自己的函式 <code>(t) =&gt; t * t</code>。</p>
+
+<h2>時間軸</h2>
+<p>好幾段動畫依序（或同時）播放時用時間軸：每一步預設接在前一步後面，<code>at: '&lt;'</code> 和前一步同時開始，<code>at: 秒數</code> 指定絕對時間。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="時間軸：跳起來" data-height="300">
+import { Transform } from '@engine/scene';
+import { create, MeshRenderer, spawn } from '@engine/render';
+import { engine, tweens, world } from './engine';
+
+const camera = spawn.camera(world, { position: [0, 1.5, 7], target: [0, 0.8, 0], fov: 40 });
+spawn.light(world, { kind: 'hemisphere', intensity: 1.2 });
+spawn.light(world, { intensity: 2, position: [2, 4, 3], target: [0, 0, 0] });
+
+const geometry = { box: 1, offset: [0, 0.5, 0] }; // 往上移半格：以底部為中心縮放（壓扁時貼著地面）
+const material = create.material({ standard: { color: 0x4f9dff } });
+const box = world.spawn(MeshRenderer.with({ geometry, material }));
+const t = world.add(box, Transform);
+
+const jump = tweens.timeline()
+  .to(t.scale, { x: 1.3, y: 0.6, z: 1.3 }, { duration: 0.15 })                     // 蹲下
+  .to(t.scale, { x: 0.8, y: 1.3, z: 0.8 }, { duration: 0.12 })                     // 伸展
+  .to(t.position, { y: 2 }, { duration: 0.4, easing: 'quadOut', at: '<' })         // 同時往上跳
+  .to(t.scale, { x: 1, y: 1, z: 1 }, { duration: 0.3, at: '<' })
+  .to(t.position, { y: 0 }, { duration: 0.35, easing: 'quadIn' })                  // 落下
+  .to(t.scale, { x: 1.25, y: 0.75, z: 1.25 }, { duration: 0.08 })                  // 著地壓扁
+  .to(t.scale, { x: 1, y: 1, z: 1 }, { duration: 0.5, easing: 'elasticOut' })
+  .call(() => material.color.setHSL(Math.random(), 0.7, 0.6))                      // 在時間軸上呼叫函式
+  .wait(0.4);
+
+console.log(`一次跳躍 ${jump.duration.toFixed(2)} 秒`);
+tweens.play(jump, { repeat: Infinity });
+engine.start();
+</script>
+
+<h2>模型動畫</h2>
+<p>載入的 glTF 模型若有動畫，加上 <code>Animator</code> 元件後用 <code>play.animation(world.require(實體, Animator), '動畫名稱', { loop: true })</code> 播放；動作很多時用 <code>AnimationStateMachine</code> 定義狀態與轉換條件（例如走路 → 跑步），在程式裡用 <code>play.trigger(狀態機, '觸發名稱')</code> 觸發。</p>
+<p>沒有模型檔時，也可以自己組物件、用資料寫動畫片段：<code>create.mesh</code> 的 <code>name</code> 是軌道裡的物件名稱，<code>create.clip</code> 的鍵是「名稱.屬性」（position、scale、rotation、visible、材質的數字或顏色）。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="create.clip：自己做的動畫片段" data-height="300">
+import { create, play, Animator } from '@engine';
+import { SceneObject, spawn } from '@engine/render';
+import { Transform } from '@engine/scene';
+import { engine, world } from './engine';
+
+spawn.camera(world, { position: [0, 1.4, 3.5], target: [0, 0.9, 0] });
+spawn.defaultLights(world);
+const robot = create.group(
+  create.mesh({ box: [0.7, 1, 0.4] }, '#4cc9f0', { position: [0, 0.6, 0] }),
+  create.mesh({ box: 0.45 }, '#ffd166', { name: 'head', position: [0, 1.4, 0] }),
+  create.mesh({ box: [0.15, 0.6, 0.15], offset: [0, -0.25, 0] }, '#ff6b6b', { name: 'arm', position: [0.45, 1, 0] }),
+);
+const wave = create.clip('wave', {
+  'arm.rotation': { times: [0, 0.3, 0.6, 0.9], values: [[0, 0, 0], [0, 0, 2.4], [0, 0, 1.8], [0, 0, 0]], interpolation: 'smooth' },
+  'head.rotation': { times: [0, 0.45, 0.9], values: [[0, 0, 0], [0.3, 0, 0], [0, 0, 0]] },
+});
+const e = world.spawn(Transform, SceneObject.with({ object: robot }), Animator.with({ clips: [wave] }));
+addEventListener('pointerdown', () => play.animation(world.require(e, Animator), 'wave', { loop: false, restart: true }));
+play.animation(world.require(e, Animator), 'wave', { loop: false });
+console.log('點畫面再揮一次手');
+engine.start();
+</script>

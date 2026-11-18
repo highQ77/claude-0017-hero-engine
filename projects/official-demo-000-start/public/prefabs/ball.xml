@@ -1,0 +1,16 @@
+<Scene format="hero-scene" version="1">
+  <Entity id="ball" name="球">
+    <Transform/>
+    <RigidBody linearDamping="0.1" angularDamping="0.3"/>
+    <Collider shape="sphere" radius="0.2" friction="0.4" restitution="0.6"/>
+    <Entity id="visual" name="外觀">
+      <Transform scale="0.4 0.4 0.4"/>
+      <MeshRenderer castShadow="true" receiveShadow="true">
+        <geometry sphere="0.5"/>
+        <material>
+          <standard color="#ffa94f" roughness="0.3"/>
+        </material>
+      </MeshRenderer>
+    </Entity>
+  </Entity>
+</Scene>

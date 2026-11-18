@@ -1,0 +1,17 @@
+node_modules
+dist
+tips
+
+# 除錯紀錄（?debug=pointer）
+.debug/
+
+# 目前選擇的專案（node hero select）
+.selected-project
+
+# 使用手冊範例檢查的暫存檔（doc/scripts/check-examples.mjs）
+doc/.check/
+doc/.check-api/
+doc/.check-chrome/
+
+# 桌面版的外殼與 Rust 編譯結果（node hero build --mac）
+.tauri/

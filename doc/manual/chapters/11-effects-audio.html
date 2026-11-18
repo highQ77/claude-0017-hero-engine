@@ -1,0 +1,89 @@
+<!-- group: 遊戲邏輯 -->
+<h1>粒子特效與音效</h1>
+<p class="lead">粒子外掛用一個繪製呼叫畫出大量粒子（火焰、煙霧、火花、爆炸）；音效外掛負責音效、背景音樂、音量分組與 3D 空間音效。</p>
+
+<h2>粒子</h2>
+<p>實體加上 <code>ParticleEmitter</code> 與 <code>Transform</code> 就會開始發射粒子。<code>ParticlePresets</code> 提供常用特效的設定，可以展開後覆蓋部分欄位：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="ParticleEmitter">
+// 持續的火焰
+world.spawn(Transform, ParticleEmitter.with(ParticlePresets.fire()));
+
+// 一次性的火花：發射 30 顆後自動銷毀實體
+world.spawn(Transform, ParticleEmitter.with({
+  ...ParticlePresets.sparks(),
+  burstCount: 30, duration: 0, loop: false, autoDestroy: true,
+  color: 0xfff3a0, colorEnd: 0xffb000,
+}));
+
+// 對正在發射的粒子再補發一批
+play.burst(world.require(e, ParticleEmitter), 50);
+</script>
+<p>常用欄位：<code>rate</code>（每秒幾顆）、<code>lifetime</code>、<code>speed</code>、<code>size</code>／<code>sizeEnd</code>、<code>color</code>／<code>colorEnd</code>、<code>direction</code>、<code>spread</code>（擴散角度）、<code>shape</code>（point／sphere／box／circle）、<code>acceleration</code>（例如重力）、<code>maxParticles</code>。範圍型的欄位可以寫 <code>[最小, 最大]</code>。</p>
+
+<h2>音效</h2>
+<p><code>AudioPlugin</code> 需要先安裝 <code>AssetPlugin</code>（用來載入音檔）。從 <code>audioPlugin.audio</code>、資源 <code>AudioKey</code> 或腳本的 <code>this.audio</code> 取得：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="AudioManager">
+audio.play('sounds/jump.wav');                                       // 播放音效
+audio.play('sounds/pop.wav', { volume: 0.6, pitch: 1.5, randomPitch: 0.1 });
+audio.playMusic('sounds/music.wav', { volume: 0.4, fade: 2 });        // 背景音樂（換曲時交叉淡入淡出）
+audio.stopMusic(1);
+audio.setVolume('sfx', 0.5);                                          // 音量分組：master（總音量）、music、sfx、ui、voice
+await audio.preload(['sounds/jump.wav', 'sounds/pop.wav']);           // 先載入常用音效
+
+// 3D 空間音效：依照與攝影機（聽者）的距離衰減、分左右聲道
+audio.play('sounds/hum.wav', { loop: true, spatial: { refDistance: 2 }, position: { x: 3, y: 0, z: 0 } });
+</script>
+<div class="warn">
+  <p>瀏覽器規定：使用者點擊或按鍵之前不能發出聲音。音效外掛會在第一次互動後自動開始播放（包括之前呼叫的背景音樂）。</p>
+</div>
+
+<h2>範例：特效與音效</h2>
+<p>點左上的按鈕切換特效、點畫面中央放出爆炸並播放音效。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="粒子與音效" data-height="380">
+import { Color } from '@engine/math';
+import type { Entity } from '@engine/ecs';
+import { Transform } from '@engine/scene';
+import { spawn } from '@engine/render';
+import { ParticleEmitter, ParticlePresets } from '@engine/particles';
+import { audio, engine, input, render, ui, world } from './engine';
+
+type PresetName = keyof typeof ParticlePresets;
+
+render.scene.background = new Color(0x0d0f12); // 暗一點，特效比較明顯
+let current: Entity | null = null;
+
+ui.loadString(`
+  <UI padding="12" gap="8" align="start">
+    <UILayout dir="h" gap="6" wrap="true">
+      <UIButton text="fire" onClick="effect"/>
+      <UIButton text="smoke" onClick="effect"/>
+      <UIButton text="sparks" onClick="effect"/>
+      <UIButton text="explosion" onClick="effect"/>
+    </UILayout>
+    <UILabel fontSize="12" color="#9aa292">點畫面中央：爆炸 + 音效</UILabel>
+  </UI>`);
+// 按鈕的 text 就是特效名稱
+ui.setHandlers({ effect: (e) => show(e.target.get('text') as PresetName) });
+
+const camera = spawn.camera(world, { position: [0, 1.5, 6], target: [0, 0.8, 0], fov: 50 });
+spawn.light(world, { kind: 'hemisphere', intensity: 0.6 });
+spawn.mesh(world, { geometry: { circle: [3, 48] }, material: { standard: { color: 0x2a2f25 } }, rotation: [-Math.PI / 2, 0, 0] });
+
+function show(name: PresetName) {
+  if (current !== null) world.destroy(current);
+  current = world.spawn(Transform, ParticleEmitter.with(ParticlePresets[name]()));
+  console.log('特效：', name);
+}
+show('fire');
+
+engine.on('update', () => {
+  if (!input.mouse.wasPressed('Left')) return;
+  world.spawn(
+    Transform.at(input.pointer.ndcX * 2.5, 1.2, 0),
+    ParticleEmitter.with({ ...ParticlePresets.explosion(), autoDestroy: true }),
+  );
+  audio.play('sounds/pop.wav', { randomPitch: 0.2 });
+});
+
+engine.start();
+</script>

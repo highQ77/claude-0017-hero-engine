@@ -1,0 +1,102 @@
+<!--
+  共用主題：每個介面檔用 <UIImport src="theme.xml"/> 匯入這裡的樣式（UIStyle）與外觀（UISkin）。
+  改這個檔案就能調整整個遊戲的配色、字級與圓角；用 UI 編輯器打開可以看到下面的樣式預覽。
+  版面尺寸：滿版（auto × auto）。只用在編輯器的樣式預覽；被 <UIImport> 匯入時只取樣式，不會套用這裡的 <UI> 屬性。
+
+  配色                                  字級              圓角
+    強調  #9acd32（亮 #b4e05a、暗 #7aa828）  標題  20 / 16 粗     面板 16、卡片 12
+    強調上的文字 #141a07                    內文  14          按鈕 10、標籤 999（膠囊）
+    文字  #eef2e8／次要 #b8c0ae／淡 #838b78   說明  12 / 11
+    金幣  #ffd75e  生命 #ff6b6b  警告 #ffb347  資訊 #6aa8ff
+-->
+<UI width="auto" height="auto" padding="28" gap="16" background="#0c0f0b">
+  <!-- ───── 外觀：每種元件的預設樣子（按鈕用下面的樣式，避免影響分頁、對話選項等內建按鈕） ───── -->
+  <UISkin for="UIWindow" background="rgba(17,21,15,0.97)" border="1 rgba(200,240,140,0.14)" radius="16"
+          shadow="0 24 60 rgba(0,0,0,0.55)" headerBackground="rgba(154,205,50,0.07)" titleColor="#eef6df"/>
+  <UISkin for="UITabs" accent="#9acd32" activeColor="#141a07" fontSize="14"/>
+  <UISkin for="UIToggle" accent="#9acd32"/>
+  <UISkin for="UISlider" accent="#9acd32"/>
+  <UISkin for="UICheckBox" accent="#9acd32" fontSize="14"/>
+  <UISkin for="UIRadioButton" accent="#9acd32" fontSize="14"/>
+  <UISkin for="UISelect" accent="#9acd32" fontSize="14"/>
+  <UISkin for="UIStackView" accent="#9acd32"/>
+  <UISkin for="UIToast" accent="#9acd32"/>
+  <UISkin for="UIDialogue" accent="#9acd32" nameColor="#c8f07a"/>
+  <UISkin for="UIJoystick" accent="#9acd32"/>
+  <UISkin for="UIMinimap" playerColor="#9acd32"/>
+  <UISkin for="UITable" headerBackground="rgba(154,205,50,0.08)" headerColor="#c8d4b4" stripeBackground="rgba(255,255,255,0.025)"
+          rowHoverBackground="rgba(154,205,50,0.1)" selectedBackground="rgba(154,205,50,0.24)" selectedColor="#eef6df" fontSize="13"/>
+  <UISkin for="UIProgressBar" fill="#7aa828,#b4e05a" trackColor="rgba(255,255,255,0.08)"/>
+
+  <!-- ───── 容器 ───── -->
+  <!-- HUD 上的半透明面板 -->
+  <UIStyle name="panel" background="rgba(13,17,12,0.82)" radius="16" border="1 rgba(255,255,255,0.08)"
+           shadow="0 10 28 rgba(0,0,0,0.38)" padding="10 14"/>
+  <!-- 視窗、面板裡的區塊 -->
+  <UIStyle name="card" background="rgba(255,255,255,0.035)" radius="12" border="1 rgba(255,255,255,0.06)" padding="12" gap="10"/>
+  <!-- 膠囊形的小資訊列（任務、狀態） -->
+  <UIStyle name="chip" dir="h" align="center" gap="8" padding="6 14" background="rgba(13,17,12,0.82)" radius="999"
+           border="1 rgba(255,255,255,0.08)"/>
+  <!-- 設定列：左邊標籤、右邊控制項 -->
+  <UIStyle name="row" dir="h" align="center" gap="12" minHeight="32"/>
+
+  <!-- ───── 文字 ───── -->
+  <UIStyle name="title" fontSize="20" fontWeight="bold" color="#eef6df"/>
+  <UIStyle name="heading" fontSize="16" fontWeight="bold" color="#eef2e8"/>
+  <UIStyle name="section" fontSize="11" fontWeight="bold" color="#8f9a80"/>
+  <UIStyle name="text" fontSize="14" color="#eef2e8"/>
+  <UIStyle name="label" fontSize="13" color="#b8c0ae"/>
+  <UIStyle name="rowLabel" fontSize="13" color="#b8c0ae" width="84" shrink="0"/>
+  <UIStyle name="hint" fontSize="12" color="#9aa38d" lineHeight="1.5"/>
+  <UIStyle name="gold" fontSize="18" fontWeight="bold" color="#ffd75e"/>
+  <!-- 按鍵提示：WASD、F、V… -->
+  <UIStyle name="key" fontSize="11" fontWeight="bold" color="#eef2e8" background="rgba(255,255,255,0.1)" radius="5" padding="2 7"
+           border="1 rgba(255,255,255,0.14)"/>
+
+  <!-- ───── 按鈕 ───── -->
+  <UIStyle name="btn" background="rgba(255,255,255,0.07)" hoverBackground="rgba(255,255,255,0.13)" pressedBackground="rgba(255,255,255,0.2)"
+           border="1 rgba(255,255,255,0.08)" color="#eef2e8" fontSize="14" radius="10" padding="9 16"/>
+  <UIStyle name="primary" background="#9acd32" hoverBackground="#b4e05a" pressedBackground="#7aa828" border="0"
+           color="#141a07" fontSize="14" fontWeight="bold" radius="10" padding="11 18"/>
+  <!-- HUD 上浮在遊戲畫面的按鈕 -->
+  <UIStyle name="ghost" background="rgba(13,17,12,0.82)" hoverBackground="rgba(38,46,32,0.92)" pressedBackground="rgba(58,70,48,0.95)"
+           border="1 rgba(255,255,255,0.1)" color="#eef2e8" fontSize="14" radius="12" padding="10 14"/>
+  <!-- 膠囊分頁按鈕（搭配 select="堆疊id:頁" 切換 UIStackView） -->
+  <UIStyle name="pill" background="rgba(255,255,255,0.06)" hoverBackground="rgba(255,255,255,0.12)" pressedBackground="rgba(255,255,255,0.18)"
+           activeBackground="#9acd32" activeColor="#141a07" color="#c8d0bc" fontSize="13" padding="6 16" radius="999"/>
+  <UIStyle name="accentIcon" size="18" color="#9acd32"/>
+
+  <!-- ───── 預覽（只在編輯這個檔案時看得到；匯入時只會取用上面的樣式） ───── -->
+  <UILabel style="title">Hero Engine 主題</UILabel>
+  <UILabel style="hint">其他介面檔用 &lt;UIImport src="theme.xml"/&gt; 匯入；改這裡就會套用到所有畫面。</UILabel>
+  <UILayout dir="h" gap="16" wrap="true" align="start">
+    <UILayout style="card" width="300">
+      <UILabel style="section">文字</UILabel>
+      <UILabel style="heading">標題 heading</UILabel>
+      <UILabel style="text">內文 text</UILabel>
+      <UILabel style="label">標籤 label</UILabel>
+      <UILabel style="hint">說明 hint：比較淡、比較小的補充文字。</UILabel>
+      <UILayout dir="h" gap="8" align="center"><UILabel style="gold">1,280</UILabel><UILabel style="key">WASD</UILabel><UILabel style="hint">移動</UILabel></UILayout>
+    </UILayout>
+    <UILayout style="card" width="300">
+      <UILabel style="section">按鈕</UILabel>
+      <UILayout dir="h" gap="8" wrap="true">
+        <UIButton style="primary" text="主要"/>
+        <UIButton style="btn" text="一般"/>
+        <UIButton style="ghost" text="浮動"><UIIcon name="menu" style="accentIcon"/></UIButton>
+      </UILayout>
+      <UILayout dir="h" gap="6"><UIButton style="pill" text="今日"/><UIButton style="pill" text="本週"/><UIButton style="pill" text="總榜"/></UILayout>
+    </UILayout>
+    <UILayout style="card" width="300">
+      <UILabel style="section">控制項</UILabel>
+      <UILayout style="row"><UILabel style="rowLabel">開關</UILabel><UIToggle checked="true"/></UILayout>
+      <UILayout style="row"><UILabel style="rowLabel">滑桿</UILabel><UISlider value="60" flex="1" showValue="true"/></UILayout>
+      <UILayout style="row"><UILabel style="rowLabel">進度</UILabel><UIProgressBar value="62" flex="1" height="10"/></UILayout>
+      <UICheckBox text="勾選框" checked="true"/>
+    </UILayout>
+    <UILayout style="panel" dir="h" gap="10" align="center">
+      <UIIcon name="coin" size="16" color="#ffd75e"/><UILabel style="text">HUD 面板 panel</UILabel>
+    </UILayout>
+    <UILayout style="chip"><UIIcon name="flag" size="14" color="#9acd32"/><UILabel style="label">膠囊 chip</UILabel></UILayout>
+  </UILayout>
+</UI>

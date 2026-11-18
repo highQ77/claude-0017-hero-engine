@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hero Engine 音效編輯器</title>
+    <!-- editor-theme -->
+    <style>
+      /* 共用的色票、按鈕、輸入框、面板標題、分頁…在 shared/theme.css（開發伺服器放在上面）；這裡只放音效編輯器自己的 */
+
+      /* ───────── 工具列（兩排：檔案、編輯與播放） ───────── */
+      header { display: flex; flex-direction: column; padding: 7px 14px; }
+      header .doc-name { flex-shrink: 1; min-width: 80px; }
+      #fileSelect { min-width: 150px; }
+      #playBtn { min-width: 84px; font-weight: 650; }
+      #playBtn.playing { color: var(--accent-hi); border-color: var(--accent-a40); }
+
+      main { display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; min-height: 0; }
+
+      /* ───────── 左：範本、圖層 ───────── */
+      .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 10px; }
+      .presets button { padding: 5px 2px; font-size: 12.5px; }
+      .layers { padding: 8px; display: flex; flex-direction: column; gap: 4px; overflow: auto; min-height: 0; }
+      .layer-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid transparent; cursor: pointer; }
+      .layer-row:hover { background: var(--raise); }
+      .layer-row.selected { background: var(--accent-a15); border-color: var(--accent-a40); }
+      .layer-row .layer-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .layer-row .layer-name small { display: block; color: var(--muted); font-size: 11px; font-family: var(--mono); }
+      .layer-row.off .layer-name { opacity: 0.45; }
+      .layer-actions { display: flex; gap: 6px; padding: 4px 10px 12px; }
+      .layer-actions button { flex: 1; font-size: 12px; padding: 4px 6px; }
+
+      /* ───────── 中：波形、包絡、音高 ───────── */
+      #center { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); padding: 12px; gap: 12px; overflow: auto; }
+      .card { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+      .card-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
+      .card-head .title { display: flex; align-items: center; gap: 7px; font-weight: 650; letter-spacing: 0.06em; color: var(--text2); }
+      .card-head .title::before { content: ""; width: 3px; height: 12px; border-radius: 2px; background: var(--accent); }
+      .card-head .info { color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+      .card canvas { display: block; width: 100%; touch-action: none; }
+      .wave-card { flex: 1; display: flex; flex-direction: column; min-height: 220px; }
+      #wave { flex: 1; min-height: 160px; cursor: pointer; }
+      #env, #pitch { height: 170px; }
+      .graphs { flex: none; }
+      .graphs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 1300px) { .graphs { grid-template-columns: 1fr; } }
+      .legend { display: inline-flex; gap: 10px; color: var(--muted); font-size: 11px; }
+      .legend i { display: inline-block; width: 10px; height: 2px; vertical-align: middle; margin-right: 4px; }
+      .hint { color: var(--muted); font-size: 11.5px; padding: 0 2px; }
+
+      /* ───────── 右：參數 ───────── */
+      #params { flex: 1; min-height: 0; overflow: auto; padding: 4px 14px 16px; }
+      .p-section { padding: 10px 0 4px; border-top: 1px solid var(--line); }
+      .p-section:first-child { border-top: 0; }
+      .p-title { font-size: 11.5px; color: var(--muted); font-weight: 650; letter-spacing: 0.06em; margin-bottom: 6px; }
+      .p-row { display: grid; grid-template-columns: 66px 1fr 92px; align-items: center; gap: 8px; margin-bottom: 6px; }
+      .p-row.select { grid-template-columns: 66px 1fr; }
+      .p-row > label { color: var(--text2); font-size: 12px; white-space: nowrap; }
+      .p-row input[type="number"] { width: 62px; flex: none; padding: 3px 5px; font: 11.5px var(--mono); text-align: right; }
+      .p-row select { width: 100%; padding-top: 3px; padding-bottom: 3px; }
+      .p-unit { color: var(--muted); font-size: 10.5px; margin-left: 4px; white-space: nowrap; }
+      .p-empty { color: var(--muted); padding: 16px 0; }
+
+      /* 滑桿 */
+      input[type="range"] { appearance: none; width: 100%; height: 18px; padding: 0; background: transparent; border: 0; box-shadow: none; cursor: pointer; }
+      input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--accent) var(--fill, 0%), var(--line-hi) var(--fill, 0%)); }
+      input[type="range"]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
+        background: var(--text); border: 2px solid var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
+      input[type="range"]::-moz-range-track { height: 4px; border-radius: 4px; background: var(--line-hi); }
+      input[type="range"]::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--accent); }
+      input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 2px solid var(--accent); }
+      input[type="range"]:focus-visible { box-shadow: none; }
+      input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent-a40); }
+
+      #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 16px); opacity: 0; z-index: 60; pointer-events: none;
+        padding: 8px 16px; border-radius: var(--radius); background: var(--raise-hi); border: 1px solid var(--line-hi); box-shadow: var(--shadow-md);
+        transition: 0.2s var(--ease); max-width: min(640px, 90vw); text-align: center; }
+      #toast.show { opacity: 1; transform: translate(-50%, 0); }
+      #toast.error { border-color: var(--error); color: #ffd0d0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar-row">
+        <div class="brand"><span class="logo">SE</span><h1>音效編輯器</h1></div>
+        <nav class="editor-nav" aria-label="編輯器">
+          <a href="/portal.html" target="hero-portal" title="專案入口頁：切換、新增、刪除專案（另一個分頁）">專案</a>
+          <a href="/ui-editor.html" target="hero-ui-editor" title="UI 編輯器（另一個分頁）">UI</a>
+          <a href="/s3d-editor.html" target="hero-s3d-editor" title="3D 場景編輯器（另一個分頁）">3D 場景</a>
+          <a href="/shader-editor.html" target="hero-shader-editor" title="著色器編輯器（另一個分頁）">著色器</a>
+          <a href="/se-editor.html" aria-current="page">音效</a>
+        </nav>
+        <div class="divider"></div>
+        <select id="fileSelect" title="開啟專案 public/sounds 裡的音效檔（.sfx.json）"></select>
+        <button id="newBtn" title="新增音效">新增</button>
+        <button id="deleteBtn" class="danger" title="刪除這個音效（.sfx.json 與 .wav）">刪除</button>
+        <span id="docName" class="doc-name"></span>
+        <span class="spacer"></span>
+        <button id="exportBtn" class="ghost" title="下載 .wav 檔">下載 .wav</button>
+        <button id="saveBtn" class="primary" title="儲存到 public/sounds：.sfx.json（可以再編輯）與 .wav（遊戲播放）（⌘/Ctrl+S）">儲存</button>
+      </div>
+      <div class="bar-row">
+        <button id="undoBtn" title="復原（⌘/Ctrl+Z）">↶ 復原</button>
+        <button id="redoBtn" title="重做（⌘/Ctrl+Shift+Z）">↷ 重做</button>
+        <div class="divider"></div>
+        <button id="playBtn" title="播放（空白鍵）">▶ 播放</button>
+        <button id="autoBtn" class="on" title="修改參數後自動播放">自動播放</button>
+        <div class="divider"></div>
+        <button id="randomBtn" title="隨機產生一個新的音效">🎲 隨機產生</button>
+        <button id="mutateBtn" title="在目前的參數附近隨機變動一點（做出同一種音的不同版本）">微調變化</button>
+        <select id="mutateAmount" title="變化的幅度">
+          <option value="0.05">小</option>
+          <option value="0.12" selected>中</option>
+          <option value="0.25">大</option>
+        </select>
+        <span class="spacer"></span>
+        <span class="bar-label" id="stats"></span>
+      </div>
+    </header>
+
+    <main>
+      <aside class="left">
+        <div class="panel-head"><span class="title">範本</span><span class="muted" style="font-size: 11.5px">每次點都有一點不同</span></div>
+        <div class="presets" id="presets"></div>
+        <div class="panel-head" style="border-top: 1px solid var(--line)"><span class="title">圖層</span></div>
+        <div class="layers" id="layers"></div>
+        <div class="layer-actions">
+          <button id="addLayerBtn" title="加一層聲音（最多 4 層）">＋ 加入</button>
+          <button id="dupLayerBtn" title="複製選取的圖層">複製</button>
+          <button id="delLayerBtn" class="danger" title="刪除選取的圖層">刪除</button>
+        </div>
+      </aside>
+
+      <section id="center">
+        <div class="card wave-card">
+          <div class="card-head"><span class="title">波形</span><span class="info" id="waveInfo"></span><span class="spacer"></span><span class="hint">點波形播放</span></div>
+          <canvas id="wave"></canvas>
+        </div>
+        <div class="graphs">
+          <div class="card">
+            <div class="card-head"><span class="title">音量包絡</span><span class="spacer"></span><span class="hint">拖曳圓點：起音、衰減／延音、維持、釋音</span></div>
+            <canvas id="env"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <span class="title">音高與濾波</span><span class="spacer"></span>
+              <span class="legend"><span><i style="background: var(--accent)"></i>音高</span><span><i style="background: #6ec6ff"></i>濾波</span></span>
+            </div>
+            <canvas id="pitch"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <aside class="right">
+        <div class="tabs">
+          <button class="tab active" data-tab="layer">圖層</button>
+          <button class="tab" data-tab="master">整體</button>
+        </div>
+        <div id="params"></div>
+      </aside>
+    </main>
+    <div id="toast"></div>
+
+    <script type="module" src="./editor.ts"></script>
+  </body>
+</html>

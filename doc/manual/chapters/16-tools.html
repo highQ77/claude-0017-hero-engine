@@ -1,0 +1,146 @@
+<!-- group: 進階 -->
+<h1>除錯工具：調整面板與效能監視器</h1>
+<p class="lead">開發時常常要「改一個數字、看看效果」。調整面板（lil-gui）讓你在遊戲執行中直接拖曳滑桿、勾選、選顏色，不用改程式再重新整理；效能監視器則顯示 FPS、每幀時間、CPU、GPU 與介面重畫的成本。兩者都是套件，用 <code>PluginManager</code> 安裝。</p>
+
+<h2>安裝調整面板</h2>
+<p>調整面板用 <a href="https://lil-gui.georgealways.com/" target="_blank" rel="noopener">lil-gui</a> 製作（已經是引擎的依賴，<code>npm install</code> 時會一起安裝）。安裝後按 <kbd>I</kbd> 顯示／隱藏：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="安裝">
+import { PluginManager } from '@engine/plugins';
+import * as audio from '@engine/audio';
+import inspector, { InspectorKey } from '@engine/packages/inspector';
+
+// 先 engine.use(...) 裝好其他外掛；api：套件可以使用的模組（調整面板有音效模組時會顯示音量）
+const plugins = new PluginManager(engine, { api: { audio } });
+await plugins.install(inspector, {
+  toggleKey: 'KeyI',                // 顯示／隱藏的按鍵；null 不綁定
+  visible: true,                    // 一開始是否顯示
+  position: { top: 8, right: 8 },   // 面板位置（預設右上角）
+  panels: ['engine', 'postfx'],     // 只要某些內建分類（預設全部）
+});
+</script>
+
+<h2>內建的分類</h2>
+<p>有安裝對應外掛的分類才會出現：</p>
+<table>
+  <thead><tr><th>分類</th><th>需要的外掛</th><th>可以調整</th></tr></thead>
+  <tbody>
+    <tr><td>引擎</td><td>—</td><td>時間縮放（慢動作、快轉）、暫停、逐幀前進；顯示 FPS 與實體數量</td></tr>
+    <tr><td>繪製</td><td><code>RenderPlugin</code></td><td>背景顏色；顯示目前的 3D 解析度（動態解析度）</td></tr>
+    <tr><td>後製</td><td><code>PostProcessingPlugin</code></td><td>色調映射、曝光、反鋸齒、光暈（強度、範圍、門檻）、暗角</td></tr>
+    <tr><td>物理</td><td><code>PhysicsPlugin</code></td><td>重力、顯示碰撞形狀</td></tr>
+    <tr><td>音效</td><td><code>AudioPlugin</code></td><td>總音量、各群組音量（音樂、音效、介面、語音）、全部靜音</td></tr>
+  </tbody>
+</table>
+<p>欄位會自動跟著遊戲裡的數值更新（例如在選單切換了反鋸齒，面板上的選項也會變）。</p>
+
+<h2>加自己的參數</h2>
+<p>從 <code>InspectorKey</code> 取得面板，<code>folder(名稱)</code> 建立自己的分類，再用 lil-gui 的寫法加欄位。<code>gui</code> 就是 lil-gui 本身，完整用法見 <a href="https://lil-gui.georgealways.com/" target="_blank" rel="noopener">lil-gui 說明</a>：</p>
+<table>
+  <thead><tr><th>寫法</th><th>欄位</th></tr></thead>
+  <tbody>
+    <tr><td><code>f.add(物件, '屬性', 最小, 最大, 間隔)</code></td><td>數字滑桿</td></tr>
+    <tr><td><code>f.add(物件, '屬性')</code></td><td>依值的型別：數字欄、勾選框（布林）、文字欄；值是函式時是按鈕</td></tr>
+    <tr><td><code>f.add(物件, '屬性', ['a', 'b'])</code>、<code>f.add(物件, '屬性', { 名稱: 值 })</code></td><td>下拉選單</td></tr>
+    <tr><td><code>f.addColor(物件, '屬性')</code></td><td>顏色（'#ff0000'、數字 0xff0000 或 THREE.Color）</td></tr>
+    <tr><td><code>.name('中文名稱')</code>、<code>.listen()</code>、<code>.onChange(fn)</code>、<code>.disable()</code></td><td>顯示名稱、自動更新、改變時呼叫、唯讀</td></tr>
+  </tbody>
+</table>
+<p>下面的範例把方塊的轉速、顏色、大小、形狀都放進面板。按執行後，用右上角的面板調整看看（按 <kbd>I</kbd> 可以隱藏；要先點一下畫面才能接收按鍵）：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="調整面板" data-height="420">
+import { Transform, math } from '@engine/scene';
+import { create, MeshRenderer, spawn } from '@engine/render';
+import { PluginManager } from '@engine/plugins';
+import inspector, { InspectorKey } from '@engine/packages/inspector';
+import { engine, postfx, world } from './engine';
+
+Object.assign(postfx.settings.bloom, { enabled: true, strength: 0.6 }); // 調整面板的「後製」分類可以即時調整
+
+const camera = spawn.camera(world, { position: [0, 1.2, 4], target: [0, 0, 0] });
+spawn.light(world, { kind: 'hemisphere', intensity: 1.2 });
+spawn.light(world, { intensity: 2, position: [2, 4, 3], target: [0, 0, 0] });
+
+const material = create.material({ standard: { color: 0x9acd32, roughness: 0.4, emissive: 0x000000 } });
+const shapes = {
+  方塊: { box: 1 },
+  球: { sphere: [0.6, 48, 24] },
+  繩結: { torusKnot: [0.45, 0.16] },
+};
+const box = spawn.mesh(world, { geometry: shapes.繩結, material });
+const t = world.require(box, Transform);
+
+// 要調整的參數
+const params = {
+  轉速: 1,
+  大小: 1,
+  形狀: '繩結' as keyof typeof shapes,
+  顏色: '#9acd32',
+  發光: 0,
+  線框: false,
+  重新開始: () => {
+    params.轉速 = 1;
+    params.大小 = 1;
+    t.rotation.identity();
+    console.log('重新開始');
+  },
+};
+engine.on('update', (time) => {
+  math.rotate(t, [0.3 * params.轉速 * time.delta, params.轉速 * time.delta, 0]);
+  t.scale.setScalar(params.大小);
+});
+
+// 安裝調整面板，加上自己的分類
+const plugins = new PluginManager(engine);
+await plugins.install(inspector, { toggleKey: 'KeyI' });
+const panel = world.requireResource(InspectorKey);
+for (const folder of Object.values(panel.folders)) folder?.close(); // 內建分類先收合，自己的參數比較好找
+const f = panel.folder('方塊');
+f.add(params, '轉速', 0, 10, 0.1).listen();
+f.add(params, '大小', 0.2, 2, 0.01).listen();
+f.add(params, '形狀', Object.keys(shapes)).onChange((name: keyof typeof shapes) => {
+  world.require(box, MeshRenderer).geometry = shapes[name];
+});
+f.addColor(params, '顏色').onChange((v: string) => material.color.set(v));
+f.add(params, '發光', 0, 1, 0.01).onChange((v: number) => material.emissive.setScalar(v));
+f.add(params, '線框').onChange((v: boolean) => (material.wireframe = v));
+f.add(params, '重新開始');
+
+engine.start();
+</script>
+
+<h2>程式控制</h2>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="InspectorKey">
+const panel = world.requireResource(InspectorKey);
+panel.toggle();                 // 顯示／隱藏（也有 show()、hide()、visible）
+panel.folders.postfx?.close();  // 內建分類的資料夾：engine、render、postfx、physics、audio
+panel.gui.close();              // 收合整個面板（lil-gui 的 API）
+panel.refresh();                // 程式改了數值、但欄位沒有 listen() 時，重新讀取
+</script>
+<div class="tip">
+  <p>調整面板是蓋在遊戲上的 HTML：點面板不會傳給遊戲（也不會被 2D 介面攔截），在數字欄裡打字時也不會觸發遊戲的按鍵。它是開發工具，正式發佈時可以不安裝，或用 <code>visible: false</code> 預設隱藏。</p>
+</div>
+
+<h2>效能監視器</h2>
+<p>效能監視器畫在引擎的 2D 介面上（不是 HTML），按 <kbd>`</kbd> 顯示／隱藏。面板可以用滑鼠（或手指）拖到畫面任何地方，位置會記住（存在瀏覽器裡，重新整理後還在）：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="安裝效能監視器">
+import perfMonitor, { PerfStatsKey } from '@engine/packages/perf-monitor';
+
+await plugins.install(perfMonitor, {
+  toggleKey: 'Backquote',
+  interval: 0.25,
+  position: { top: 100, right: 16 },  // 一開始的位置（預設右上角）
+  draggable: true,                    // 可以拖曳；false：滑鼠穿透面板，點擊傳給後面的遊戲
+  rememberPosition: true,             // 記住拖曳後的位置
+});
+const stats = world.requireResource(PerfStatsKey);  // 程式也能讀數據：stats.fps、stats.frameMs、stats.cpu…
+</script>
+<table>
+  <thead><tr><th>欄位</th><th>怎麼看</th></tr></thead>
+  <tbody>
+    <tr><td>曲線</td><td>每一幀的時間：綠色正常（≤ 17.5 ms）、橘色稍慢（≤ 34 ms）、紅色卡頓（&gt; 34 ms）</td></tr>
+    <tr><td>每幀</td><td>平均每幀時間與最快～最慢</td></tr>
+    <tr><td>CPU、階段</td><td>引擎各更新階段的時間（輸入、物理、更新、繪製…），找出哪個系統太慢</td></tr>
+    <tr><td>解析度</td><td>3D 場景的解析度；畫面跟不上時動態解析度會降低它（介面不受影響）</td></tr>
+    <tr><td>GPU、資源</td><td>每幀的繪製呼叫、三角形數量；幾何、貼圖、著色器數量（一直增加代表沒有釋放）</td></tr>
+    <tr><td>介面</td><td>2D 介面每秒重畫幾次、平均與最久的時間。介面重畫不在引擎的階段裡：卡頓卻看不到 CPU 時間時看這一行</td></tr>
+  </tbody>
+</table>

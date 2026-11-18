@@ -1,0 +1,19 @@
+# Hero Engine 遊戲的桌面版外殼（node hero build --mac 會複製到 .tauri/<專案>/src-tauri/ 再編譯）
+[package]
+name = "hero-game"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+# 檔案小一點、啟動快一點
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

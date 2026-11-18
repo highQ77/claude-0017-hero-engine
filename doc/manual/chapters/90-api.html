@@ -1,0 +1,17 @@
+<!-- group: 總覽 -->
+<h1>API 參考</h1>
+<p class="lead">引擎所有公開的 API：每個模組一章，列出類別、函式、常數、介面與型別，以及它們的簽名、說明、參數、範例與原始碼位置。內容是開啟手冊時從引擎原始碼自動產生的，和程式碼永遠一致。</p>
+
+<h2>模組</h2>
+<div data-generate="api-index"></div>
+
+<h2>怎麼讀</h2>
+<ul>
+  <li><b>引用</b>：遊戲裡用 <code>import { 名稱 } from '@engine/模組'</code>；套件（<code>packages/…</code>）用 PluginManager 安裝。</li>
+  <li><b>簽名</b>：<code>?</code> 代表可以省略的參數或欄位，<code>get</code> 是唯讀屬性，<code>static</code> 是用類別名稱呼叫的。</li>
+  <li><b>成員</b>：類別的方法與屬性、介面的欄位、小工具分類（例如 <code>create</code>、<code>spawn</code>）裡的函式。成員很多時預設收合，點「成員」展開。</li>
+  <li><b>範例</b>：取自原始碼註解的 <code>@example</code>，可以複製、編輯；這些是程式片段，假設 <code>world</code>、<code>scenes</code> 等已經準備好（見〈開始使用〉的 engine.ts）。</li>
+  <li><b>原始碼位置</b>：標題右邊的 <code>src/…:行號</code>。</li>
+  <li><b>找 API</b>：上方的搜尋框輸入名稱，API 會列在最前面；其他章節內文裡的 API 名稱也會連到這裡。</li>
+</ul>
+<p>同樣的內容也可以輸出成文字檔：<code>node hero api</code>（寫到 <code>tips/api.txt</code>）。</p>

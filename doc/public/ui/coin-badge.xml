@@ -1,0 +1,12 @@
+<!--
+  共用小元件：金幣圖示＋數字
+  用途：被 inventory.xml 用 <UIComponent src="coin-badge.xml"/> 內嵌（可以放很多次）
+  版面尺寸：寬 100、高依內容（height="fit"：字級或圖片改變時自動跟著變）
+            嵌入後的大小由這裡的 <UI> 決定，<UIComponent> 上不能寫寬高；dir、gap、align 也會套用到嵌入的位置
+  用到：UIImport（共用主題）、UIImage、UILabel
+-->
+<UI width="100" height="fit" dir="h" gap="8" align="center">
+  <UIImport src="theme.xml"/>
+  <UIImage src="coin.png" width="24"/>
+  <UILabel id="coinAmount" style="gold">1,280</UILabel>
+</UI>

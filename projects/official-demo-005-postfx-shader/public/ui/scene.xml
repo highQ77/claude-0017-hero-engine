@@ -1,0 +1,156 @@
+<!--
+  official-demo-005-postfx-shader 的介面：左邊是說明面板（四個分頁），右邊是 3D 畫面。
+  後製效果只套用在 3D 畫面上，介面不受影響（介面在後製之後才疊上去）。
+  可以用 UI 編輯器（/ui-editor.html）編輯。程式在 src/main.ts（onClick、onChange 的處理函式）。
+-->
+<UI width="auto" height="auto" dir="h">
+  <UISkin for="UIButton" radius="8" padding="7 12" background="#2a3124" hoverBackground="#37402f" color="#e9f6d2" fontSize="13"/>
+  <UISkin for="UISlider" width="100%"/>
+  <UISkin for="UIToggle" fontSize="13" color="#e9f6d2"/>
+  <UIStyle name="tab" flex="1" padding="8 4" activeBackground="#9acd32" activeColor="#141a07" fontWeight="bold"/>
+  <UIStyle name="title" fontSize="17" fontWeight="bold" color="#c8f07a"/>
+  <UIStyle name="text" fontSize="13" color="#c6cdbb" lineHeight="1.5"/>
+  <UIStyle name="hint" fontSize="12" color="#8f9884" lineHeight="1.5"/>
+  <UIStyle name="field" fontSize="12" color="#e9f6d2"/>
+  <UIStyle name="section" fontSize="13" fontWeight="bold" color="#c8f07a" marginTop="4"/>
+  <UIStyle name="codeBox" gap="3" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+  <UIStyle name="codeLine" fontSize="12" color="#ffd166" fontFamily="monospace"/>
+  <UIStyle name="box" gap="4" padding="10" background="rgba(255,255,255,0.04)" radius="8"/>
+  <UIStyle name="preset" flex="1" padding="7 4"/>
+
+  <!-- ───────── 左：說明面板 ───────── -->
+  <UILayout id="panel" width="340" padding="16" gap="12" background="rgba(14,17,12,0.92)">
+    <UILayout gap="2">
+      <UILabel fontSize="11" color="#8f9884">OFFICIAL DEMO 005</UILabel>
+      <UILabel fontSize="22" fontWeight="bold" color="#ffffff">後製與著色器</UILabel>
+    </UILayout>
+
+    <UILayout dir="h" gap="4">
+      <UIButton text="後製" style="tab" select="pages:postfx"/>
+      <UIButton text="材質" style="tab" select="pages:materials"/>
+      <UIButton text="全螢幕" style="tab" select="pages:effects"/>
+      <UIButton text="節點圖" style="tab" select="pages:graph"/>
+    </UILayout>
+
+    <UIStackView id="pages" flex="1" transition="fade" onChange="page">
+      <!-- ① 後製效果 -->
+      <UIScrollView id="postfx" gap="9">
+        <UILabel style="title">後製效果（postfx）</UILabel>
+        <UILabel style="text">畫完 3D 畫面之後，再整張加工：光暈、景深、暗角、底片顆粒、調色。直接改 postfx.settings，下一幀生效。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">postfx.settings.bloom.enabled = true</UILabel>
+          <UILabel style="codeLine">postfx.settings.dof.focusOn = 實體</UILabel>
+        </UILayout>
+        <UILabel style="section">風格預設</UILabel>
+        <UILayout dir="h" gap="4">
+          <UIButton text="原始" style="preset" onClick="presetNone"/>
+          <UIButton text="霓虹" style="preset" onClick="presetNeon"/>
+          <UIButton text="電影" style="preset" onClick="presetFilm"/>
+          <UIButton text="復古" style="preset" onClick="presetRetro"/>
+        </UILayout>
+
+        <UILabel style="section">色調</UILabel>
+        <UILabel style="field">色調映射（toneMapping）</UILabel>
+        <UISelect id="toneMapping" value="aces" onChange="fx">
+          <UIOption value="aces">aces：電影感（預設）</UIOption>
+          <UIOption value="agx">agx：自然</UIOption>
+          <UIOption value="neutral">neutral：中性</UIOption>
+          <UIOption value="reinhard">reinhard：柔和</UIOption>
+          <UIOption value="none">none：不處理（亮處會爆白）</UIOption>
+        </UISelect>
+        <UILabel style="field">曝光（exposure）</UILabel>
+        <UISlider id="exposure" min="0.2" max="2.5" step="0.05" value="1" showValue="true" onInput="fx"/>
+
+        <UILabel style="section">光暈（bloom）</UILabel>
+        <UIToggle id="bloom" text="開啟光暈" onChange="fx"/>
+        <UILabel style="field">強度</UILabel>
+        <UISlider id="bloomStrength" min="0" max="3" step="0.05" value="0.8" showValue="true" onInput="fx"/>
+        <UILabel style="field">門檻（多亮才發光）</UILabel>
+        <UISlider id="bloomThreshold" min="0" max="1" step="0.01" value="0.6" showValue="true" onInput="fx"/>
+
+        <UILabel style="section">景深（dof）</UILabel>
+        <UIToggle id="dof" text="開啟景深：點畫面上的物件對焦" onChange="fx"/>
+        <UILabel style="field">光圈（越大背景越模糊）</UILabel>
+        <UISlider id="aperture" min="0.001" max="0.03" step="0.001" value="0.012" showValue="true" onInput="fx"/>
+
+        <UILabel style="section">畫面</UILabel>
+        <UIToggle id="vignette" text="暗角（vignette）" onChange="fx"/>
+        <UIToggle id="film" text="底片顆粒（film）" onChange="fx"/>
+        <UIToggle id="grayscale" text="黑白" onChange="fx"/>
+        <UIToggle id="ao" text="環境光遮蔽（ao）：角落變暗" onChange="fx"/>
+        <UILabel style="field">飽和度（color.saturation）</UILabel>
+        <UISlider id="saturation" min="0" max="2" step="0.05" value="1" showValue="true" onInput="fx"/>
+        <UILabel style="field">對比（color.contrast）</UILabel>
+        <UISlider id="contrast" min="0.5" max="1.5" step="0.05" value="1" showValue="true" onInput="fx"/>
+        <UILabel id="passes" style="hint"> </UILabel>
+      </UIScrollView>
+
+      <!-- ② 自訂材質 -->
+      <UIScrollView id="materials" gap="10">
+        <UILabel style="title">自訂材質（ShaderDefinition）</UILabel>
+        <UILabel style="text">用 GLSL 寫材質。base: 'standard' 保留光照與陰影、只改一部分（溶解、波浪）；base: 'unlit' 自己決定顏色（全像投影、條紋）。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">shaders.define({ name, base, uniforms, fragment })</UILabel>
+          <UILabel style="codeLine">mat.uniforms.progress.value = 0.5</UILabel>
+        </UILayout>
+        <UILabel style="section">溶解（左）</UILabel>
+        <UIToggle id="dissolveAuto" text="自動來回" checked="true"/>
+        <UISlider id="dissolve" min="0" max="1" step="0.01" value="0" showValue="true" onInput="materialUniforms"/>
+        <UILabel style="section">波浪（右）</UILabel>
+        <UILabel style="field">振幅（amplitude）</UILabel>
+        <UISlider id="waveAmp" min="0" max="0.5" step="0.01" value="0.15" showValue="true" onInput="materialUniforms"/>
+        <UILabel style="section">條紋（中間，自己寫的）</UILabel>
+        <UILabel style="field">條紋數（count）</UILabel>
+        <UISlider id="stripes" min="2" max="40" step="1" value="12" showValue="true" onInput="materialUniforms"/>
+        <UIButton id="hotSwap" text="熱更新：改成斜線（shaders.update）" onClick="hotSwap"/>
+        <UILabel style="hint">shaders.update 會重新編譯所有用到這個著色器的材質，uniform 的值保留。</UILabel>
+      </UIScrollView>
+
+      <!-- ③ 全螢幕效果 -->
+      <UIScrollView id="effects" gap="10">
+        <UILabel style="title">全螢幕效果（EffectDefinition）</UILabel>
+        <UILabel style="text">自己寫的後製效果：拿到整張畫面（tDiffuse）與座標（uv），算出每個像素的顏色。內建三種，也可以自己寫。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">shaders.defineEffect({ name, uniforms, fragment })</UILabel>
+          <UILabel style="codeLine">postfx.addPass(shaders.createEffect('vhs'), 'display')</UILabel>
+        </UILayout>
+        <UILabel style="field">效果</UILabel>
+        <UISelect id="effect" value="pixelate" onChange="effect">
+          <UIOption value="none">不套用</UIOption>
+          <UIOption value="pixelate">像素化（內建）</UIOption>
+          <UIOption value="chromaticAberration">色差（內建）</UIOption>
+          <UIOption value="rainOnWindow">雨落窗（內建）</UIOption>
+          <UIOption value="vhs">錄影帶（自己寫的）</UIOption>
+          <UIOption value="nightVision">夜視鏡（自己寫的）</UIOption>
+        </UISelect>
+        <UILabel id="effectParam" style="field">參數</UILabel>
+        <UISlider id="effectValue" min="0" max="1" step="0.01" value="0.5" showValue="true" onInput="effectValue"/>
+        <UILabel id="effectDesc" style="hint"> </UILabel>
+      </UIScrollView>
+
+      <!-- ④ 節點圖 -->
+      <UIScrollView id="graph" gap="10">
+        <UILabel style="title">節點圖（Shader Graph）</UILabel>
+        <UILabel style="text">不寫 GLSL，用節點連起來：著色器編輯器（/shader-editor.html）存的 .shader.json 就是這種圖。這裡用程式組三張圖，編譯成著色器。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">compileShaderGraph(graph)</UILabel>
+          <UILabel style="codeLine">shaders.createFromDefinition(shaderGraphDefinition(file))</UILabel>
+        </UILayout>
+        <UILayout dir="h" gap="4">
+          <UIButton text="彩虹雜訊" style="preset" onClick="graphRainbow"/>
+          <UIButton text="細胞" style="preset" onClick="graphCells"/>
+          <UIButton text="邊緣光" style="preset" onClick="graphRim"/>
+        </UILayout>
+        <UILabel id="graphNodes" style="field" lineHeight="1.6"> </UILabel>
+        <UILabel style="hint">編譯出來的片段著色器：</UILabel>
+        <UILayout style="codeBox">
+          <UILabel id="graphCode" fontSize="11" color="#9fe0ff" fontFamily="monospace" lineHeight="1.45"> </UILabel>
+        </UILayout>
+      </UIScrollView>
+    </UIStackView>
+
+    <UILabel style="hint">拖曳畫面轉動視角，滾輪縮放（先點一下畫面）。按 ` 鍵顯示效能面板。</UILabel>
+  </UILayout>
+
+  <UIToast placement="top"/>
+</UI>

@@ -1,0 +1,43 @@
+{
+  "name": "hero-engine",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css",
+    "./projects/**",
+    "./doc/**",
+    "./tools/**",
+    "./src/editors/**",
+    "./tests/**"
+  ],
+  "scripts": {
+    "dev": "node hero dev",
+    "build": "node hero build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "relay": "node server/relay.mjs",
+    "doc": "node hero doc",
+    "format": "biome format --write",
+    "lint": "biome lint",
+    "fix": "biome check --write",
+    "check": "biome ci"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.14.0",
+    "lil-gui": "^0.21.0",
+    "three": "^0.170.0",
+    "yoga-layout": "^3.2.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.3",
+    "@tauri-apps/cli": "2.12.4",
+    "@types/three": "^0.170.0",
+    "tone": "15.1.22",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9",
+    "ws": "^8.18.0"
+  }
+}

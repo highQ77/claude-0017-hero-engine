@@ -1,0 +1,17 @@
+/Users/highquality/Desktop/ClaudeNotes/claude-0017/.tauri/target/release/deps/libunic_char_range-f85cb18fcac4d0d7.rmeta: /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/lib.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/pkg_info.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/iter.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/range.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/macros.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/step.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/iter_fused.rs
+
+/Users/highquality/Desktop/ClaudeNotes/claude-0017/.tauri/target/release/deps/libunic_char_range-f85cb18fcac4d0d7.rlib: /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/lib.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/pkg_info.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/iter.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/range.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/macros.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/step.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/iter_fused.rs
+
+/Users/highquality/Desktop/ClaudeNotes/claude-0017/.tauri/target/release/deps/unic_char_range-f85cb18fcac4d0d7.d: /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/lib.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/pkg_info.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/iter.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/range.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/macros.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/step.rs /Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/iter_fused.rs
+
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/lib.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/pkg_info.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/iter.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/range.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/macros.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/step.rs:
+/Users/highquality/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unic-char-range-0.9.0/src/iter_fused.rs:
+
+# env-dep:CARGO_PKG_DESCRIPTION=UNIC — Unicode Character Tools — Character Range and Iteration
+# env-dep:CARGO_PKG_NAME=unic-char-range
+# env-dep:CARGO_PKG_VERSION=0.9.0

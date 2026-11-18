@@ -1,0 +1,158 @@
+<!--
+  official-demo-007-network 的介面：左邊是說明面板（四個分頁），右邊是大家共用的 3D 廣場。
+  可以用 UI 編輯器（/ui-editor.html）編輯。程式在 src/main.ts（onClick、onChange 的處理函式）。
+-->
+<UI width="auto" height="auto" dir="h">
+  <UISkin for="UIButton" radius="8" padding="7 12" background="#2a3124" hoverBackground="#37402f" color="#e9f6d2" fontSize="13"/>
+  <UISkin for="UISlider" width="100%"/>
+  <UIStyle name="tab" flex="1" padding="8 4" activeBackground="#9acd32" activeColor="#141a07" fontWeight="bold"/>
+  <UIStyle name="title" fontSize="17" fontWeight="bold" color="#c8f07a"/>
+  <UIStyle name="text" fontSize="13" color="#c6cdbb" lineHeight="1.5"/>
+  <UIStyle name="hint" fontSize="12" color="#8f9884" lineHeight="1.5"/>
+  <UIStyle name="field" fontSize="12" color="#e9f6d2"/>
+  <UIStyle name="codeBox" gap="3" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+  <UIStyle name="codeLine" fontSize="12" color="#ffd166" fontFamily="monospace"/>
+  <UIStyle name="box" gap="4" padding="10" background="rgba(255,255,255,0.04)" radius="8"/>
+  <UIStyle name="stat" fontSize="18" fontWeight="bold" color="#ffd166"/>
+  <UIStyle name="emote" flex="1" padding="8 4" fontSize="15"/>
+  <UIStyle name="hudCard" padding="10 14" background="rgba(10,12,9,0.72)" radius="12" border="1 rgba(154,205,50,0.25)"/>
+
+  <!-- ───────── 左：說明面板 ───────── -->
+  <UILayout id="panel" width="340" padding="16" gap="12" background="rgba(14,17,12,0.92)">
+    <UILayout gap="2">
+      <UILabel fontSize="11" color="#8f9884">OFFICIAL DEMO 007</UILabel>
+      <UILabel fontSize="22" fontWeight="bold" color="#ffffff">多人連線</UILabel>
+    </UILayout>
+
+    <UILayout dir="h" gap="4">
+      <UIButton text="連線" style="tab" select="pages:connect"/>
+      <UIButton text="訊息" style="tab" select="pages:messages"/>
+      <UIButton text="同步" style="tab" select="pages:sync"/>
+      <UIButton text="網路狀況" style="tab" select="pages:conditions"/>
+    </UILayout>
+
+    <UIStackView id="pages" flex="1" transition="fade">
+      <!-- ① 連線與玩家 -->
+      <UIScrollView id="connect" gap="10">
+        <UILabel style="title">連線與玩家（NetworkClient）</UILabel>
+        <UILabel style="text">每個玩家有一個連線用戶端：連上同一個房間，就會收到其他人的加入、離開與訊息。再開一個分頁打開這個網址，就多了一位真人玩家。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">new NetworkClient({ transport, meta })</UILabel>
+          <UILabel style="codeLine">client.onPeerJoin((peer) =&gt; …)</UILabel>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="hint">連線方式</UILabel>
+          <UILabel id="transport" style="field"> </UILabel>
+          <UILabel style="hint">我</UILabel>
+          <UILabel id="me" style="field"> </UILabel>
+          <UILabel style="hint">房主（編號最小的人）</UILabel>
+          <UILabel id="host" style="field"> </UILabel>
+        </UILayout>
+        <UILabel style="field">房間裡的玩家（peer.meta、peer.rtt）</UILabel>
+        <UIList id="peers" gap="4">
+          <UITemplate>
+            <UILayout dir="h" gap="8" align="center" padding="4 8" radius="6" background="rgba(255,255,255,0.04)">
+              <UILayout width="10" height="10" radius="5" background="{color}"/>
+              <UILabel style="field" flex="1">{name}</UILabel>
+              <UILabel style="hint">{info}</UILabel>
+            </UILayout>
+          </UITemplate>
+        </UIList>
+        <UILabel style="hint">只有一個分頁時，可以加入機器人玩家（另一個沒有畫面的引擎，用自己的連線加入同一個房間）。</UILabel>
+        <UILayout dir="h" gap="8">
+          <UIButton text="加入機器人" onClick="addBot" flex="1"/>
+          <UIButton text="移除機器人" onClick="removeBot" flex="1"/>
+        </UILayout>
+      </UIScrollView>
+
+      <!-- ② 訊息 -->
+      <UIScrollView id="messages" gap="10">
+        <UILabel style="title">訊息與請求</UILabel>
+        <UILabel style="text">send 廣播給所有人（或用 to 指定一個人）；request 送出後等對方回覆。表情是廣播；擲骰子是請房主擲，房主決定結果再告訴大家，每個人看到的數字都一樣。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">client.send('emote', { text })</UILabel>
+          <UILabel style="codeLine">await client.request('roll', null, { to: 房主 })</UILabel>
+        </UILayout>
+        <UILabel style="field">表情（也可以按 1～6）</UILabel>
+        <UILayout dir="h" gap="4">
+          <UIButton text="👋" style="emote" onClick="emote1"/>
+          <UIButton text="😄" style="emote" onClick="emote2"/>
+          <UIButton text="👍" style="emote" onClick="emote3"/>
+        </UILayout>
+        <UILayout dir="h" gap="4">
+          <UIButton text="❤️" style="emote" onClick="emote4"/>
+          <UIButton text="💤" style="emote" onClick="emote5"/>
+          <UIButton text="🎉" style="emote" onClick="emote6"/>
+        </UILayout>
+        <UIButton text="🎲 請房主擲骰子（request）" onClick="roll"/>
+        <UILayout style="box">
+          <UILabel style="hint">聊天紀錄</UILabel>
+          <UILabel id="chatLog" style="field" lineHeight="1.6"> </UILabel>
+        </UILayout>
+      </UIScrollView>
+
+      <!-- ③ 同步實體 -->
+      <UIScrollView id="sync" gap="10">
+        <UILabel style="title">同步實體（NetworkPlugin）</UILabel>
+        <UILabel style="text">用 net.spawn 建立的實體，位置會自動送給其他玩家；其他人那邊用同名的預製物件建立複本。收到的位置一秒只有 20 次，所以複本在兩個位置之間平滑插值，看起來才不會一頓一頓的。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">net.registerPrefab('avatar', 建立外觀)</UILabel>
+          <UILabel style="codeLine">net.spawn('avatar', { name, color })</UILabel>
+        </UILayout>
+        <UILabel style="hint">用 WASD 或方向鍵移動自己的角色（腳下有綠圈的那個）。開兩個分頁並排，看對方畫面上的你。</UILabel>
+        <UILayout style="box">
+          <UILayout dir="h" gap="16">
+            <UILayout gap="2" flex="1">
+              <UILabel style="hint">別人的實體</UILabel>
+              <UILabel id="remoteCount" style="stat">0</UILabel>
+            </UILayout>
+            <UILayout gap="2" flex="1">
+              <UILabel style="hint">每秒送出</UILabel>
+              <UILabel id="sendRate" style="stat">0</UILabel>
+            </UILayout>
+          </UILayout>
+          <UILabel id="traffic" style="field"> </UILabel>
+        </UILayout>
+        <UILabel style="hint">設定在 engine.ts：new NetworkPlugin(client, { sendRate: 20, interpolationDelay: 0.1 })。sendRate 是每秒送幾次位置，interpolationDelay 是複本故意晚一點顯示的秒數（才有前後兩個位置可以插值）。</UILabel>
+      </UIScrollView>
+
+      <!-- ④ 網路狀況 -->
+      <UIScrollView id="conditions" gap="10">
+        <UILabel style="title">延遲與斷線</UILabel>
+        <UILabel style="text">真實的網路會延遲、會斷線。這裡用自己寫的傳輸方式（包住原本的傳輸、晚一點才送出與處理）模擬延遲；斷線後用戶端會自動重新連線，斷線期間送的訊息會先暫存。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">class DelayTransport implements Transport</UILabel>
+          <UILabel style="codeLine">client.disconnect()；client.connect()</UILabel>
+        </UILayout>
+        <UILabel style="field">模擬延遲（單向，只影響這個分頁）</UILabel>
+        <UISlider id="delay" min="0" max="800" step="10" value="0" showValue="true" suffix=" ms" onInput="delay"/>
+        <UILabel style="hint">調高延遲後移動角色、送表情：自己的畫面馬上動，別人要等一下才看到；玩家名單上的延遲（rtt）也會變大。</UILabel>
+        <UILayout dir="h" gap="8">
+          <UIButton id="disconnect" text="斷線" onClick="disconnect" flex="1"/>
+          <UIButton text="重新連線" onClick="reconnect" flex="1"/>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="hint">連線狀態（client.status）</UILabel>
+          <UILabel id="status" style="stat">—</UILabel>
+          <UILabel style="hint">事件紀錄</UILabel>
+          <UILabel id="eventLog" style="field" lineHeight="1.6"> </UILabel>
+        </UILayout>
+      </UIScrollView>
+    </UIStackView>
+
+    <UILabel style="hint">拖曳畫面轉動視角，滾輪縮放（先點一下畫面）。按 ` 鍵顯示效能面板。</UILabel>
+  </UILayout>
+
+  <!-- ───────── 右：線上人數 ───────── -->
+  <UILayout flex="1" padding="16" align="start" justify="between">
+    <UILayout style="hudCard" gap="2">
+      <UILabel id="online" fontSize="16" fontWeight="bold" color="#ffffff">連線中…</UILabel>
+      <UILabel id="onlineSub" fontSize="12" color="#8f9884"> </UILabel>
+    </UILayout>
+    <UILayout style="hudCard" self="center">
+      <UILabel fontSize="12" color="#c6cdbb">WASD／方向鍵移動　1～6 表情　開兩個分頁就能看到對方</UILabel>
+    </UILayout>
+  </UILayout>
+
+  <UIToast placement="top"/>
+</UI>

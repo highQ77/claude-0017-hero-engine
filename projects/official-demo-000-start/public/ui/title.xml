@@ -1,0 +1,39 @@
+<!--
+  範例：標題畫面（XML 管理器的入口）
+  用途：開場疊在 HUD 上（screens.open('title')）
+  版面尺寸：滿版（auto × auto）：背景圖 cover 鋪滿畫面，選單卡片置中
+  用到：UIImport（共用主題）、bgImage（cover 背景、九宮格按鈕 bgSlice／hoverBgImage）、UIRichText、UIIcon、UIBadge、tooltip、UISkin
+  按鈕用 XML 管理器的內建處理函式切換畫面：screen.open:名稱、screen.back
+-->
+<UI width="auto" height="auto" padding="24" align="center" justify="center" bgImage="banner.svg" bgFit="cover">
+  <UIImport src="theme.xml"/>
+  <!-- 選單按鈕：九宮格外框（四角不變形），滑鼠移上去換成發光的外框 -->
+  <UISkin for="UIButton" bgImage="frame.svg" bgSlice="16" hoverBgImage="frame-hover.svg" background="transparent"
+          hoverBackground="transparent" pressedBackground="rgba(154,205,50,0.18)" color="#e9f6d2" fontSize="15" padding="12 22" radius="12"/>
+  <UIStyle name="menuIcon" size="18" color="#c8f07a"/>
+
+  <UILayout align="center" gap="22" width="92%" maxWidth="360" padding="30 28 22" radius="24"
+            background="rgba(9,12,8,0.55)" border="1 rgba(200,240,140,0.14)" shadow="0 30 70 rgba(0,0,0,0.5)">
+    <!-- 標題 -->
+    <UILayout align="center" gap="6">
+      <UILabel style="section" color="#c8f07a">UI2D 範例</UILabel>
+      <UILabel fontSize="38" fontWeight="bold" color="#ffffff" textShadow="0 4 14 rgba(0,0,0,0.65)">HERO ENGINE</UILabel>
+      <UIRichText fontSize="14" textAlign="center" color="#d4dcc6">以 [b]three.js[/b] 打造的遊戲引擎 [icon=star color=#ffd75e]</UIRichText>
+    </UILayout>
+
+    <!-- 選單 -->
+    <UILayout gap="10" self="stretch">
+      <UIButton text="開始遊戲" onClick="screen.back" tooltip="關閉標題畫面，回到遊戲" bgImage="none" hoverBgImage="none"
+                background="#9acd32" hoverBackground="#b4e05a" pressedBackground="#7aa828" color="#141a07" fontWeight="bold">
+        <UIIcon name="play" size="18" color="#141a07"/>
+      </UIButton>
+      <UIButton text="背包" onClick="screen.open:inventory"><UIIcon name="bag" style="menuIcon"/><UIBadge value="3"/></UIButton>
+      <UIButton text="排行榜" onClick="screen.open:leaderboard"><UIIcon name="trophy" style="menuIcon"/><UIBadge dot="true"/></UIButton>
+      <UIButton text="對話示範" onClick="screen.open:dialogue"><UIIcon name="chat" style="menuIcon"/></UIButton>
+      <UIButton text="手機操作" onClick="screen.open:mobile"><UIIcon name="target" style="menuIcon"/></UIButton>
+      <UIButton text="設定" onClick="screen.open:settings"><UIIcon name="gear" style="menuIcon"/></UIButton>
+    </UILayout>
+
+    <UILabel style="hint" textAlign="center">v0.1 · 按 Esc 或「開始遊戲」關閉</UILabel>
+  </UILayout>
+</UI>

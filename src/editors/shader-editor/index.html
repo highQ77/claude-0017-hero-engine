@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hero Engine 著色器編輯器</title>
+    <!-- editor-theme -->
+    <style>
+      /* 共用的色票、按鈕、輸入框、面板標題、分頁…在 shared/theme.css（開發伺服器放在上面）；這裡只放著色器編輯器自己的 */
+      :root { --node: #222620; }
+
+      /* ───────── 工具列（兩排：檔案、編輯） ───────── */
+      header { display: flex; flex-direction: column; padding: 7px 14px; }
+      header .doc-name { flex-shrink: 1; min-width: 80px; }
+      #file-select { min-width: 150px; }
+      #example-select { min-width: 140px; }
+
+      main { display: grid; grid-template-columns: 250px 1fr 310px; min-height: 0; }
+
+      /* ───────── 左：節點庫 + 預覽 ───────── */
+      .search { margin: 8px 10px 6px; padding: 5px 9px; }
+      #palette { flex: 1; overflow: auto; padding: 0 6px 8px; min-height: 80px; }
+      .pal-cat { margin-top: 6px; }
+      .pal-cat > summary { list-style: none; cursor: pointer; padding: 5px 6px; font-weight: 600; color: var(--text2);
+        display: flex; align-items: center; gap: 7px; border-radius: 5px; user-select: none; }
+      .pal-cat > summary::-webkit-details-marker { display: none; }
+      .pal-cat > summary::before { content: '▸'; color: var(--muted); font-size: 10px; transition: transform 0.15s; }
+      .pal-cat[open] > summary::before { transform: rotate(90deg); }
+      .pal-cat > summary:hover { background: var(--raise); }
+      .cat-dot { width: 8px; height: 8px; border-radius: 2px; }
+      .pal-item { padding: 4px 8px 4px 26px; border-radius: 5px; cursor: grab; display: flex; justify-content: space-between; gap: 6px; }
+      .pal-item > span { white-space: nowrap; }
+      .pal-item:hover { background: var(--raise); }
+      .pal-item small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      .preview-panel { border-top: 1px solid var(--line); }
+      .preview-bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; }
+      .preview-bar select { padding-top: 2px; padding-bottom: 2px; padding-left: 8px; font-size: 12px; }
+      .preview-bar button.small { padding: 2px 7px; }
+      #time-label { font-size: 11.5px; min-width: 0; overflow: hidden; }
+      .preview-wrap { position: relative; aspect-ratio: 1 / 1; background: radial-gradient(ellipse at 50% 40%, #2d322a 0%, #181a18 75%); }
+      .preview-wrap.flat { background: repeating-conic-gradient(#262a24 0% 25%, #1f221e 0% 50%) 50% / 16px 16px; }
+      #preview { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+      #preview:active { cursor: grabbing; }
+      #error { position: absolute; left: 0; right: 0; bottom: 0; max-height: 60%; overflow: auto; margin: 0; padding: 8px 10px;
+        background: rgba(40, 10, 12, 0.92); color: #ffb4b4; font: 11px/1.45 var(--mono); white-space: pre-wrap; }
+      #error:empty { display: none; }
+      .preview-panel:fullscreen { background: #000; display: flex; flex-direction: column; }
+      .preview-panel:fullscreen .preview-wrap { flex: 1; aspect-ratio: auto; min-height: 0; }
+      .preview-panel:fullscreen #preview { position: absolute; inset: 0; }
+
+      /* ───────── 中：節點圖 ───────── */
+      #graph { position: relative; overflow: hidden; user-select: none; touch-action: none; background-color: #151715;
+        background-image: linear-gradient(#1f221e 1px, transparent 1px), linear-gradient(90deg, #1f221e 1px, transparent 1px); }
+      #graph.panning { cursor: grabbing; }
+      #graph.drop-target { outline: 2px dashed var(--accent); outline-offset: -4px; }
+      #layer { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+      #wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+      .wire { fill: none; stroke-width: 2.5; pointer-events: none; opacity: 0.9; }
+      .wire-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+      .wire-hit:hover + .wire { stroke-width: 4.5; opacity: 1; }
+      #temp-wire { fill: none; stroke-width: 2.5; stroke-dasharray: 7 5; pointer-events: none; }
+      .hint { position: absolute; left: 12px; bottom: 10px; right: 90px; color: #5c6455; font-size: 11.5px;
+        pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .zoom-label { position: absolute; right: 12px; bottom: 10px; color: #5c6455; font-size: 11px; }
+
+      .node { position: absolute; min-width: 160px; background: var(--node); border: 1px solid var(--line-hi);
+        border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+      .node.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 24px rgba(0, 0, 0, 0.45); }
+      .node-head { display: flex; align-items: center; gap: 4px; padding: 5px 6px 5px 10px; cursor: grab;
+        border-radius: 7px 7px 0 0; font-weight: 600; font-size: 12.5px;
+        background: linear-gradient(90deg, color-mix(in srgb, var(--cat) 60%, #232721), color-mix(in srgb, var(--cat) 18%, #232721));
+        border-bottom: 1px solid rgba(0, 0, 0, 0.25); }
+      .node-title { flex: 1; white-space: nowrap; }
+      .icon-btn { background: none; border: 0; color: #fff; opacity: 0.55; cursor: pointer; padding: 0 4px; font-size: 12px; line-height: 1; }
+      .icon-btn:hover { opacity: 1; }
+      .node-body { padding: 5px 0 7px; }
+      .row { position: relative; display: flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 12px; }
+      .row.out { justify-content: flex-end; }
+      .row label { color: var(--text2); font-size: 12px; white-space: nowrap; }
+      .row.param { padding: 2px 10px; gap: 8px; }
+      .row.param label { color: var(--muted); }
+      .row .tag { color: #636b5a; font-size: 11px; font-style: italic; margin-left: auto; }
+      .port { position: absolute; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%;
+        background: var(--pc, #888); border: 2px solid #191b19; cursor: crosshair; z-index: 1; transition: transform 0.1s; }
+      .row.in .port { left: -7px; }
+      .row.out .port { right: -7px; }
+      .port:hover { transform: scale(1.35); }
+      .node input[type=number], .node select, .props input[type=number], .props select {
+        border-radius: 4px; font: 11.5px var(--mono); padding: 2px 4px; box-shadow: none; }
+      .node select, .props select { padding-right: 20px; background-position: calc(100% - 11px) 50%, calc(100% - 7px) 50%, 0 0; }
+      .node input[type=number] { width: 58px; margin-left: auto; }
+      .node select { flex: 1; font-family: inherit; }
+      .node input:focus, .node select:focus, .props input:focus, .props select:focus { border-color: var(--accent); }
+      .node input[type=color], .props input[type=color] { width: 46px; height: 22px; padding: 0; border: 1px solid var(--line);
+        border-radius: 4px; background: none; cursor: pointer; }
+      .img-ctl { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+      .img-name { flex: 1; color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .thumb { display: block; width: 136px; height: 136px; margin: 4px auto 2px; border-radius: 4px; background: #000; }
+
+      /* ───────── 右：屬性 / GLSL ───────── */
+      .tab-body { flex: 1; overflow: auto; min-height: 0; display: flex; flex-direction: column; }
+      .props { padding: 12px 14px; }
+      .props h3 { margin: 0 0 2px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+      .props .desc { color: var(--muted); margin: 4px 0 12px; }
+      .props .chip { font-size: 10.5px; font-weight: 500; padding: 1px 7px; border-radius: 10px; background: color-mix(in srgb, var(--cat) 35%, transparent); color: #fff; }
+      .props section { border-top: 1px solid var(--line); padding: 10px 0 4px; }
+      .props section > .sec-title { font-size: 11.5px; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+      .prop-row { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; margin-bottom: 7px; }
+      .prop-row > span:first-child { color: var(--text2); display: flex; align-items: center; gap: 6px; }
+      .prop-row input[type=number], .prop-row select { width: 100%; }
+      .type-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+      .linked { color: var(--accent-hi); font-size: 12px; }
+      .props ul.keys { list-style: none; padding: 0; margin: 0; }
+      .props ul.keys li { display: flex; justify-content: space-between; padding: 4px 0; color: var(--text2); }
+      .props code { font: 11.5px var(--mono); color: var(--accent-hi); }
+      .stat { display: flex; gap: 14px; margin-bottom: 10px; }
+      .stat b { font-size: 18px; display: block; }
+      .legend { display: flex; gap: 12px; flex-wrap: wrap; }
+      .legend span { display: flex; align-items: center; gap: 5px; }
+      .code-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+      #code { flex: 1; margin: 0; padding: 10px 12px; overflow: auto; background: #151715; color: var(--text2);
+        font: 11.5px/1.55 var(--mono); white-space: pre; tab-size: 2; }
+      #code .code-title { color: var(--accent-hi); }
+      #code .ln { color: #4a5145; user-select: none; }
+
+      /* ───────── 新增節點選單、提示 ───────── */
+      #menu { position: fixed; z-index: 50; width: 270px; max-height: 400px; display: flex; flex-direction: column;
+        background: var(--panel2); border: 1px solid var(--line-hi); border-radius: 9px; box-shadow: var(--shadow-lg); overflow: hidden; }
+      #menu-input { margin: 8px; padding: 7px 9px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--bg);
+        color: var(--text); font: inherit; outline: none; }
+      #menu-input:focus { border-color: var(--accent); }
+      #menu-list { list-style: none; margin: 0; padding: 0 6px 6px; overflow: auto; }
+      .menu-cat { color: var(--muted); font-size: 11px; padding: 7px 8px 3px; }
+      .menu-item { padding: 5px 8px; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+      .menu-item small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .menu-item.active { background: var(--raise-hi); }
+      #toast { max-width: min(640px, 90vw); text-align: center; position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px);
+        opacity: 0; background: var(--raise-hi); color: #fff; padding: 8px 16px; border-radius: var(--radius); border: 1px solid var(--line-hi);
+        transition: 0.2s; pointer-events: none; z-index: 60; }
+      #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+      @media (max-width: 1100px) {
+        main { grid-template-columns: 220px 1fr 0; }
+        aside.right { display: none; }
+        .hint { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar-row">
+        <div class="brand"><span class="logo">SH</span><h1>著色器編輯器</h1></div>
+        <nav class="editor-nav" aria-label="編輯器">
+          <a href="/portal.html" target="hero-portal" title="專案入口頁：切換、新增、刪除專案（另一個分頁）">專案</a>
+          <a href="/ui-editor.html" target="hero-ui-editor" title="UI 編輯器（另一個分頁）">UI</a>
+          <a href="/s3d-editor.html" target="hero-s3d-editor" title="3D 場景編輯器（另一個分頁）">3D 場景</a>
+          <a href="/shader-editor.html" aria-current="page">著色器</a>
+          <a href="/se-editor.html" target="hero-se-editor" title="音效編輯器（另一個分頁）">音效</a>
+        </nav>
+        <div class="divider"></div>
+        <select id="file-select" title="開啟專案 public/shaders 裡的節點圖檔"></select>
+        <button id="btn-new" title="新增節點圖檔">新增</button>
+        <button class="danger" id="btn-delete" title="刪除這個節點圖檔">刪除</button>
+        <span class="doc-name" id="doc-name"></span>
+        <span class="spacer"></span>
+        <button class="primary" id="btn-save" title="儲存到專案的 public/shaders（⌘/Ctrl+S）">儲存</button>
+      </div>
+      <div class="bar-row">
+        <select id="example-select" title="載入範例（會取代目前的節點圖，可以復原）"></select>
+        <div class="divider"></div>
+        <button id="btn-undo" title="復原（⌘/Ctrl+Z）">↶ 復原</button>
+        <button id="btn-redo" title="重做（⌘/Ctrl+Shift+Z）">↷ 重做</button>
+        <button id="btn-frame" title="全部置中（F）">⤢ 置中</button>
+        <div class="divider"></div>
+        <button id="btn-import" title="匯入節點圖 JSON（也讀得懂 Shader Composer 匯出的檔案）">匯入 JSON</button>
+        <button id="btn-export" title="下載節點圖 JSON">匯出 JSON</button>
+        <input type="file" id="file-input" accept=".json,application/json" hidden />
+        <input type="file" id="image-input" accept="image/*" hidden />
+        <span class="spacer"></span>
+        <button class="danger" id="btn-clear">清空</button>
+      </div>
+    </header>
+
+    <main>
+      <aside class="left">
+        <div class="panel-head"><span class="title">節點庫</span></div>
+        <input id="palette-search" class="search" placeholder="搜尋節點…" autocomplete="off" />
+        <div id="palette"></div>
+        <div class="preview-panel" id="preview-panel">
+          <div class="preview-bar">
+            <select id="mesh-select" title="預覽網格"></select>
+            <button class="small" id="btn-rotate" title="自動旋轉">⟳</button>
+            <button class="small" id="btn-pause" title="暫停／播放時間">⏸</button>
+            <span id="time-label" class="muted mono"></span>
+            <span class="spacer"></span>
+            <button class="small" id="btn-shot" title="下載 PNG">⤓</button>
+            <button class="small" id="btn-full" title="全螢幕">⛶</button>
+          </div>
+          <div class="preview-wrap" id="preview-wrap">
+            <canvas id="preview"></canvas>
+            <div id="error"></div>
+          </div>
+        </div>
+      </aside>
+
+      <section id="graph">
+        <div id="layer">
+          <svg id="wires">
+            <g id="links"></g>
+            <path id="temp-wire" style="display: none"></path>
+          </svg>
+          <div id="nodes"></div>
+        </div>
+        <div class="hint">右鍵／空白鍵：新增節點 · 拖曳背景：平移 · 滾輪：縮放 · 拖曳連線到空白處：建立並連接 · 拖入圖檔：建立貼圖 · 雙擊連線：刪除 · Del：刪除節點 · ⌘/Ctrl+D：複製</div>
+        <div class="zoom-label mono" id="zoom-label"></div>
+      </section>
+
+      <aside class="right">
+        <div class="tabs">
+          <button class="tab active" data-tab="props">屬性</button>
+          <button class="tab" data-tab="code">GLSL</button>
+        </div>
+        <div class="tab-body" id="tab-props"></div>
+        <div class="tab-body" id="tab-code" hidden>
+          <div class="code-head"><span class="muted">放進引擎 unlit 著色器的程式</span><button class="small" id="btn-copy">複製</button></div>
+          <pre id="code"></pre>
+        </div>
+      </aside>
+    </main>
+
+    <div id="menu" hidden>
+      <input id="menu-input" placeholder="搜尋節點…" autocomplete="off" />
+      <ul id="menu-list"></ul>
+    </div>
+    <div id="toast"></div>
+
+    <script type="module" src="./editor.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+<Scene format="hero-scene" version="1">
+  <Entity id="coin" name="金幣">
+    <Transform/>
+    <MeshRenderer castShadow="true">
+      <geometry cylinder="0.28 0.06" rotation="1.5707963267948966 0 0"/>
+      <material>
+        <standard color="#ffc83d" metalness="0.9" roughness="0.25" emissive="#6b4a00"/>
+      </material>
+    </MeshRenderer>
+    <Collider shape="cylinder" radius="0.3" halfHeight="0.3" sensor="true"/>
+    <ScriptList>
+      <Coin/>
+    </ScriptList>
+  </Entity>
+</Scene>

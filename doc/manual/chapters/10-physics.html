@@ -1,0 +1,119 @@
+<!-- group: 遊戲邏輯 -->
+<h1>物理</h1>
+<p class="lead">物理外掛包裝了 Rapier 物理引擎：加上 <code>RigidBody</code>（剛體）的實體會受重力掉落、互相碰撞；<code>Collider</code>（碰撞體）決定形狀。物理在 <code>fixedUpdate</code> 以固定步長模擬，畫面會自動插值，不會抖動。</p>
+
+<h2>安裝</h2>
+<p>Rapier 是 WebAssembly，需要先非同步載入，所以用 <code>await PhysicsPlugin.create()</code>。需要先安裝 <code>ecs</code> 與 <code>scene</code>。</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="PhysicsPlugin.create（寫在 engine.ts）">
+// 放在 scene 之後（新專案的 engine.ts 裡已經寫好，取消註解即可）
+export const physicsPlugin = use(await PhysicsPlugin.create({
+  gravity: { x: 0, y: -9.81, z: 0 },  // 預設值
+  debug: false,                       // true：畫出碰撞形狀的線框
+}));
+export const physics = physicsPlugin.physics;
+</script>
+
+<h2>剛體與碰撞體</h2>
+<table>
+  <thead><tr><th>RigidBody 的 type</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>dynamic</code>（預設）</td><td>受重力與碰撞影響：箱子、球、被打飛的敵人</td></tr>
+    <tr><td><code>fixed</code></td><td>完全不會動：地板、牆壁</td></tr>
+    <tr><td><code>kinematic</code></td><td>由程式移動，會推開別人但自己不受影響：移動平台、玩家控制的角色</td></tr>
+  </tbody>
+</table>
+<p>只有 <code>Collider</code> 沒有 <code>RigidBody</code> 的實體是固定的碰撞體（和 <code>fixed</code> 相同）。<code>Collider</code> 的常用欄位：</p>
+<table>
+  <thead><tr><th>欄位</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>shape</code></td><td><code>box</code>、<code>sphere</code>、<code>capsule</code>、<code>cylinder</code>、<code>cone</code>、<code>convexHull</code>、<code>trimesh</code></td></tr>
+    <tr><td><code>halfExtents</code></td><td>方塊的一半長寬高（預設 0.5，也就是 1×1×1 的方塊）</td></tr>
+    <tr><td><code>radius</code>、<code>halfHeight</code></td><td>球、膠囊、圓柱的半徑與一半高度</td></tr>
+    <tr><td><code>restitution</code></td><td>彈性（0 不彈，1 完全彈回）</td></tr>
+    <tr><td><code>friction</code>、<code>density</code></td><td>摩擦力、密度（影響質量）</td></tr>
+    <tr><td><code>sensor</code></td><td>感應區：不會擋住東西，只觸發進入／離開事件（收集物品、陷阱）</td></tr>
+  </tbody>
+</table>
+
+<h2>範例：掉落的方塊與球</h2>
+<p>點擊畫面上的物件把它往上打飛；每隔一段時間會掉下新的物件。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="物理範例" data-height="380">
+import { Color } from '@engine/math';
+import { Transform } from '@engine/scene';
+import { MeshRenderer, spawn } from '@engine/render';
+import { Collider, RigidBody } from '@engine/physics';
+import { engine, input, physics, render, world } from './engine';
+
+const camera = spawn.camera(world, { position: [0, 6, 11], target: [0, 1, 0], fov: 50 });
+spawn.light(world, { kind: 'hemisphere', color: 0xcfe0ff, groundColor: 0x40342a, intensity: 0.9 });
+spawn.light(world, { intensity: 2.5, castShadow: true, shadowArea: 14, position: [4, 10, 5], target: [0, 0, 0] });
+
+// 地板：只有碰撞體（固定不動）
+const floor = world.spawn(
+  Transform.at(0, -0.2, 0),
+  MeshRenderer.with({ geometry: { box: [12, 0.4, 8] }, material: { standard: { color: 0x3a4030 } }, receiveShadow: true }),
+  Collider.with({ halfExtents: { x: 6, y: 0.2, z: 4 } }),
+);
+
+const box = { box: 0.8 };
+const ball = { sphere: [0.45, 24, 12] };
+function drop() {
+  const isBall = Math.random() < 0.4;
+  spawn.entity(
+    world,
+    {
+      position: [(Math.random() - 0.5) * 6, 6 + Math.random() * 2, (Math.random() - 0.5) * 3],
+      rotation: [Math.random() * 3, Math.random() * 3, 0],
+    },
+    MeshRenderer.with({
+      geometry: isBall ? ball : box,
+      material: { standard: { color: new Color().setHSL(Math.random(), 0.65, 0.55) } },
+      castShadow: true,
+    }),
+    RigidBody.with({ angularDamping: 0.3 }),
+    isBall
+      ? Collider.with({ shape: 'sphere', radius: 0.45, restitution: 0.7 })
+      : Collider.with({ halfExtents: { x: 0.4, y: 0.4, z: 0.4 }, restitution: 0.1, friction: 0.8 }),
+  );
+}
+for (let i = 0; i < 12; i++) drop();
+const timer = setInterval(() => {
+  if (world.query([RigidBody]).size < 40) drop();
+  else clearInterval(timer);
+}, 700);
+
+// 點擊：往上打飛
+engine.on('update', () => {
+  if (!input.mouse.wasPressed('Left')) return;
+  const hit = render.pick(input.pointer.ndcX, input.pointer.ndcY, (h) => world.has(h.entity, RigidBody));
+  if (hit) physics.applyImpulse(hit.entity, { x: (Math.random() - 0.5) * 3, y: 8, z: 0 });
+});
+
+// 碰撞事件：印出比較大力的碰撞
+physics.onCollision((e) => {
+  if (!e.started || e.a === floor || e.b === floor) return;
+  const speed = physics.getLinearVelocity(e.a).length();
+  if (speed > 4) console.log(`碰！實體 ${e.a} 撞到 ${e.b}（速度 ${speed.toFixed(1)}）`);
+});
+
+engine.start();
+</script>
+<div class="tip">
+  <p>試試看：在 <code>PhysicsPlugin.create()</code> 加上 <code>{ debug: true }</code> 看碰撞形狀，或改成 <code>{ gravity: { x: 0, y: -2, z: 0 } }</code>。</p>
+</div>
+
+<h2>常用方法</h2>
+<p>從 <code>physicsPlugin.physics</code>、資源 <code>PhysicsKey</code> 或腳本的 <code>this.physics</code> 取得：</p>
+<table>
+  <thead><tr><th>方法</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>applyImpulse(實體, 力)</code></td><td>瞬間推一下（跳躍、爆炸、被打飛）</td></tr>
+    <tr><td><code>applyTorqueImpulse(實體, 力)</code></td><td>瞬間轉動</td></tr>
+    <tr><td><code>setLinearVelocity</code>／<code>getLinearVelocity</code></td><td>設定、讀取速度</td></tr>
+    <tr><td><code>teleport(實體, 位置, 旋轉?)</code></td><td>瞬間移動（不會穿過中間的東西產生碰撞）</td></tr>
+    <tr><td><code>raycast(起點, 方向, 最遠距離, { exclude })</code></td><td>射線：回傳打到的實體、位置、法線；射擊、地面偵測</td></tr>
+    <tr><td><code>overlapSphere(中心, 半徑)</code></td><td>找出範圍內的實體（爆炸範圍）</td></tr>
+    <tr><td><code>onCollision(回呼)</code></td><td>所有碰撞事件：<code>{ a, b, started, sensor }</code></td></tr>
+  </tbody>
+</table>
+<p>只關心某個物件的碰撞時，用腳本的 <code>onCollisionEnter(other)</code>、<code>onTriggerEnter(other)</code> 比較方便（見「腳本」章節）。</p>

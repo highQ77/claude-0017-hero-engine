@@ -1,0 +1,179 @@
+<!-- group: 核心 -->
+<h1>實體與元件（ECS）</h1>
+<p class="lead">遊戲裡的每個東西都是一個<strong>實體</strong>（只是一個編號），身上掛著描述它的<strong>元件</strong>（純資料），由<strong>系統</strong>每幀找出符合條件的實體來處理。</p>
+
+<h2>三個觀念</h2>
+<table>
+  <thead><tr><th>名稱</th><th>是什麼</th><th>例子</th></tr></thead>
+  <tbody>
+    <tr><td>實體 Entity</td><td>一個數字編號，本身沒有資料</td><td>玩家、子彈、攝影機</td></tr>
+    <tr><td>元件 Component</td><td>一包資料，掛在實體上</td><td><code>Transform</code>（位置）、<code>Health</code>（血量）、<code>Player</code>（標籤）</td></tr>
+    <tr><td>系統 System</td><td>每幀執行的函式，處理擁有某些元件的實體</td><td>移動系統：所有有 <code>Velocity</code> 的實體都往前移動</td></tr>
+  </tbody>
+</table>
+<p>好處是組合自由：要讓一個東西會動就加上 <code>Velocity</code>、要讓它會受傷就加上 <code>Health</code>，不需要設計複雜的繼承關係。</p>
+
+<h2>定義元件</h2>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="define.component／define.tag">
+import { define } from '@engine/ecs';
+
+// 第二個參數回傳預設值（每個實體各自一份）
+const Health = define.component('Health', () => ({ hp: 100, max: 100 }));
+const Velocity = define.component('Velocity', () => ({ x: 0, y: 0, z: 0 }));
+
+// 標籤：沒有資料，只用來分類
+const Enemy = define.tag('Enemy');
+</script>
+
+<h2>建立實體</h2>
+<script type="text/plain" class="example" data-lang="ts" data-title="spawn、add、get、destroy" data-height="160">
+import { World, define } from '@engine/ecs';
+
+const Health = define.component('Health', () => ({ hp: 100, max: 100 }));
+const Enemy = define.tag('Enemy');
+
+const world = new World();
+
+// spawn：建立實體並加上元件；元件.with(初始值) 覆蓋部分預設值
+const slime = world.spawn(Enemy, Health.with({ hp: 30, max: 30 }));
+const hero = world.spawn(Health);
+
+// require：取得一定存在的元件（沒有時錯誤訊息會說明是哪個實體、哪個元件）；可能沒有時用 get（沒有時是 undefined）
+console.log('slime 的血量', world.require(slime, Health));
+console.log('hero 是敵人嗎？', world.has(hero, Enemy));
+
+// add 回傳元件資料，直接修改即可
+const hp = world.add(hero, Health, { hp: 80 });
+hp.hp -= 15;
+console.log('hero 剩下', world.require(hero, Health).hp);
+
+world.destroy(slime);
+console.log('slime 還在嗎？', world.isAlive(slime), '，實體數量', world.entityCount);
+</script>
+
+<h2>查詢</h2>
+<p><code>world.query([元件…])</code> 找出擁有全部元件的實體；<code>each</code> 的參數依序是實體與各元件的資料。用 <code>{ none: [...] }</code> 排除有某些元件的實體。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="查詢實體" data-height="140">
+import { World, define } from '@engine/ecs';
+
+const Health = define.component('Health', () => ({ hp: 100 }));
+const Enemy = define.tag('Enemy');
+const Dead = define.tag('Dead');
+
+const world = new World();
+world.spawn(Enemy, Health.with({ hp: 30 }));
+world.spawn(Enemy, Health.with({ hp: 0 }), Dead);
+world.spawn(Enemy, Health.with({ hp: 75 }));
+world.spawn(Health.with({ hp: 100 })); // 玩家：不是 Enemy
+
+const alive = world.query([Enemy, Health], { none: [Dead] });
+console.log('活著的敵人數量：', alive.size);
+alive.each((entity, _enemy, health) => {
+  console.log(`敵人 ${entity}：hp ${health.hp}`);
+});
+</script>
+
+<h2>系統</h2>
+<p>最常見的系統是「每幀對符合查詢的實體逐一處理」，用 <code>ecs.each(名稱, [元件…], (實體, 元件資料…, time) => …)</code>：參數依序是實體、各元件的資料，最後一個是時間（<code>time.delta</code> 是這一幀的秒數）。第四個參數可以指定 <code>phase</code>（更新階段）、<code>priority</code>（順序，越小越先）、<code>none</code>（排除有這些元件的實體）。下面的範例用兩個元件、一個系統做出 150 顆會彈跳的球：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="彈跳的球" data-height="340">
+import { Color, Vector3 } from '@engine/math';
+import { define } from '@engine/ecs';
+import { Transform } from '@engine/scene';
+import { MeshRenderer, spawn } from '@engine/render';
+import { ecs, engine, world } from './engine';
+
+const Velocity = define.component('Velocity', () => new Vector3());
+const Bounce = define.component('Bounce', () => ({ floor: -1.5, damping: 0.85 }));
+
+const GRAVITY = -9.8;
+
+// 移動系統：速度 → 位置，碰到地板反彈
+ecs.each('move', [Transform, Velocity, Bounce], (_e, t, v, b, time) => {
+  v.y += GRAVITY * time.delta;
+  t.position.addScaledVector(v, time.delta);
+  if (t.position.y < b.floor) {
+    t.position.y = b.floor;
+    v.y = Math.abs(v.y) * b.damping;
+    if (v.y < 1) v.y = 4 + Math.random() * 4; // 快停下來時再彈高一點
+  }
+  // 左右牆壁
+  if (Math.abs(t.position.x) > 3) v.x = -v.x;
+  if (Math.abs(t.position.z) > 2) v.z = -v.z;
+});
+
+const camera = spawn.camera(world, { position: [0, 2, 8], target: [0, 0, 0], fov: 50 });
+spawn.light(world, { kind: 'hemisphere', color: 0xdde8ff, groundColor: 0x302820, intensity: 1.5 });
+spawn.light(world, { intensity: 2, position: [2, 4, 3], target: [0, 0, 0] });
+
+const geometry = { sphere: [0.12, 16, 8] };
+for (let i = 0; i < 150; i++) {
+  const color = new Color().setHSL(Math.random(), 0.7, 0.6);
+  world.spawn(
+    Transform.at((Math.random() - 0.5) * 5, Math.random() * 2, (Math.random() - 0.5) * 3),
+    MeshRenderer.with({ geometry, material: { standard: { color } } }),
+    Velocity.with(new Vector3((Math.random() - 0.5) * 3, Math.random() * 5, (Math.random() - 0.5) * 2)),
+    Bounce,
+  );
+}
+console.log('實體數量：', world.entityCount);
+engine.start();
+</script>
+<div class="tip">
+  <p>試試看：把 <code>GRAVITY</code> 改成 <code>-2</code>（月球）、把 150 改成 1000，或在 <code>Bounce</code> 的 <code>damping</code> 改成 <code>1</code>（永遠不會停）。</p>
+</div>
+<p>比較複雜的系統（迴圈前要先準備資料、不只一個查詢、要 <code>init</code>／<code>dispose</code>）用 <code>ecs.addSystem</code>：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="ecs.addSystem">
+ecs.addSystem({
+  name: 'player-move',
+  phase: 'update',           // 更新階段（預設 update）
+  priority: 0,               // 同階段的順序，越小越先
+  init(world) {},            // 加入時執行一次
+  run(world, time) {
+    const x = input.actions.axis('moveX'); // 先算一次，給所有玩家用
+    world.query([Transform, Player]).each((_e, t, p) => {
+      t.position.x += x * p.speed * time.delta;
+    });
+  },
+  dispose(world) {},         // 移除時執行
+});
+</script>
+<p><code>ecs.setEnabled(名稱, false)</code> 暫時停用、<code>ecs.removeSystem(名稱)</code> 移除。</p>
+
+<h2>資源（全域資料）</h2>
+<p>不屬於任何實體的共用資料（分數、設定、外掛提供的物件）放在資源裡，用 <code>define.resource</code> 定義鑰匙：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="資源" data-height="110">
+import { World, define } from '@engine/ecs';
+
+const ScoreKey = define.resource<{ score: number; combo: number }>('Score');
+
+const world = new World();
+world.setResource(ScoreKey, { score: 0, combo: 0 });
+
+// 任何系統裡都能取得
+const s = world.requireResource(ScoreKey);
+s.score += 100;
+s.combo++;
+console.log(world.getResource(ScoreKey));
+</script>
+<p>遊戲裡要用外掛的物件（輸入、音效、物理、補間…），直接從專案的 <code>engine.ts</code> 引用：<code>import { input, audio, physics, tweens } from './engine'</code>（見<a href="#/getting-started">開始使用</a>）。外掛提供的物件同時也是資源（<code>InputKey</code>、<code>AudioKey</code>、<code>PhysicsKey</code>…），只有寫給其他專案共用的程式（套件、可重複使用的系統）才需要用 <code>world.requireResource(…)</code> 取得。</p>
+
+<h2>延後執行與事件</h2>
+<p>在查詢的迴圈裡刪除實體可能會漏掉其他實體，請用 <code>world.defer()</code> 延到這個階段結束再做：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="defer 與掛鉤" data-height="140">
+import { World, define } from '@engine/ecs';
+
+const Health = define.component('Health', () => ({ hp: 100 }));
+const world = new World();
+
+// 元件被加上、移除，實體被銷毀時會通知
+world.onAdd(Health, (e, h) => console.log(`實體 ${e} 加上 Health（${h.hp}）`));
+world.onDestroy((e) => console.log(`實體 ${e} 被銷毀`));
+
+for (const hp of [0, 50, 0, 80]) world.spawn(Health.with({ hp }));
+
+world.query([Health]).each((e, h) => {
+  if (h.hp <= 0) world.defer(() => world.destroy(e));
+});
+world.flush(); // 在引擎裡每個階段結束會自動執行；這裡沒有引擎，自己呼叫
+console.log('剩下', world.entityCount, '個實體');
+</script>

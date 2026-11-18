@@ -1,0 +1,19 @@
+<!--
+  場景「rain」的介面
+  用途：進入 rain 場景後疊在 HUD（scene.xml）上，離開場景時自動移除（SceneTransition 的 hud）
+  版面尺寸：滿版（auto × auto）；根元素沒有背景，透明的地方可以點到遊戲
+  用到：UIImport（共用主題）、UILayout（絕對定位）、UIIcon、UIRichText
+-->
+<UI width="auto" height="auto">
+  <UIImport src="../theme.xml"/>
+  <!-- 場景名稱與目標
+       md 以上：下方中間，快捷列（scene.xml）上方 8 的地方（快捷列頂端距離底部 90，lg 以上多了按鍵說明是 117）
+       手機：左下有搖桿、快捷列靠右，放在上方玩家資訊下面 -->
+  <UILayout position="absolute" left="0" right="0" top="84" align="center" pointerEvents="none"
+            md:top="auto" md:bottom="98" lg:bottom="125">
+    <UILayout style="chip">
+      <UIIcon name="shield" size="14" color="#ffb347"/>
+      <UIRichText fontSize="13" color="#d4dcc6">[b][color=#ffb347]方塊雨[/color][/b] · 點擊物件把它踢飛 · 按 [b]N[/b] 回到環繞軌道</UIRichText>
+    </UILayout>
+  </UILayout>
+</UI>

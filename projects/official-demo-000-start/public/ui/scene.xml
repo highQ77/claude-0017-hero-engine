@@ -1,0 +1,192 @@
+<!--
+  遊戲畫面上的介面（HUD）
+  用途：基本畫面（screens.show('hud')），其他畫面疊在它上面
+  版面尺寸：滿版（auto × auto），跟著視窗大小改變
+  配置：左上玩家資訊、右上狀態、下方小地圖／快捷列／選單，開場有導覽對話。
+  RWD（行動優先）：手機顯示虛擬搖桿、隱藏小地圖與按鍵說明；平板以上相反。
+  斷點前綴：sm ≥ 640、md ≥ 768、lg ≥ 1024、xl ≥ 1280
+  配色、字級、按鈕樣式來自 theme.xml（這是基本畫面，它的樣式疊加畫面也可以用）。
+-->
+<UI width="auto" height="auto" padding="12" md:padding="18">
+  <UIImport src="theme.xml"/>
+  <!-- 這個畫面專用的樣式 -->
+  <UIStyle name="keyHint" dir="h" gap="5" align="center"/>
+  <UIStyle name="statBar" dir="h" gap="6" align="center"/>
+  <UIStyle name="menuItem" background="rgba(255,255,255,0.06)" hoverBackground="rgba(154,205,50,0.2)" pressedBackground="rgba(154,205,50,0.32)"
+           border="1 rgba(255,255,255,0.06)" radius="10" fontSize="14" padding="14 10" md:padding="10"/>
+
+  <!-- ───── 上方 ───── -->
+  <UILayout dir="h" justify="between" align="start" gap="12">
+    <!-- 左上：玩家資訊（金幣進度、體力） -->
+    <UILayout style="panel" dir="h" gap="12" align="center" padding="10 16 10 10">
+      <UILayout id="avatar" width="46" height="46" radius="23" background="rgba(154,205,50,0.14)" border="2 #9acd32"
+                align="center" justify="center">
+        <UIIcon id="avatarIcon" name="user" size="24" color="#9acd32"/>
+      </UILayout>
+      <UILayout gap="6" width="160" md:width="200">
+        <UILayout dir="h" justify="between" align="center" gap="8">
+          <UILabel id="playerName" fontSize="14" fontWeight="bold" color="#eef2e8">玩家</UILabel>
+          <UILabel id="net" style="hint" fontSize="11" tooltip="再開一個分頁，就能看到其他玩家的方塊">連線中…</UILabel>
+        </UILayout>
+        <UILayout style="statBar" tooltip="收集這個場景裡的 8 枚金幣">
+          <UIIcon name="coin" size="14" color="#ffd75e"/>
+          <UIProgressBar id="coinBar" value="0" max="8" height="8" flex="1" fill="#ffb347,#ffd75e"/>
+        </UILayout>
+        <UILayout style="statBar" tooltip="跳躍會消耗體力，停下來會慢慢回復">
+          <UIIcon name="bolt" size="14" color="#9acd32"/>
+          <UIProgressBar id="energy" value="100" height="8" flex="1"/>
+        </UILayout>
+      </UILayout>
+    </UILayout>
+
+    <!-- 右上：狀態與選單 -->
+    <UILayout dir="h" gap="8" align="start">
+      <UILayout style="panel" align="end" gap="2" padding="8 14" hidden="true" sm:hidden="false">
+        <!-- FPS 由效能監視器顯示（` 鍵），這裡只顯示場景資訊 -->
+        <UILabel id="worldInfo" style="hint" color="#a8e08a" tooltip="場景裡的實體數量；按 ` 鍵打開效能面板看 FPS 與記憶體">實體 --</UILabel>
+        <UILabel id="postfx" style="hint" tooltip="F 鍵切換後製風格">後製：標準</UILabel>
+        <UILabel id="effect" style="hint" tooltip="V 鍵切換畫面效果">畫面效果：無</UILabel>
+      </UILayout>
+      <!-- 效能面板（FPS）開關：文字顯示目前的 FPS；開啟時亮綠色（程式會依面板狀態更新），也可以按 ` 鍵 -->
+      <UIButton id="fpsToggle" style="ghost" onClick="toggleFps" text="FPS --" minWidth="104" tooltip="顯示／隱藏效能面板（` 鍵）">
+        <UIIcon id="fpsIcon" name="bolt" size="16" color="#838b78"/>
+      </UIButton>
+      <UIButton id="menuButton" style="ghost" onClick="toggleMenu" text="選單" tooltip="打開選單（遊戲會暫停）">
+        <UIIcon name="menu" style="accentIcon"/>
+      </UIButton>
+    </UILayout>
+  </UILayout>
+
+  <UILayout flex="1"/>
+
+  <!-- ───── 下方 ───── -->
+  <UILayout dir="h" justify="between" align="end" gap="12">
+    <!-- 左下：小地圖（平板以上）或虛擬搖桿（手機）＋金幣數 -->
+    <UILayout gap="10" align="start">
+      <UIMinimap id="minimap" width="150" height="150" range="12" grid="2" hidden="true" md:hidden="false"/>
+      <UIJoystick id="stick" width="120" height="120" md:hidden="true"/>
+      <UILayout style="panel" dir="h" align="center" gap="8" padding="8 16 8 10">
+        <UIImage src="coin.png" width="26" md:width="30"/>
+        <UILabel id="score" style="gold" fontSize="22" md:fontSize="26">0</UILabel>
+      </UILayout>
+    </UILayout>
+
+    <!-- 中下：快捷列（點擊或按對應的鍵）與按鍵說明 -->
+    <UILayout align="center" gap="8" shrink="1">
+      <UILayout style="panel" dir="h" gap="8" padding="8">
+        <UISlot id="slotJump" iconName="arrowUp" count="Space" rarity="uncommon" draggable="false" onClick="hotbar"
+                tooltipTitle="跳躍" tooltip="讓所有物件彈起來（消耗 25 體力）"/>
+        <UISlot id="slotScene" iconName="refresh" count="N" rarity="rare" draggable="false" onClick="hotbar"
+                tooltipTitle="切換場景" tooltip="在兩個場景之間切換">
+          <UICooldown id="sceneCd"/>
+        </UISlot>
+        <UISlot id="slotExplode" iconName="fire" count="X" rarity="legendary" draggable="false" onClick="hotbar"
+                tooltipTitle="炸掉方塊" tooltip="先溶解，再爆炸"/>
+        <UISlot id="slotDebug" iconName="shield" count="G" rarity="epic" draggable="false" onClick="hotbar"
+                tooltipTitle="碰撞形狀" tooltip="顯示物理碰撞體" hidden="true" sm:hidden="false"/>
+        <UISlot id="slotMusic" iconName="sound" count="M" draggable="false" onClick="hotbar"
+                tooltipTitle="背景音樂" tooltip="開啟或關閉音樂" hidden="true" sm:hidden="false"/>
+      </UILayout>
+      <UILayout id="help" dir="h" gap="12" align="center" wrap="true" justify="center" hidden="true" lg:hidden="false">
+        <UILayout style="keyHint"><UILabel style="key">WASD</UILabel><UILabel style="hint">移動</UILabel></UILayout>
+        <UILayout style="keyHint"><UILabel style="key">點擊</UILabel><UILabel style="hint">踢飛物件</UILabel></UILayout>
+        <UILayout style="keyHint"><UILabel style="key">滾輪</UILabel><UILabel style="hint">縮放</UILabel></UILayout>
+        <UILayout style="keyHint"><UILabel style="key">F</UILabel><UILabel style="hint">後製</UILabel></UILayout>
+        <UILayout style="keyHint"><UILabel style="key">V</UILabel><UILabel style="hint">畫面效果</UILabel></UILayout>
+        <UILayout style="keyHint"><UILabel style="key">C</UILabel><UILabel style="hint">攝影機</UILabel></UILayout>
+        <UILayout style="keyHint"><UILabel style="key">P</UILabel><UILabel style="hint">暫停</UILabel></UILayout>
+        <UILayout style="keyHint"><UILabel style="key">~</UILabel><UILabel style="hint">效能</UILabel></UILayout>
+      </UILayout>
+    </UILayout>
+
+    <!-- 右下：保持左右平衡的空白（和左下同寬） -->
+    <UILayout width="150" hidden="true" md:hidden="false"/>
+  </UILayout>
+
+  <!-- ───── 開場導覽（對話框） ───── -->
+  <UILayout id="intro" position="absolute" left="0" right="0" bottom="230" md:bottom="200" align="center">
+    <UIDialogue id="introDialog" speaker="導覽員" width="92%" maxWidth="560" autoplay="true" speed="45"
+                onChoose="introChoice">歡迎來到 [b]Hero Engine[/b] 示範！用 [bg=rgba(255,255,255,0.12)] WASD [/bg] 移動[color=#6aa8ff]藍色方塊[/color]，收集 [icon=coin color=#ffd75e] [color=#ffd75e]金幣[/color]；點擊物件可以把它踢飛。
+      <UIChoice value="start">開始遊戲</UIChoice>
+      <UIChoice value="multi">多人連線怎麼玩？</UIChoice>
+    </UIDialogue>
+  </UILayout>
+
+  <!-- 提示訊息（ui.toast） -->
+  <UIToast placement="top"/>
+
+  <!-- ───── 選單：視窗＋分頁（遊戲暫停時顯示） ───── -->
+  <UILayout id="menu" position="absolute" left="0" top="0" right="0" bottom="0"
+            align="center" justify="center" background="rgba(0,0,0,0.55)" hidden="true">
+    <UIWindow id="menuWindow" title="選單 · 遊戲已暫停" width="92%" maxWidth="460" draggable="false" onClose="closeMenu">
+      <UITabs id="menuTabs" value="0">
+        <UITab title="聲音" gap="12">
+          <UILayout style="card">
+            <UILayout style="row">
+              <UILabel style="rowLabel">背景音樂</UILabel>
+              <UIToggle id="musicToggle" checked="true" onChange="setMusic"/>
+            </UILayout>
+            <UILayout style="row">
+              <UILabel style="rowLabel">音樂音量</UILabel>
+              <UISlider id="musicVolume" min="0" max="100" step="5" value="100" showValue="true" suffix="%" onInput="setMusicVolume" flex="1"/>
+            </UILayout>
+          </UILayout>
+        </UITab>
+        <UITab title="畫面" gap="12">
+          <UILayout style="card">
+            <UILayout style="row" wrap="true">
+              <UILabel style="rowLabel">後製</UILabel>
+              <UIRadioButton group="postfx" value="標準" text="標準" checked="true" onChange="setPostfx"/>
+              <UIRadioButton group="postfx" value="電影感" text="電影感" onChange="setPostfx"/>
+              <UIRadioButton group="postfx" value="關閉" text="關閉" onChange="setPostfx"/>
+            </UILayout>
+            <UILayout style="row">
+              <UILabel style="rowLabel">畫面效果</UILabel>
+              <UISelect id="effectSelect" value="無" onChange="setEffect" flex="1" maxWidth="220">
+                <UIOption>無</UIOption>
+                <UIOption>色差</UIOption>
+                <UIOption>像素化</UIOption>
+              </UISelect>
+            </UILayout>
+            <!-- 雨滴玻璃：雨落窗的後製效果（像隔著淋雨的玻璃看），可以和上面的畫面效果一起開 -->
+            <UILayout style="row">
+              <UILabel style="rowLabel">雨滴玻璃</UILabel>
+              <UIToggle id="rainToggle" checked="false" onChange="setRain"/>
+            </UILayout>
+            <UILayout style="row">
+              <UILabel style="rowLabel">雨量</UILabel>
+              <UISlider id="rainAmount" min="0.1" max="1" step="0.05" value="0.7" onInput="setRainAmount" flex="1"/>
+            </UILayout>
+            <!-- 反鋸齒：自動時高解析度螢幕用 FXAA、一般螢幕用 MSAA；下面一行顯示實際使用的方式 -->
+            <UILayout style="row">
+              <UILabel style="rowLabel">反鋸齒</UILabel>
+              <UISelect id="aaSelect" value="auto" onChange="setAntialias" flex="1" maxWidth="220">
+                <UIOption value="auto">自動</UIOption>
+                <UIOption value="msaa">MSAA（多重取樣）</UIOption>
+                <UIOption value="smaa">SMAA（銳利）</UIOption>
+                <UIOption value="fxaa">FXAA（最省效能）</UIOption>
+                <UIOption value="none">關閉</UIOption>
+              </UISelect>
+            </UILayout>
+            <UILabel id="aaInfo" style="hint">目前：—</UILabel>
+          </UILayout>
+        </UITab>
+        <UITab title="遊戲" gap="12">
+          <UILayout style="card">
+            <UILayout style="row">
+              <UILabel style="rowLabel">遊戲速度</UILabel>
+              <UISlider id="speed" min="0.25" max="2" step="0.25" value="1" showValue="true" suffix="x" onInput="setSpeed" flex="1"/>
+            </UILayout>
+          </UILayout>
+          <UILabel style="section">快速動作</UILabel>
+          <UIList id="menuList" type="grid" columns="3" gap="8" maxHeight="200">
+            <UITemplate>
+              <UIButton style="menuItem" onClick="menuAction" text="{label}"/>
+            </UITemplate>
+          </UIList>
+        </UITab>
+      </UITabs>
+      <UIButton style="primary" onClick="toggleMenu" text="繼續遊戲" padding="12 18" marginTop="4"/>
+    </UIWindow>
+  </UILayout>
+</UI>

@@ -1,0 +1,17 @@
+<!--
+  「雪地」關卡的載入頁面（SceneTransition 的 loading）。
+  這些 id 會由轉場自動填入：loadingTitle 名稱、loadingBar 進度（0～100）、loadingText 百分比、
+  loadingItem 正在載入的檔案、loadingTip 隨機提示。
+-->
+<UI width="auto" height="auto" background="#0c1622" align="center" justify="center" padding="24" gap="16">
+  <UILabel fontSize="12" color="#9fe0ff">NOW LOADING</UILabel>
+  <UILabel id="loadingTitle" fontSize="34" fontWeight="bold" color="#e6f7ff" textAlign="center">雪地</UILabel>
+  <UIProgressBar id="loadingBar" value="0" max="100" width="60%" maxWidth="420" height="12" radius="6" fill="#3a6a9a,#d8f3ff" animate="0.15"/>
+  <UILayout dir="h" gap="12" width="60%" maxWidth="420">
+    <UILabel id="loadingItem" fontSize="12" color="rgba(255,255,255,0.5)" flex="1"> </UILabel>
+    <UILabel id="loadingText" fontSize="12" color="#9fe0ff">0%</UILabel>
+  </UILayout>
+  <UILayout padding="10 16" radius="10" background="rgba(255,255,255,0.06)" maxWidth="460">
+    <UIRichText id="loadingTip" fontSize="14" color="rgba(255,255,255,0.8)"> </UIRichText>
+  </UILayout>
+</UI>

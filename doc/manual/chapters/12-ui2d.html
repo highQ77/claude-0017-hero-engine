@@ -1,0 +1,483 @@
+<!-- group: 介面 -->
+<h1>2D 介面</h1>
+<p class="lead">遊戲的選單、血條、背包等 2D 介面用 XML 描述，由 Yoga 排版引擎（和 React Native 相同的 Flexbox 排版）自動計算位置，再由引擎畫在 3D 畫面上方。介面會隨畫面寬度調整（RWD），手機、平板、電腦都能用同一份檔案。</p>
+
+<h2>XML 的寫法</h2>
+<p>一份介面檔的最外層是 <code>&lt;UI&gt;</code>，裡面放元件。屬性寫外觀與排版，文字可以寫在標籤中間或 <code>text</code> 屬性：</p>
+<script type="text/plain" class="example" data-lang="xml" data-title="基本結構" data-height="220">
+<UI padding="20" gap="12">
+  <!-- 註解：這是一個標題 -->
+  <UILabel fontSize="22" fontWeight="bold" color="#ffffff">背包</UILabel>
+  <UILayout dir="h" gap="8" align="center">
+    <UIIcon name="coin" size="22" color="#ffd75e"/>
+    <UILabel color="#ffd75e">1,280</UILabel>
+  </UILayout>
+  <UIProgressBar value="65" max="100" width="200" showText="true"/>
+  <UIButton text="關閉" onClick="close" self="start"/>
+</UI>
+</script>
+<p>全部元件與屬性見<a href="#/ui-reference">UI 元件參考</a>。編輯 XML 時建議用 UI 編輯器（<code>node hero dev</code> 後開啟 <code>/ui-editor.html</code>），有即時預覽和屬性提示。</p>
+
+<h2>排版</h2>
+<p>排版容器（<code>&lt;UI&gt;</code>、<code>&lt;UILayout&gt;</code>、視窗、分頁…）用 Flexbox 的規則排列子元件：</p>
+<table>
+  <thead><tr><th>屬性</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>dir</code></td><td>排列方向：<code>v</code>（上到下，預設）、<code>h</code>（左到右）</td></tr>
+    <tr><td><code>gap</code>、<code>padding</code>、<code>margin</code></td><td>間距、內距、外距；<code>padding="8 16"</code> 是上下 8、左右 16</td></tr>
+    <tr><td><code>align</code></td><td>和排列方向垂直的對齊：<code>start</code>、<code>center</code>、<code>end</code>、<code>stretch</code></td></tr>
+    <tr><td><code>justify</code></td><td>排列方向上的分布：<code>start</code>、<code>center</code>、<code>end</code>、<code>between</code>、<code>around</code>、<code>evenly</code></td></tr>
+    <tr><td><code>flex="1"</code></td><td>佔滿剩下的空間</td></tr>
+    <tr><td><code>width</code>、<code>height</code></td><td>數字（像素）、百分比或 <code>auto</code>；搭配 <code>minWidth</code>、<code>maxWidth</code></td></tr>
+    <tr><td><code>wrap="true"</code></td><td>空間不夠時換行</td></tr>
+    <tr><td><code>position="absolute"</code></td><td>脫離排版，用 <code>left</code>／<code>top</code>／<code>right</code>／<code>bottom</code> 定位（例如角落的按鈕）</td></tr>
+  </tbody>
+</table>
+<p>下面是常見的遊戲 HUD：上方一列資訊、中間留空、下方技能列。試著把 <code>justify="between"</code> 改成 <code>center</code>，或把技能列的 <code>gap</code> 改大：</p>
+<script type="text/plain" class="example" data-lang="xml" data-title="遊戲 HUD 排版" data-height="300">
+<UI padding="12">
+  <!-- 上方：左邊玩家、右邊金幣，中間用 justify="between" 撐開 -->
+  <UILayout dir="h" justify="between" align="center">
+    <UILayout dir="h" gap="10" align="center" padding="6 12" background="rgba(0,0,0,0.5)" radius="999">
+      <UIIcon name="user" size="18" color="#9acd32"/>
+      <UILayout gap="4">
+        <UILabel fontSize="13" color="#ffffff">勇者 Lv.12</UILabel>
+        <UIProgressBar value="72" width="120" height="6" fill="#ff5a5a,#ffb347"/>
+      </UILayout>
+    </UILayout>
+    <UILayout dir="h" gap="6" align="center" padding="6 12" background="rgba(0,0,0,0.5)" radius="999">
+      <UIIcon name="coin" size="16" color="#ffd75e"/>
+      <UILabel fontSize="14" color="#ffd75e" fontWeight="bold">1,280</UILabel>
+    </UILayout>
+  </UILayout>
+
+  <!-- 中間：flex="1" 佔掉剩下的高度，把技能列推到最下面 -->
+  <UILayout flex="1"/>
+
+  <!-- 下方：技能列置中 -->
+  <UILayout dir="h" gap="8" justify="center">
+    <UISlot iconName="sword" rarity="epic" onClick="skill"/>
+    <UISlot iconName="shield" rarity="rare" onClick="skill"/>
+    <UISlot iconName="fire" onClick="skill"><UICooldown value="0.6"/></UISlot>
+    <UISlot iconName="potion" count="5" rarity="uncommon" onClick="skill"/>
+  </UILayout>
+
+  <!-- 右下角：絕對定位 -->
+  <UIButton position="absolute" right="12" bottom="12" text="選單" onClick="menu"/>
+</UI>
+</script>
+
+<h2>版面尺寸</h2>
+<p>最外層的 <code>&lt;UI&gt;</code> 可以用 <code>width</code>、<code>height</code> 設定整個版面的大小：</p>
+<table>
+  <thead><tr><th>寫法</th><th>結果</th></tr></thead>
+  <tbody>
+    <tr><td><code>&lt;UI&gt;</code></td><td>沒寫：自動滿版（和 <code>auto</code> 相同）</td></tr>
+    <tr><td><code>&lt;UI width="800" height="600"&gt;</code></td><td>固定 800 × 600</td></tr>
+    <tr><td><code>&lt;UI width="auto" height="auto"&gt;</code></td><td>自動滿版，畫面尺寸改變時跟著改變</td></tr>
+    <tr><td><code>&lt;UI width="auto" height="300"&gt;</code></td><td>寬度滿版、高度固定 300</td></tr>
+    <tr><td><code>&lt;UI width="50%"&gt;</code></td><td>畫面寬度的一半；也可以加斷點，例如 <code>md:width="600"</code></td></tr>
+    <tr><td><code>&lt;UI width="100" height="fit"&gt;</code></td><td>寬 100、高度依內容（<code>fit</code>：內容改變時自動跟著變）</td></tr>
+  </tbody>
+</table>
+<p>只有 <code>&lt;UI&gt;</code> 的 <code>auto</code> 是「滿版」；其他元件的 <code>auto</code> 是依內容決定大小，但在預設的 <code>align="stretch"</code> 下會被父元件拉伸。<code>fit</code> 在任何元件上都是「依內容決定大小、不被拉伸」。版面放在畫面左上角，想置中時在外面再包一層，或用 <code>left</code>、<code>top</code> 調整。改改看下面的寬高：</p>
+<script type="text/plain" class="example" data-lang="xml" data-title="版面尺寸" data-height="260">
+<UI width="auto" height="160" padding="12" gap="8" background="rgba(154,205,50,0.15)" border="1 #9acd32">
+  <UILabel color="#ffffff">寬度滿版、高度固定 160</UILabel>
+  <UILabel fontSize="12" color="#9aa292">把 width 改成 300、height 改成 auto 或 fit 看看</UILabel>
+</UI>
+</script>
+
+<h2>RWD：依畫面寬度調整</h2>
+<p>屬性前面加上<strong>斷點</strong>，就只在畫面寬度達到該斷點時套用。預設斷點：<code>sm</code> 640、<code>md</code> 768、<code>lg</code> 1024、<code>xl</code> 1280（像素）。下面的卡片在窄畫面上下排列、在寬畫面左右排列。用預覽上方的「手機／平板／全寬」切換看看，或拖曳預覽框的右下角調整高度：</p>
+<script type="text/plain" class="example" data-lang="xml" data-title="RWD 斷點" data-height="340">
+<UI padding="16" gap="12" md:padding="24">
+  <UILabel fontSize="18" md:fontSize="24" fontWeight="bold" color="#ffffff">選擇角色</UILabel>
+  <!-- 預設上下排列；md 以上改成左右排列 -->
+  <UILayout gap="10" md:dir="h">
+    <UILayout flex="1" dir="h" md:dir="v" gap="10" align="center" padding="12" background="rgba(154,205,50,0.12)" radius="12">
+      <UIIcon name="sword" size="32" color="#9acd32"/>
+      <UILabel color="#ffffff">劍士</UILabel>
+    </UILayout>
+    <UILayout flex="1" dir="h" md:dir="v" gap="10" align="center" padding="12" background="rgba(106,168,255,0.12)" radius="12">
+      <UIIcon name="bolt" size="32" color="#6aa8ff"/>
+      <UILabel color="#ffffff">法師</UILabel>
+    </UILayout>
+    <UILayout flex="1" dir="h" md:dir="v" gap="10" align="center" padding="12" background="rgba(255,179,71,0.12)" radius="12">
+      <UIIcon name="target" size="32" color="#ffb347"/>
+      <UILabel color="#ffffff">弓箭手</UILabel>
+    </UILayout>
+  </UILayout>
+  <!-- 只在寬畫面顯示的說明 -->
+  <UILabel hidden="true" md:hidden="false" color="#9aa292" fontSize="13">寬畫面才看得到這行說明</UILabel>
+</UI>
+</script>
+<p>斷點可以自訂：<code>UIPlugin.create({ breakpoints: { tablet: 600, desktop: 1100 } })</code>，XML 裡就能寫 <code>tablet:dir="h"</code>。</p>
+
+<h2>樣式與外觀</h2>
+<p>重複的屬性寫成樣式，讓整份介面一致、修改時只改一個地方：</p>
+<ul>
+  <li><code>&lt;UIStyle name="名稱" 屬性…/&gt;</code>：元件用 <code>style="名稱"</code> 套用（可以用空白隔開多個）。元件自己寫的屬性優先。</li>
+  <li><code>&lt;UISkin for="UIButton" 屬性…/&gt;</code>：同一種元件的預設外觀，不用每個都寫 <code>style</code>。</li>
+  <li><code>&lt;UIImport src="theme.xml"/&gt;</code>：匯入另一個檔案的樣式與外觀（整個遊戲共用一份主題）。</li>
+</ul>
+<script type="text/plain" class="example" data-lang="xml" data-title="UIStyle 與 UISkin" data-height="230">
+<UI padding="16" gap="10">
+  <!-- 所有按鈕的預設外觀 -->
+  <UISkin for="UIButton" radius="999" padding="8 18" background="#2c3326" hoverBackground="#3a4430" color="#e9f6d2"/>
+  <!-- 具名樣式 -->
+  <UIStyle name="primary" background="#9acd32" hoverBackground="#b4e05a" color="#141a07" fontWeight="bold"/>
+  <UIStyle name="danger" background="#5a2020" hoverBackground="#7a2a2a" color="#ffd0d0"/>
+
+  <UILayout dir="h" gap="8" wrap="true">
+    <UIButton text="一般按鈕" onClick="normal"/>
+    <UIButton text="開始遊戲" style="primary" onClick="start"/>
+    <UIButton text="刪除存檔" style="danger" onClick="remove"/>
+    <!-- 自己寫的屬性比樣式優先 -->
+    <UIButton text="自訂" style="primary" background="#6aa8ff" onClick="custom"/>
+  </UILayout>
+  <!-- 匯入共用主題（doc/public/ui/theme.xml）後，就能用主題裡的 card、section 等樣式 -->
+  <UIImport src="theme.xml"/>
+  <UILayout style="card"><UILabel style="section">來自 theme.xml 的樣式</UILabel></UILayout>
+</UI>
+</script>
+
+<h2>圖片背景與九宮格</h2>
+<p>任何元件都可以用 <code>bgImage</code> 加背景圖片。做框和按鈕時用 <code>bgSlice</code>（九宮格）：圖片切成九塊，四個角維持原樣，邊和中間延伸，怎麼縮放都不會變形。<code>hoverBgImage</code>、<code>pressedBgImage</code> 是滑鼠移入、按下時的圖片。</p>
+<script type="text/plain" class="example" data-lang="xml" data-title="九宮格" data-height="260">
+<UI padding="16" gap="14" bgImage="pattern.svg" bgFit="tile">
+  <UILayout dir="h" gap="12" wrap="true">
+    <UIButton text="小按鈕" bgImage="frame.svg" bgSlice="16" hoverBgImage="frame-hover.svg"
+              background="transparent" hoverBackground="transparent" color="#e9f6d2" padding="10 18" onClick="small"/>
+    <UIButton text="很寬很寬的按鈕" width="260" bgImage="frame.svg" bgSlice="16" hoverBgImage="frame-hover.svg"
+              background="transparent" hoverBackground="transparent" color="#e9f6d2" padding="10 18" onClick="wide"/>
+  </UILayout>
+  <!-- 同一張圖做成面板，四角不變形 -->
+  <UILayout padding="20" gap="6" bgImage="frame.svg" bgSlice="16" width="90%" maxWidth="420">
+    <UILabel fontSize="18" fontWeight="bold" color="#c8f07a">九宮格面板</UILabel>
+    <UILabel fontSize="13" color="#b8c0ae">把 bgSlice="16" 拿掉看看：整張圖會被拉長變形。</UILabel>
+  </UILayout>
+</UI>
+</script>
+<p>UI 編輯器裡有九宮格編輯器，可以直接在圖片上拖曳切割線。</p>
+
+<h2>在遊戲裡使用</h2>
+<p>用 <code>UIPlugin</code> 把介面疊在 3D 畫面上：點到介面的滑鼠事件不會傳給遊戲，透明的地方照常可以點到遊戲。XML 的 <code>onClick="名稱"</code> 會呼叫用 <code>ui.setHandlers({ 名稱: 函式, … })</code> 註冊的同名函式（專案裡的 <code>ui</code> 從 <code>engine.ts</code> 引用）。<code>uiPlugin.interactive = false</code> 時介面只顯示、不攔截任何滑鼠或觸控，點擊全部穿透到遊戲（例如過場動畫、3D 場景編輯器的 UI 層）：</p>
+<table>
+  <thead><tr><th>寫法</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>ui.get&lt;UILabel&gt;('id')</code></td><td>用 id 取得元件（找不到是 undefined）；<code>ui.require</code> 找不到會報錯</td></tr>
+    <tr><td><code>label.setText('文字')</code></td><td>改文字</td></tr>
+    <tr><td><code>el.set('屬性', 值)</code></td><td>改任何屬性，例如 <code>set('hidden', 'true')</code>、<code>set('background', '#f00')</code>；給 <code>null</code> 回到原本的值</td></tr>
+    <tr><td><code>bar.value = 50</code></td><td>進度條、滑桿等有 <code>value</code> 的元件可以直接設定</td></tr>
+    <tr><td><code>ui.setHandlers({ 名稱: 函式 })</code></td><td>註冊事件處理函式（可以一次多個，隨時再加或換掉）</td></tr>
+    <tr><td><code>el.on('click', 函式)</code></td><td>直接在元件上聽事件</td></tr>
+    <tr><td><code>ui.toast('文字', { icon, color, duration })</code></td><td>顯示會自動淡出的提示（介面裡要有 <code>&lt;UIToast/&gt;</code>）</td></tr>
+  </tbody>
+</table>
+<p>事件處理函式收到的參數有 <code>target</code>（觸發的元件）、<code>value</code>（滑桿、下拉選單的值）、<code>checked</code>（勾選框）、<code>item</code>／<code>index</code>（列表樣板的資料）。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="介面與遊戲互動" data-height="380">
+import { Transform, math } from '@engine/scene';
+import { create, spawn } from '@engine/render';
+import type { UILabel, UIProgressBar } from '@engine/ui2d';
+import { engine, ui, world } from './engine';
+
+let hp = 100;
+let speed = 1;
+const material = create.material({ standard: { color: 0x9acd32 } });
+
+ui.loadString(`
+  <UI padding="14" gap="10">
+    <UIToast placement="top"/>
+    <UILayout gap="8" padding="12" width="240" background="rgba(10,12,9,0.8)" radius="12">
+      <UILayout dir="h" justify="between">
+        <UILabel color="#ffffff" fontWeight="bold">生命</UILabel>
+        <UILabel id="hpText" color="#ff8a8a">100 / 100</UILabel>
+      </UILayout>
+      <UIProgressBar id="hpBar" value="100" fill="#ff5a5a,#ffb347"/>
+      <UILayout dir="h" gap="6">
+        <UIButton text="受傷" onClick="hit" flex="1"/>
+        <UIButton text="回復" onClick="heal" flex="1"/>
+      </UILayout>
+      <UILabel fontSize="12" color="#9aa292">旋轉速度</UILabel>
+      <UISlider min="0" max="5" step="0.5" value="1" showValue="true" suffix="x" onInput="setSpeed"/>
+      <UISelect value="#9acd32" onChange="setColor">
+        <UIOption value="#9acd32">綠色</UIOption>
+        <UIOption value="#6aa8ff">藍色</UIOption>
+        <UIOption value="#ff6b6b">紅色</UIOption>
+      </UISelect>
+      <UICheckBox text="線框模式" onChange="toggleWire"/>
+    </UILayout>
+  </UI>`);
+
+ui.setHandlers({
+  hit: () => setHp(hp - 15),
+  heal: () => setHp(hp + 25),
+  setSpeed: (e) => (speed = Number(e.value)),
+  setColor: (e) => material.color.set(String(e.value)),
+  toggleWire: (e) => (material.wireframe = !!e.checked),
+});
+
+function setHp(value: number) {
+  hp = Math.max(0, Math.min(100, value));
+  ui.require<UIProgressBar>('hpBar').value = hp;
+  ui.get<UILabel>('hpText')?.setText(`${hp} / 100`);
+  if (hp === 0) ui.toast('你倒下了……', { icon: 'warning', color: '#ff6b6b' });
+}
+
+const camera = spawn.camera(world, { position: [-1.2, 0.8, 4], target: [-1.2, 0, 0], fov: 50 });
+spawn.light(world, { kind: 'hemisphere', intensity: 1.3 });
+spawn.light(world, { intensity: 2, position: [2, 4, 3], target: [0, 0, 0] });
+
+const knot = spawn.mesh(world, { geometry: { torusKnot: [0.6, 0.2] }, material });
+// 每幀轉一點（速度由介面的滑桿控制）
+engine.on('update', (t) => math.rotate(world.require(knot, Transform), [0.3 * speed * t.delta, speed * t.delta, 0]));
+
+engine.start();
+</script>
+
+<h2>列表資料</h2>
+<p>列表裡放一個 <code>&lt;UITemplate&gt;</code>，用 <code>ui.setItems(列表id, 資料陣列)</code> 依資料產生項目；樣板裡的 <code>{欄位}</code> 會換成資料的值，事件的 <code>e.item</code> 是被點到的那筆資料。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="UITemplate 與 setItems" data-height="320">
+import { UI2D } from '@engine/ui2d';
+
+// 沒有 3D 畫面時，也可以直接把介面放在任何 HTML 元素裡
+const ui = await UI2D.create({ container: document.body });
+ui.setHandlers({
+  buy: (e) => {
+    const item = e.item as { name: string; price: number };
+    ui.toast(`買了${item.name}（${item.price} 金幣）`, { icon: 'coin', color: '#ffd75e' });
+  },
+});
+
+ui.loadString(`
+  <UI padding="14" gap="10">
+    <UIToast/>
+    <UILabel fontSize="18" fontWeight="bold" color="#ffffff">商店</UILabel>
+    <UIList id="shop" type="grid" columns="3" md:columns="4" gap="8" flex="1">
+      <UITemplate>
+        <UIButton onClick="buy" dir="v" padding="10" gap="4" align="center">
+          <UIIcon name="{icon}" size="26" color="{color}"/>
+          <UILabel fontSize="13" color="#ffffff">{name}</UILabel>
+          <UILabel fontSize="12" color="#ffd75e">{price} 金幣</UILabel>
+        </UIButton>
+      </UITemplate>
+    </UIList>
+  </UI>`);
+
+ui.setItems('shop', [
+  { name: '鐵劍', icon: 'sword', color: '#b072ff', price: 120 },
+  { name: '木盾', icon: 'shield', color: '#6aa8ff', price: 80 },
+  { name: '藥水', icon: 'potion', color: '#ff6b6b', price: 25 },
+  { name: '寶石', icon: 'gem', color: '#4fd1c5', price: 500 },
+  { name: '卷軸', icon: 'bolt', color: '#ffd75e', price: 60 },
+  { name: '火把', icon: 'fire', color: '#ffb347', price: 10 },
+]);
+console.log('商品數量：', ui.get('shop')?.children.length);
+</script>
+
+<h2>重複使用介面</h2>
+<p>常用的一小塊介面（卡片、金幣顯示）存成獨立的 XML 檔，用 <code>&lt;UIComponent src="檔名.xml"/&gt;</code> 放進來。外部檔案的 <code>&lt;UIStyle&gt;</code>、<code>&lt;UISkin&gt;</code> 只套用在它自己裡面；根元素 <code>&lt;UI&gt;</code> 的屬性也會套用，自己寫的屬性優先。</p>
+<p><strong>寬高只能寫在外部檔案的 <code>&lt;UI&gt;</code></strong>：<code>&lt;UIComponent&gt;</code> 標籤上的 <code>width</code>、<code>height</code> 會被忽略（主控台會提醒）。</p>
+<table>
+  <thead><tr><th>外部檔案的根元素</th><th>嵌入後的大小</th></tr></thead>
+  <tbody>
+    <tr><td><code>&lt;UI&gt;</code>（沒寫寬高）</td><td>依內容決定</td></tr>
+    <tr><td><code>&lt;UI width="100" height="fit"&gt;</code></td><td>寬 100、高依內容，例如 coin-badge.xml（單獨打開時也是依內容，不會滿版）</td></tr>
+    <tr><td><code>&lt;UI width="300" height="120"&gt;</code></td><td>固定 300 × 120</td></tr>
+    <tr><td><code>&lt;UI width="auto" height="80"&gt;</code></td><td>寬度填滿放置的位置、高度 80</td></tr>
+  </tbody>
+</table>
+<script type="text/plain" class="example" data-lang="xml" data-title="UIComponent" data-height="150">
+<UI padding="16" gap="10">
+  <!-- doc/public/ui/coin-badge.xml：金幣圖示 + 數字，<UI width="100" height="fit"> -->
+  <UIComponent src="coin-badge.xml"/>
+  <UIComponent src="coin-badge.xml" gap="20" padding="8" background="rgba(255,215,94,0.1)" radius="10"/>
+</UI>
+</script>
+
+<h2>畫面管理</h2>
+<p>遊戲通常有好幾個畫面：HUD、標題、設定、背包。<code>UIScreenManager</code> 管理多份 XML：<code>show</code> 換掉基本畫面，<code>open</code> 疊在上面（例如彈出視窗），<code>back</code> 關閉最上層。XML 裡可以直接寫 <code>onClick="screen.open:settings"</code>、<code>onClick="screen.back"</code>、<code>onClick="screen.close"</code>。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="UIScreenManager" data-height="320">
+import { UI2D, UIScreenManager } from '@engine/ui2d';
+
+const ui = await UI2D.create({ container: document.body });
+
+// 一般是 { url: 'ui/settings.xml' }；這裡為了範例直接寫 XML
+const screens = new UIScreenManager(ui).registerAll({
+  hud: { xml: `
+    <UI padding="14" gap="8" align="start">
+      <UILabel color="#ffffff" fontWeight="bold">遊戲畫面（HUD）</UILabel>
+      <UILayout dir="h" gap="8">
+        <UIButton text="設定" onClick="screen.open:settings"/>
+        <UIButton text="背包" onClick="screen.open:bag"/>
+      </UILayout>
+    </UI>` },
+  settings: { modal: true, xml: `
+    <UI align="center" justify="center" padding="16">
+      <UIWindow title="設定" width="280" onClose="screen.close">
+        <UIToggle text="背景音樂" checked="true"/>
+        <UIButton text="再開背包" onClick="screen.open:bag"/>
+        <UIButton text="完成" onClick="screen.close"/>
+      </UIWindow>
+    </UI>` },
+  bag: { modal: true, xml: `
+    <UI align="center" justify="center" padding="16">
+      <UIWindow title="背包" width="260" onClose="screen.close">
+        <UILayout dir="h" gap="6"><UISlot iconName="sword"/><UISlot iconName="potion" count="3"/><UISlot/></UILayout>
+        <UIButton text="返回（screen.back）" onClick="screen.back"/>
+      </UIWindow>
+    </UI>` },
+});
+
+screens.onChange((c) => console.log(`${c.type}：${c.name}`));
+await screens.show('hud');
+</script>
+<p>其他方法：<code>screens.close(名稱)</code>、<code>screens.toggle(名稱)</code>、<code>screens.isOpen(名稱)</code>、<code>screens.closeAll()</code>、<code>screens.preload()</code>（先載入所有畫面，打開時不用等）。</p>
+
+<h2>場景轉場與載入頁面</h2>
+<p>遊戲有好幾個場景（關卡）時，每個場景的介面放在 <code>public/ui</code> 底下自己的資料夾，資料夾名稱就是場景名稱，可以自訂。共用的檔案（主題、標題、設定）放在 <code>public/ui</code> 根目錄。在 UI 編輯器的檔案清單裡，它們會依資料夾分組列出。</p>
+<script type="text/plain" class="example" data-lang="text" data-readonly data-title="public/ui/">
+public/ui/
+├── theme.xml          共用：主題
+├── scene.xml          共用：基本 HUD
+├── forest/            場景「forest」
+│   ├── loading.xml    進入 forest 時的資源載入頁面
+│   └── hud.xml        進入 forest 後疊在畫面上的介面
+└── desert/            場景「desert」
+    ├── loading.xml
+    └── hud.xml
+</script>
+<p>場景資料夾裡的檔案用 <code>../</code> 引用上一層，例如 <code>&lt;UIImport src="../theme.xml"/&gt;</code>、<code>bgImage="../pattern.svg"</code>；同一個資料夾的圖片直接寫檔名。</p>
+<p><code>SceneTransition</code> 負責切換場景。每次進入場景（包括遊戲一開始進入第一個場景）都會：</p>
+<ol>
+  <li>畫面淡出成黑色（蓋住舊場景，也擋住滑鼠），移除舊場景的介面；</li>
+  <li>顯示這個場景的<strong>載入頁面</strong>，一邊下載資源（圖片、音效、模型、介面檔），一邊更新進度條；</li>
+  <li>載入完成後切換 3D 場景（<code>SceneManager</code>），在所有畫面的最下層疊上場景介面（<code>hud</code>），再淡入。</li>
+</ol>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="SceneTransition">
+const transition = new SceneTransition({
+  ui: uiPlugin.ui,
+  scenes: scenePlugin.scenes,     // 切換 3D 場景
+  assets: assetPlugin.assets,     // 下載資源
+  loading: 'ui/loading.xml',      // 預設的載入頁面（沒寫用內建的）
+  duration: 0.35,                 // 每段淡入淡出的秒數
+  minLoadingTime: 0.6,            // 載入頁面至少顯示幾秒（不會一閃而過）
+}).defineAll({
+  forest: {
+    title: '迷霧森林',                       // 載入頁面上的名稱
+    loading: 'ui/forest/loading.xml',        // 這個場景自己的載入頁面
+    hud: 'ui/forest/hud.xml',                // 進入後疊在畫面上，離開時移除
+    assets: ['textures/tree.png', { url: 'models/hut.glb', type: 'gltf' }],
+    tips: ['按空白鍵跳躍', '金幣會在 3 秒後重生'],
+  },
+  desert: { title: '沙漠', loading: 'ui/desert/loading.xml', hud: 'ui/desert/hud.xml' },
+});
+
+await transition.go('forest');   // 開始遊戲：經過載入頁面進入第一個場景（第一次進入直接從全黑開始）
+// 淡入前（畫面還是黑的）先打開標題畫面：淡入時它已經在上面，不會先閃過遊戲畫面
+await transition.go('forest', { beforeReveal: () => screens.open('title') });
+transition.go('desert');         // 換場景：淡出 → 載入頁面 → 淡入
+transition.current;              // 目前的場景
+transition.onProgress((p) => console.log(p.loaded, '/', p.total));
+</script>
+<p>淡入前會等新畫面的圖片都讀完（<code>ui.whenReady()</code>，最多等 <code>readyTimeout</code> 秒），畫面不會一張一張跳出來。</p>
+<div class="tip">
+  <p>用 <code>UIPlugin</code> 時，淡入淡出是一個蓋在整個畫面（含介面）上的單色面片，只改它的透明度，不會每幀重畫介面，高解析度螢幕也很順。移除舊介面、放上載入頁面、切換 3D 場景都在畫面全黑時完成，並多等幾幀讓重畫和著色器編譯做完才淡入。沒有 <code>UIPlugin</code>（例如獨立畫布）或指定 <code>fader: null</code> 時，改用介面圖層淡入淡出。</p>
+</div>
+<p>載入頁面是一般的 XML，用這些 id 顯示進度（都可以省略）：</p>
+<table>
+  <thead><tr><th>id</th><th>元件</th><th>內容</th></tr></thead>
+  <tbody>
+    <tr><td><code>loadingTitle</code></td><td>UILabel</td><td>場景名稱（<code>title</code>）</td></tr>
+    <tr><td><code>loadingBar</code></td><td>UIProgressBar</td><td>進度 0～100</td></tr>
+    <tr><td><code>loadingText</code></td><td>UILabel</td><td>百分比</td></tr>
+    <tr><td><code>loadingItem</code></td><td>UILabel</td><td>剛載入的檔案名稱</td></tr>
+    <tr><td><code>loadingTip</code></td><td>UILabel</td><td>從 <code>tips</code> 隨機挑一則</td></tr>
+  </tbody>
+</table>
+<p>下面的範例有兩個場景，用左上的按鈕切換（範例用 <code>uiXml.register</code> 直接提供 XML 內容；專案裡就是 <code>public/ui</code> 的檔案）：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="兩個場景的轉場" data-height="360">
+import { Transform, type Scene } from '@engine/scene';
+import { create, MeshRenderer, spawn } from '@engine/render';
+import { SceneTransition, uiXml } from '@engine/ui2d';
+import { engine, scenes, ui, world } from './engine';
+
+// 專案裡這些是 public/ui/forest/…、public/ui/desert/… 的檔案
+const loading = (title: string, color: string) => `
+  <UI width="auto" height="auto" background="#0c0f0b" align="center" justify="center" gap="12">
+    <UILabel fontSize="12" color="#838b78">LOADING</UILabel>
+    <UILabel id="loadingTitle" fontSize="26" fontWeight="bold" color="${color}">${title}</UILabel>
+    <UIProgressBar id="loadingBar" width="60%" maxWidth="320" height="8" fill="${color}"/>
+    <UILabel id="loadingText" fontSize="12" color="#b8c0ae">0%</UILabel>
+    <UILabel id="loadingTip" fontSize="13" color="#b8c0ae"/>
+  </UI>`;
+const hud = (text: string) => `
+  <UI width="auto" height="auto" align="center" padding="12">
+    <UILabel padding="6 14" radius="999" background="rgba(0,0,0,0.55)" color="#ffffff">${text}</UILabel>
+  </UI>`;
+uiXml.register({
+  '/ui/forest/loading.xml': async () => loading('迷霧森林', '#9acd32'),
+  '/ui/forest/hud.xml': async () => hud('🌲 迷霧森林'),
+  '/ui/desert/loading.xml': async () => loading('沙漠', '#ffb347'),
+  '/ui/desert/hud.xml': async () => hud('🏜️ 沙漠'),
+});
+
+// 3D 場景
+const material = (color: number) => create.material({ standard: { color } });
+const forest: Scene = {
+  name: 'forest',
+  setup(w) {
+    for (let i = 0; i < 9; i++) {
+      w.spawn(
+        Transform.at((i % 3) * 1.5 - 1.5, 0, Math.floor(i / 3) * -1.5 + 1),
+        MeshRenderer.with({ geometry: { cone: [0.35, 1.3, 8] }, material: material(0x4caf50) }),
+      );
+    }
+  },
+};
+const desert: Scene = {
+  name: 'desert',
+  setup(w) {
+    w.spawn(Transform, MeshRenderer.with({ geometry: { dodecahedron: 1 }, material: material(0xd8a657) }));
+  },
+};
+
+// 基本 HUD：切換場景的按鈕
+ui.setHandlers({
+  forest: () => void transition.go('forest'),
+  desert: () => void transition.go('desert'),
+});
+ui.loadString(`
+  <UI padding="12" dir="h" gap="8" align="start">
+    <UIButton text="森林" onClick="forest"/>
+    <UIButton text="沙漠" onClick="desert"/>
+  </UI>`);
+
+const camera = spawn.camera(world, { position: [0, 2.5, 6], target: [0, 0, 0] });
+spawn.light(world, { kind: 'hemisphere', intensity: 2 });
+scenes.register(forest, desert);
+
+const transition = new SceneTransition({ ui, scenes, minLoadingTime: 1.2 }).defineAll({
+  forest: { title: '迷霧森林', loading: 'ui/forest/loading.xml', hud: 'ui/forest/hud.xml', tips: ['森林裡有九棵樹'] },
+  desert: { title: '沙漠', loading: 'ui/desert/loading.xml', hud: 'ui/desert/hud.xml', tips: ['沙漠中間有一塊大石頭'] },
+});
+transition.onChange((c) => c.type === 'enter' && console.log(`進入 ${c.to}（從 ${c.from ?? '遊戲開始'}）`));
+
+engine.start();
+await transition.go('forest');
+</script>
+<div class="note">
+  <p>範例遊戲 <code>projects/official-demo-000-start</code> 用同樣的方式切換兩個場景：<code>public/ui/orbit/</code> 和 <code>public/ui/rain/</code> 各有自己的 <code>loading.xml</code> 與 <code>hud.xml</code>，按 <kbd>N</kbd> 切換。</p>
+</div>
+
+<h2>小地圖</h2>
+<p><code>MinimapPlugin</code> 把有 <code>MinimapMarker</code> 元件的實體顯示在 <code>&lt;UIMinimap&gt;</code> 上，並以玩家為中心：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="MinimapPlugin（安裝寫在 engine.ts）">
+// XML：<UIMinimap id="minimap" width="160" height="160" range="30" rotate="true"/>
+// engine.ts（放在 ui 之後）：
+export const minimap = use(new MinimapPlugin({ minimap: 'minimap', follow: () => player }));
+
+world.add(enemy, MinimapMarker, { color: '#ff5a5a', shape: 'dot' });
+world.add(chest, MinimapMarker, { color: '#ffd75e', pin: true }); // pin：超出範圍時貼在邊緣
+</script>

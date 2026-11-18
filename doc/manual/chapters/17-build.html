@@ -1,0 +1,81 @@
+<!-- group: 進階 -->
+<h1>打包發佈與常見問題</h1>
+<p class="lead">把遊戲打包成靜態網站，放到網頁伺服器（GitHub Pages、Netlify、自己的主機）就能玩；也可以包成 macOS App，雙擊就能玩。</p>
+
+<h2>打包</h2>
+<script type="text/plain" class="example" data-lang="sh" data-readonly data-title="打包">
+node hero select my-game
+node hero build                       # 格式與程式檢查 → 型別檢查 → 測試 → 打包網頁版，輸出到 dist/my-game/web/
+node hero build --web                 # 同上
+node hero build --mac                 # 再包成 macOS App：dist/my-game/mac/my-game.app（也會產生網頁版）
+
+PROJECT=my-game npx vite build        # 只打包（跳過檢查和測試）
+PROJECT=my-game npx vite preview --outDir dist/my-game/web   # 在本機預覽打包結果
+</script>
+<p>打包時：</p>
+<ul>
+  <li>只會打包遊戲頁面，UI 編輯器等開發工具不會包含在內。</li>
+  <li><code>public/ui</code> 的 XML 會轉成 JS 模組，載入時不用再抓 <code>.xml</code> 檔。</li>
+  <li>物理引擎（Rapier）、字型等用動態載入：沒用到的功能不會下載。</li>
+</ul>
+
+<h2>macOS App（Tauri）</h2>
+<p><code>node hero build --mac</code> 用 <a href="https://tauri.app/" target="_blank" rel="noopener">Tauri</a> 把網頁版包成 macOS App：一個視窗、裡面就是遊戲，不需要瀏覽器，也不用架伺服器。App 用系統內建的網頁引擎（WebKit），檔案很小（約 10 MB 左右）。</p>
+<ul>
+  <li><strong>需要</strong>：macOS、Rust（<code>brew install rust</code> 或 <a href="https://rustup.rs" target="_blank" rel="noopener">rustup</a>）、Xcode Command Line Tools（<code>xcode-select --install</code>）。Tauri 的指令工具已經在 <code>npm install</code> 時安裝。</li>
+  <li><strong>第一次比較久</strong>：要下載、編譯 Rust 套件（幾分鐘）；之後只重新包裝，很快。編譯結果放在引擎目錄的 <code>.tauri/</code>（不用管它，刪掉也沒關係，下次會重建）。</li>
+  <li><strong>視窗</strong>：標題用專案 <code>index.html</code> 的 <code>&lt;title&gt;</code>，大小 1280 × 720（可以縮放）。</li>
+  <li><strong>圖示</strong>：在專案資料夾放 <code>icon.png</code>（建議 1024 × 1024、正方形）就會用它；沒有時用引擎預設的圖示。</li>
+  <li>App 的識別碼是 <code>com.heroengine.專案名稱</code>。沒有簽章：別人的電腦第一次打開時，要在 Finder 裡按右鍵 →「打開」。</li>
+  <li>Windows、iOS、Android 還不支援（<code>--windows</code> 等參數會提示）。</li>
+</ul>
+
+<h2>引擎的模組結構</h2>
+<p>引擎分成分層的模組，下層不知道上層的存在，打包時<strong>只包含用到的部分</strong>（分模組引用或用總入口 <code>hero.*</code> 都一樣）：</p>
+<script type="text/plain" class="example" data-lang="text" data-readonly data-title="模組分層（只能往下引用）">
+最上層   plugins（套件管理）
+第 5 層  ui3d、ai、scripts
+第 4 層  assets、particles、shaders、postfx、ui2d、audio、animation、text3d
+第 3 層  render、physics、input、network        ← 同一層互不依賴
+第 2 層  scene
+第 1 層  ecs
+第 0 層  core
+</script>
+<ul>
+  <li><strong>資源鍵放在各模組的 <code>keys.ts</code></strong>：例如腳本的 <code>this.physics</code> 只需要 <code>physics/keys.ts</code>，不會把整個物理模組打包進來。</li>
+  <li><strong>同一層要合作時透過下層的介面</strong>：例如物理要用網格的形狀建立碰撞體，由繪製外掛提供 <code>MeshGeometryKey</code>（定義在 scene），物理不直接依賴繪製。</li>
+  <li><strong>套件管理不會帶進整個引擎</strong>：<code>new PluginManager(engine, { api: { ui2d } })</code> 只把給的模組交給套件；要全部時用 <code>{ api: engineApi }</code>。</li>
+  <li><code>package.json</code> 的 <code>sideEffects</code> 宣告 <code>src/</code> 沒有「引用時就執行」的程式，打包工具才能去掉沒用到的模組。模組最上層不要寫會改動外部狀態的程式（註冊、改全域變數），要做的話放在外掛的 <code>install()</code> 裡。</li>
+</ul>
+<p>這些規則由測試自動檢查（<code>node hero build</code> 會執行）：<code>tests/module-deps.test.ts</code> 檢查每個模組只引用允許的模組、沒有循環；<code>tests/tree-shaking.test.ts</code> 打包幾個最小的遊戲，檢查沒有多包含不相干的模組。新增模組時要在 <code>module-deps.test.ts</code> 的 <code>RULES</code> 寫好它可以依賴哪些模組。</p>
+
+<h2>使用手冊本身</h2>
+<script type="text/plain" class="example" data-lang="sh" data-readonly data-title="手冊指令">
+node hero doc            # 開啟使用手冊（開發伺服器，所有範例都能執行）
+node hero doc build      # 打包成靜態網站 → dist/doc/（XML 範例可以執行；TypeScript 範例只能閱讀、編輯）
+</script>
+<p>打包結果用相對路徑，可以放在網站的任何路徑，也可以不用伺服器、直接雙擊 <code>dist/doc/index.html</code>（<code>file://</code>）閱讀。</p>
+<p>新增章節：在 <code>doc/manual/chapters/</code> 加一個 HTML 檔（檔名開頭的數字決定順序），範例寫在 <code>&lt;script type="text/plain" class="example" data-lang="ts"&gt;</code> 裡。詳細說明見 <code>doc/README.md</code>。</p>
+
+<h2>常見問題</h2>
+<h4>畫面一片黑，什麼都沒有</h4>
+<ul>
+  <li>有沒有攝影機？攝影機有沒有 <code>Transform</code>、有沒有朝向物件（<code>spawn.camera</code> 的 <code>target</code>，或 <code>math.lookAt</code>）？</li>
+  <li>有沒有燈光？<code>MeshStandardMaterial</code> 沒有燈光是黑色的（可以先用 <code>MeshBasicMaterial</code> 測試）。</li>
+  <li>物件有沒有 <code>Transform</code>？沒有 <code>Transform</code> 的網格不會顯示。</li>
+  <li>有沒有呼叫 <code>engine.start()</code>？</li>
+</ul>
+<h4>安裝外掛時出現「需要先安裝」</h4>
+<p>外掛有依賴順序，例如 <code>RenderPlugin</code> 需要 <code>ecs</code> 與 <code>scene</code>、<code>AudioPlugin</code> 需要 <code>assets</code>、<code>UIPlugin</code> 需要 <code>render</code>。照錯誤訊息把需要的外掛先 <code>use</code>。</p>
+<h4>背景音樂沒有聲音</h4>
+<p>瀏覽器要求使用者先點擊或按鍵才能播放聲音。音效外掛會在第一次互動後自動開始播放。</p>
+<h4>按鍵沒有反應</h4>
+<ul>
+  <li>遊戲暫停時輸入外掛不會更新；暫停鍵請直接聽 <code>window</code> 的 <code>keydown</code>。</li>
+  <li>焦點在輸入框裡時，輸入外掛不會攔截按鍵。</li>
+  <li>在這本手冊的預覽框裡，要先點一下畫面才能接收鍵盤。</li>
+</ul>
+<h4>介面的按鈕點不到遊戲物件</h4>
+<p>這是刻意的：點到介面的事件不會傳給遊戲。透明、沒有背景的地方會穿透；想讓某個有背景的元件也穿透，加上 <code>pointerEvents="none"</code>。</p>
+<h4>在 Safari 上拖曳或點擊不正常</h4>
+<p>介面用 Pointer Events 處理滑鼠和觸控。自己加的 HTML 元素若蓋在畫布上，請確認沒有攔截 <code>pointerup</code>；拖曳時離開視窗、觸控被系統取消時，介面會自動中斷拖曳。</p>

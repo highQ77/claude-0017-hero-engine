@@ -1,0 +1,238 @@
+<!-- group: 核心 -->
+<h1>場景、位置與父子關係</h1>
+<p class="lead"><code>ScenePlugin</code> 提供三件事：<code>Transform</code>（位置、旋轉、縮放）、父子關係（子物件跟著父物件移動），以及場景的載入與切換。</p>
+
+<h2>Transform</h2>
+<p>任何要出現在 3D 空間裡的實體都需要 <code>Transform</code>。它的欄位是 three.js 的數學物件，可以直接使用 three.js 的方法：</p>
+<table>
+  <thead><tr><th>欄位</th><th>類型</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>position</code></td><td><code>Vector3</code></td><td>位置（相對父物件）</td></tr>
+    <tr><td><code>rotation</code></td><td><code>Quaternion</code></td><td>旋轉（四元數，不會有萬向鎖問題）</td></tr>
+    <tr><td><code>scale</code></td><td><code>Vector3</code></td><td>縮放</td></tr>
+    <tr><td><code>worldMatrix</code></td><td><code>Matrix4</code></td><td>世界矩陣（引擎計算，唯讀）</td></tr>
+  </tbody>
+</table>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="常用操作">
+import { Vector3 } from '@engine/math';
+const e = world.spawn(Transform.at(0, 1, -3));         // 建立時指定位置
+const t = world.require(e, Transform);
+t.position.set(0, 1, -3);
+t.scale.setScalar(2);
+math.setRotation(t, [0, Math.PI / 4, 0]);               // 設定旋轉（弧度，依 X、Y、Z 順序）
+math.rotate(t, [0, 0.5 * time.delta, 0]);               // 在自己的座標上再轉一點（每幀轉動用這個）
+math.lookAt(t, new Vector3(0, 0, 0));                   // 讓 -Z 方向朝向目標（攝影機、燈光）
+const worldPos = math.worldPosition(t);                 // 世界座標（有父物件時和 position 不同）
+</script>
+
+<h2>父子關係</h2>
+<p>建立時給 <code>parent</code>（<code>spawn.entity</code>、<code>spawn.mesh</code>、<code>spawn.light</code>、<code>spawn.camera</code> 都可以）：子物件的 <code>position</code> 變成相對於父物件，父物件移動、旋轉、縮放時子物件跟著動；父物件被銷毀時子物件也會一起銷毀。建立之後才要改父物件，用 <code>hierarchy.setParent(子, 父)</code>（<code>null</code> 代表脫離）。下面是一個小太陽系：月球是地球的子物件，地球是太陽的子物件。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="太陽系" data-height="340">
+import { Color } from '@engine/math';
+import { define, type Entity } from '@engine/ecs';
+import { Transform, math } from '@engine/scene';
+import { spawn } from '@engine/render';
+import { ecs, engine, hierarchy, render, world } from './engine';
+
+render.scene.background = new Color(0x07080c); // 太空：比預設暗一點
+
+const Spin = define.component('Spin', () => ({ speed: 1 }));
+ecs.each('spin', [Transform, Spin], (_e, t, s, time) => math.rotate(t, [0, s.speed * time.delta, 0]));
+
+const camera = spawn.camera(world, { position: [0, 6, 10], target: [0, 0, 0], fov: 45 });
+spawn.light(world, { kind: 'ambient', intensity: 0.25 });
+
+function ball(radius: number, color: number, emissive: number, position: [number, number, number], parent?: Entity): Entity {
+  return spawn.mesh(world, {
+    geometry: { sphere: [radius, 32, 16] },
+    material: { standard: { color, emissive: color, emissiveIntensity: emissive } },
+    position,
+    parent,
+  });
+}
+
+// 太陽：會發光，中心放一個點光源（點光源是太陽的子物件）
+const sun = ball(1, 0xffc84a, 1, [0, 0, 0]);
+world.add(sun, Spin, { speed: 0.3 });
+spawn.light(world, { kind: 'point', intensity: 60, distance: 30, parent: sun });
+
+// 地球：太陽的子物件 → 跟著太陽轉（公轉）
+const earth = ball(0.35, 0x4f9dff, 0, [4, 0, 0], sun);
+world.add(earth, Spin, { speed: 2 });
+
+// 月球：地球的子物件 → 跟著地球轉
+ball(0.1, 0xdddddd, 0, [0.8, 0, 0], earth);
+
+console.log('太陽的子物件：', hierarchy.childrenOf(sun));
+engine.start();
+</script>
+
+<h2>場景管理</h2>
+<p>場景是一個有 <code>name</code> 與 <code>setup(world)</code> 的物件。<code>setup</code> 期間建立的實體屬於這個場景，切換場景時會自動銷毀。</p>
+<table>
+  <thead><tr><th>方法</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>scenes.register(...場景)</code></td><td>登記場景</td></tr>
+    <tr><td><code>scenes.load(名稱)</code></td><td>卸載目前的場景、載入新場景</td></tr>
+    <tr><td><code>scenes.load(名稱, { additive: true })</code></td><td>疊加載入（不卸載現有場景），例如暫停選單</td></tr>
+    <tr><td><code>scenes.unload(名稱)</code></td><td>卸載一個場景</td></tr>
+    <tr><td><code>scenes.persist(實體)</code></td><td>讓實體不隨場景卸載（例如玩家、背景音樂）</td></tr>
+  </tbody>
+</table>
+<p>在任何場景載入前建立的實體（例如攝影機、燈光）是永久的。下面的範例每 2 秒在兩個場景之間切換：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="切換場景" data-height="300">
+import { Transform, type Scene } from '@engine/scene';
+import { create, MeshRenderer, spawn } from '@engine/render';
+import { engine, scenes, world } from './engine';
+
+// 永久的實體：場景載入前建立
+const camera = spawn.camera(world, { position: [0, 2, 6], target: [0, 0, 0] });
+spawn.light(world, { kind: 'hemisphere', intensity: 2 });
+
+const material = (color: number) => create.material({ standard: { color } });
+
+const forest: Scene = {
+  name: 'forest',
+  setup(w) {
+    for (let i = 0; i < 12; i++) {
+      w.spawn(
+        Transform.at((i % 6) - 2.5, 0, Math.floor(i / 6) * -1.5),
+        MeshRenderer.with({ geometry: { cone: [0.3, 1.2, 8] }, material: material(0x4caf50) }),
+      );
+    }
+  },
+};
+
+const desert: Scene = {
+  name: 'desert',
+  setup(w) {
+    w.spawn(Transform, MeshRenderer.with({ geometry: { dodecahedron: 1 }, material: material(0xd8a657) }));
+  },
+  teardown() {
+    console.log('離開沙漠（實體會自動銷毀，這裡只要清理額外的資源）');
+  },
+};
+
+scenes.register(forest, desert).load('forest');
+console.log('森林：實體數量', world.entityCount);
+
+setInterval(() => {
+  scenes.load(scenes.isLoaded('forest') ? 'desert' : 'forest');
+  console.log(`切換到 ${scenes.isLoaded('forest') ? '森林' : '沙漠'}：實體數量 ${world.entityCount}`);
+}, 2000);
+
+engine.start();
+</script>
+
+<h2>場景檔</h2>
+<p>場景也可以寫成場景檔，放在專案的 <code>public/scenes/</code>。檔案記錄實體、名稱、父子關係與元件資料，可以寫成 XML（3D 場景編輯器 <code>/s3d-editor.html</code> 預設存成 XML）或 JSON，兩種內容完全一樣，載入時自動判斷。先看 JSON 的寫法：</p>
+<script type="text/plain" class="example" data-lang="json" data-run="false" data-title="public/scenes/forest.json">
+{
+  "format": "hero-scene",
+  "version": 1,
+  "entities": [
+    { "id": "sun", "name": "太陽", "components": { "Transform": { "rotation": [-60, 30, 0] }, "Light": { "intensity": 2 } } },
+    { "id": "tree", "name": "樹", "components": {
+      "Transform": { "position": [2, 0, -1] },
+      "MeshRenderer": { "geometry": { "cone": [0.3, 1.2, 8] }, "material": "#4caf50" }
+    } },
+    { "id": "apple", "parent": "tree", "components": { "Transform": { "position": [0, 0.8, 0] } } }
+  ]
+}
+</script>
+<ul>
+  <li><code>id</code>：檔案裡的編號，<code>parent</code> 用它指定父節點；<code>name</code> 是實體名稱（<code>Name</code> 元件），可以用 <code>scripts.find('樹')</code> 找到。</li>
+  <li>角度一律用「度」：<code>Transform</code> 的 <code>rotation</code>（X、Y、Z 順序）、<code>Light</code> 的 <code>angle</code>。省略的欄位用預設值。</li>
+  <li>能存的元件：<code>Transform</code>（場景外掛）、<code>MeshRenderer</code>、<code>Camera</code>、<code>Light</code>（繪製外掛）、<code>Model</code>（資源外掛）、<code>Animator</code>（動畫外掛）、<code>RigidBody</code>、<code>Collider</code>（物理外掛）、<code>ParticleEmitter</code>（粒子外掛）、<code>AudioSource</code>（音效外掛，<code>playing: true</code> 代表載入後自動播放）、<code>Text3D</code>（3D 文字外掛）、<code>UIPanel3D</code>（3D 介面外掛；事件處理函式要用 <code>ui3d.setHandlers</code> 註冊）。粒子的 <code>lifetime</code>、<code>size</code> 等可以寫數字或 <code>[最小, 最大]</code>，角度欄位一樣用度。網格的幾何、材質要寫描述；程式建立的 three.js 物件不能存。外掛要裝在 <code>ScenePlugin</code> 之後，才會登記自己的元件。</li>
+  <li>檔案裡有沒登記的元件（例如沒裝那個外掛）只會警告並略過；格式錯誤會說明是哪個實體、哪個欄位。</li>
+  <li><code>ui</code>（可省略）：這個場景搭配的介面檔，例如 <code>["ui/scene.xml", "ui/forest/hud.xml"]</code>。3D 場景編輯器會把它們疊在畫面上預覽；遊戲不會自動載入，照常用 <code>UIScreenManager</code>、<code>SceneTransition</code> 或 <code>ui.load</code> 載入介面。</li>
+</ul>
+<h3>XML 寫法</h3>
+<p>同一個場景寫成 XML：子實體直接寫在父實體裡面（不用 <code>parent</code>），元件的標籤就是元件名稱，欄位寫成屬性。</p>
+<script type="text/plain" class="example" data-lang="xml" data-run="false" data-readonly data-title="public/scenes/forest.xml">
+<Scene format="hero-scene" version="1">
+  <SceneUI src="ui/scene.xml"/>
+  <Settings background="#87ceeb">
+    <fog color="#87ceeb" near="10" far="40"/>
+  </Settings>
+  <Entity id="sun" name="太陽">
+    <Transform rotation="-60 30 0"/>
+    <Light intensity="2"/>
+  </Entity>
+  <Entity id="tree" name="樹">
+    <Transform position="2 0 -1"/>
+    <MeshRenderer material="#4caf50">
+      <geometry cone="0.3 1.2 8"/>
+    </MeshRenderer>
+    <Entity id="apple">
+      <Transform position="0 0.8 0"/>
+    </Entity>
+  </Entity>
+</Scene>
+</script>
+<ul>
+  <li>屬性值：<code>true</code>／<code>false</code> 是布林，像數字的是數字，用空白隔開的多個數字是陣列（<code>position="2 0 -1"</code>），其他都是文字。</li>
+  <li>物件寫成子元素（<code>&lt;geometry cone="…"/&gt;</code>）；其他少見的值：<code>is="null"</code>（例如 <code>&lt;play is="null"/&gt;</code>）、<code>is="array"</code>（裡面放 <code>&lt;item …/&gt;</code>）、看起來像數字的文字 <code>&lt;text is="string" value="12"/&gt;</code>。不能當標籤的鍵（中文、有 <code>/</code> 的）寫成 <code>&lt;_ key="鍵" …/&gt;</code>。</li>
+  <li><code>&lt;Settings&gt;</code> 是場景設定，<code>&lt;SceneUI src="…"/&gt;</code> 是搭配的介面檔（JSON 的 <code>ui</code>）；預製物件的實例寫成 <code>&lt;Entity id="tree1" prefab="prefabs/tree.xml"&gt;</code>，覆蓋裡面的東西用 <code>&lt;Override target="leaf" name="…"&gt;元件…&lt;/Override&gt;</code>（<code>&lt;Collider is="null"/&gt;</code> 代表移除）。</li>
+  <li>可以寫註解 <code>&lt;!-- … --&gt;</code>，但用編輯器存檔時會重新產生檔案（註解不會保留）。格式錯誤時訊息會附上行號。</li>
+</ul>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="載入場景檔">
+import { create, load } from '@engine';
+
+const data = await load.sceneFile('scenes/forest.xml'); // .json 也可以
+scenes.register(
+  create.sceneFromFile('forest', data, {
+    // 場景檔的實體建立好之後（例如加上遊戲邏輯、腳本）
+    setup(world, spawned) {
+      spawned.add('tree', Sway, { speed: 2 }); // 替 id 是 tree 的實體加上元件（找不到時警告、略過）
+      const tree = spawned.entities.get('tree'); // 檔案 id → 實體（找不到時是 undefined）
+      if (tree !== undefined) scripts.add(tree, Rustle);
+    },
+  }),
+);
+scenes.load('forest');
+</script>
+<h3>開發時自動重新載入</h3>
+<p>用 <code>load.sceneFile</code> 載入、<code>create.sceneFromFile</code> 建立的場景，在 <code>node hero dev</code> 時會自動重新載入：場景檔（或它用到的預製物件）存檔後，開著的遊戲馬上換成新的內容，不用重新整理頁面。在 3D 場景編輯器存檔、或直接修改檔案都可以。</p>
+<ul>
+  <li>重新載入會重新執行場景的 <code>setup</code>（場景裡的實體重建，<code>persist()</code> 的實體不受影響）。</li>
+  <li>不想要時：<code>create.sceneFromFile('forest', data, { hotReload: false })</code>。打包後的遊戲不包含這個功能。</li>
+</ul>
+<p>自己定義的元件要存進場景檔，登記「存讀規則」。欄位都是數字、文字、布林時用 <code>plainCodec</code>；其他的自己寫 <code>{ type, read, write }</code>：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="登記自訂元件">
+import { define } from '@engine/ecs';
+import { plainCodec } from '@engine/scene';
+
+const Health = define.component('Health', () => ({ max: 100, current: 100 }));
+scenePlugin.codecs.register(plainCodec(Health)); // 檔案裡寫 "Health": { "current": 40 }
+</script>
+<h3>預製物件</h3>
+<p>常用的一組物件（例如一棵樹、一個箱子）可以存成預製物件，放在 <code>public/prefabs/</code>，格式和場景檔一樣，但要<b>剛好有一個最上層的實體</b>。場景裡用 <code>prefab</code> 放置：</p>
+<script type="text/plain" class="example" data-lang="json" data-run="false" data-title="放置預製物件">
+{ "id": "tree1", "prefab": "prefabs/tree.json", "components": { "Transform": { "position": [3, 0, 1] } } }
+</script>
+<ul>
+  <li>載入時展開：預製物件的根節點變成 <code>tree1</code>，裡面其他的實體是 <code>tree1/原本的 id</code>（例如 <code>spawned.entities.get('tree1/leaf')</code>）。</li>
+  <li>實例的 <code>name</code>、<code>parent</code> 取代根節點的；實例的 <code>components</code> 逐一覆蓋根節點的同名元件（通常只有位置）。</li>
+  <li>修改預製物件檔，所有用到它的場景都會跟著變。預製物件裡也可以再放預製物件（不能互相包含）。</li>
+  <li><code>load.sceneFile</code> 會自動下載用到的預製物件；自己組資料時，把內容放在 <code>prefabs</code>（路徑 → 預製物件檔）。</li>
+  <li>要改預製物件裡面的東西（只影響這個實例）用 <code>overrides</code>：鍵是預製物件裡的 id（巢狀時是 <code>a/leaf</code>），<code>components</code> 裡的元件整個取代原本的，<code>null</code> 代表移除。預製物件改過、對不到的覆蓋只會警告。</li>
+</ul>
+<script type="text/plain" class="example" data-lang="json" data-run="false" data-title="覆蓋預製物件裡的東西">
+{ "id": "tree2", "prefab": "prefabs/tree.json",
+  "overrides": { "leaf": { "name": "紅葉", "components": { "MeshRenderer": { "geometry": { "sphere": 0.8 }, "material": "#c0392b" } } } } }
+</script>
+
+<h3>場景設定</h3>
+<p>不屬於任何實體的設定寫在 <code>settings</code>，載入場景時套用、卸載（切換場景）時恢復原狀。每個鍵由對應的外掛處理，沒有安裝那個外掛時只會警告：</p>
+<table>
+  <thead><tr><th>鍵</th><th>寫法</th><th>外掛</th></tr></thead>
+  <tbody>
+    <tr><td><code>background</code></td><td><code>"#223344"</code>，或 <code>null</code>（透明）</td><td><code>RenderPlugin</code></td></tr>
+    <tr><td><code>fog</code></td><td><code>{ "color", "near", "far" }</code>（線性）或 <code>{ "color", "density" }</code>（指數）</td><td><code>RenderPlugin</code></td></tr>
+    <tr><td><code>postfx</code></td><td>和 <code>PostFxSettings</code> 一樣，只寫要改的，例如 <code>{ "bloom": { "enabled": true } }</code></td><td><code>PostProcessingPlugin</code></td></tr>
+    <tr><td><code>navGrid</code></td><td><code>{ "min": [x, z], "max": [x, z], "cellSize", "y", "walkable": [可走, 擋住, 可走…] }</code></td><td><code>AIPlugin</code></td></tr>
+  </tbody>
+</table>
+<p><code>navGrid</code> 的 <code>walkable</code> 是「可走、擋住」交替的格數（一列一列，從最小角開始），省略代表全部可走；程式裡可以用 <code>navGridToFile</code>、<code>navGridFromFile</code>（<code>@engine/ai</code>）轉換。自己的外掛也可以登記設定：<code>scenePlugin.codecs.registerSetting({ key, apply(value, ctx) { …; return 恢復的函式 } })</code>。</p>
+<p>程式裡也可以直接讀寫：<code>sceneFile.spawn(world, 資料)</code> 建立實體，<code>sceneFile.write(world, 實體清單)</code> 存成場景檔，<code>sceneFile.stringify(資料)</code> 轉成 JSON 文字，<code>sceneFile.stringifyXml(資料)</code> 轉成 XML 文字；<code>sceneFile.parse(文字)</code> 兩種都能讀。</p>

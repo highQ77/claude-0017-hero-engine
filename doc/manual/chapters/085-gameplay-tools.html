@@ -1,0 +1,198 @@
+<!-- group: 遊戲邏輯 -->
+<h1>遊戲邏輯小工具</h1>
+<p class="lead">幾乎每個遊戲都會用到的小工具：計時器、事件、可以重現的亂數、路徑曲線、物件池、存檔、記錄器，以及檢查用的除錯繪製。它們都不需要另外安裝外掛。</p>
+
+<script type="text/plain" class="example" data-lang="ts" data-title="巡邏的球：路徑、亂數、計時器、事件、除錯繪製" data-height="360">
+import { define } from '@engine/ecs';
+import { Transform } from '@engine/scene';
+import { Path, Random } from '@engine/math';
+import { spawn } from '@engine/render';
+import { engine, render, world } from './engine';
+
+spawn.camera(world, { position: [0, 9, 9], target: [0, 0, 0], fov: 50 });
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { plane: 14 }, material: '#2a3027', rotation: [-Math.PI / 2, 0, 0] });
+
+// 同一個種子：每次打開，巡邏路線都一樣
+const rng = new Random('patrol');
+const points = Array.from({ length: 6 }, (_, i) => {
+  const a = (i / 6) * Math.PI * 2;
+  const r = rng.range(3, 5.5);
+  return [Math.cos(a) * r, 0.4, Math.sin(a) * r] as [number, number, number];
+});
+const path = new Path(points, { closed: true });
+
+// 事件：球繞完一圈時通知
+const LapDone = define.event<{ lap: number }>('LapDone');
+world.events.on(LapDone, (e) => console.log(`繞完第 ${e.lap} 圈`));
+
+const ball = spawn.mesh(world, { geometry: { sphere: 0.4 }, material: '#ffa94f', position: points[0] });
+let t = 0;
+let lap = 0;
+engine.on('update', (time) => {
+  t += (time.delta * 2) / path.length; // 每秒走 2 公尺（依實際距離，速度均勻）
+  if (t >= lap + 1) world.events.emit(LapDone, { lap: ++lap });
+  path.pointAt(t, world.require(ball, Transform).position);
+  // 除錯繪製：每一幀畫出路線與前進方向（只畫這一幀，所以每幀都要畫）
+  render.debug.path(path.sample(64), { closed: true, color: '#4cc9f0' });
+  render.debug.ray(path.pointAt(t), path.tangentAt(t), 1.2, { color: '#ff6b6b' });
+});
+
+// 計時器：每 1.5 秒在球的位置留下一個記號，畫 3 秒
+engine.timers.every(1.5, () => {
+  render.debug.sphere(world.require(ball, Transform).position, 0.25, { duration: 3, color: '#ffd166' });
+});
+
+engine.start();
+</script>
+
+<h2>計時器</h2>
+<p><code>engine.timers</code>：幾秒後做一件事、每隔幾秒做一件事。和瀏覽器的 <code>setTimeout</code>／<code>setInterval</code> 不同，它跟著遊戲的主迴圈走：<b>遊戲暫停時不會觸發</b>，預設也<b>跟著時間縮放</b>（慢動作時一起變慢，<code>timeScale</code> 為 0 時停住）。在 update 階段最前面觸發。</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="計時器">
+const h = engine.timers.every(0.5, () => updateHud());       // 每 0.5 秒；h.cancel() 停止
+engine.timers.after(2, () => door.open());                    // 2 秒後執行一次
+engine.timers.after(3, respawn, { owner: enemy });            // 綁定實體：敵人被銷毀時自動取消
+engine.timers.every(1, showFps, { realtime: true });          // 用真實時間（慢動作時一樣每秒一次；暫停時一樣不觸發）
+engine.timers.every(5, autosave, { immediate: true });        // 先執行一次，之後每 5 秒
+</script>
+<ul>
+  <li>腳本裡用 <code>this.after(秒, 函式)</code>、<code>this.every(秒, 函式)</code>：腳本結束（實體銷毀或移除腳本）時自動取消；要等待一段時間再往下執行用 <code>await this.wait(秒)</code>。</li>
+  <li>回呼出錯時會記錄錯誤，其他計時器照常執行；畫面卡很久時，<code>every</code> 一幀最多補觸發 10 次。</li>
+  <li>要在遊戲暫停時也持續（例如連線狀態）才用 <code>setInterval</code>。</li>
+</ul>
+
+<h2>事件</h2>
+<p>物件之間互相通知，不用互相知道對方：發出的一方只管 <code>emit</code>，有興趣的一方自己 <code>on</code>。事件用 <code>define.event</code> 定義，內容有型別：</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="事件">
+import { define } from '@engine/ecs';
+
+// 定義事件（通常放在共用的檔案，大家都引用同一個）
+export const CoinCollected = define.event<{ value: number }>('CoinCollected');
+export const GameOver = define.event('GameOver'); // 沒有內容的事件
+
+world.events.emit(CoinCollected, { value: 1 });                     // 發出（馬上通知所有收聽的函式）
+const off = world.events.on(CoinCollected, (e) => (score += e.value)); // 收聽；off() 取消
+world.events.once(GameOver, showGameOver);                            // 只收一次
+world.events.on(GameOver, flash, { owner: hud });                     // 綁定實體：實體銷毀時自動取消
+
+// 腳本裡：this.on 在腳本結束時自動取消；this.emit 發出
+class Coin extends Script {
+  onTriggerEnter() {
+    this.emit(CoinCollected, { value: 1 });
+  }
+}
+</script>
+<p>收聽的函式出錯時會記錄錯誤，其他收聽的函式照常收到。範例專案 official-demo-000-start 的金幣就是用事件通知分數、介面（<code>src/coin.ts</code> 的 <code>CoinCollected</code>）。</p>
+
+<h2>可以重現的亂數</h2>
+<p><code>Random</code>（<code>@engine/math</code>）：給同一個種子，每次得到同樣的一串數字。適合關卡產生、多人連線（大家用同一個種子就得到同樣的地圖）、可以重現的測試。不給種子時每次不同，但可以讀 <code>rng.seed</code> 記下來，之後重現同一局。</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="Random">
+import { Random } from '@engine/math';
+
+const rng = new Random(42);            // 也可以用文字：new Random('level-3')
+rng.next();                            // 0 ≤ x < 1
+rng.range(-5, 5);                      // -5 ≤ x < 5
+rng.int(1, 6);                         // 骰子：1~6（包含 6）
+rng.chance(0.25);                      // 25% 的機會是 true
+rng.pick(['紅', '綠', '藍']);
+rng.weighted([['普通', 80], ['稀有', 15], ['傳說', 5]]);
+rng.shuffle(cards);                    // 打亂（直接改這個陣列）
+const enemiesRng = rng.fork();         // 分出一個：不同用途互不影響
+</script>
+<p>不適合密碼、抽獎等需要安全的用途。</p>
+
+<h2>路徑曲線</h2>
+<p><code>Path</code>（<code>@engine/math</code>）：穿過幾個點的平滑曲線，用在巡邏路線、攝影機軌道、移動平台。<code>t</code> 從 0（起點）到 1（終點），<b>依實際距離計算</b>，所以用固定的速度推進 <code>t</code> 時移動速度是均勻的。</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="Path">
+import { Path } from '@engine/math';
+
+const path = new Path([[0, 0, 0], [4, 1, 2], [8, 0, 0]], { closed: false });
+path.pointAt(0.5, transform.position);   // 走到一半的位置（給 target 時直接寫進去，不建立新物件）
+path.tangentAt(0.5);                     // 那裡的前進方向（單位向量）
+path.pointAtDistance(3);                 // 走了 3 公尺的位置
+path.length;                             // 全長
+path.sample(32);                         // 均勻取 32 個點（畫出來檢查：render.debug.path(…)）
+</script>
+<p><code>closed: true</code> 時頭尾相連，<code>t</code> 超過 1 會繞回來。預設是轉彎自然、不會繞出多餘圈的曲線；給 <code>tension</code>（0~1）可以調整鬆緊。</p>
+
+<h2>物件池</h2>
+<p>子彈、火花、敵人這類一直建立又銷毀的東西，可以放進池子重複使用，避免遊戲中途建立物件時卡一下。池子不知道物件的內容：拿出來、放回去時要做的事寫在 <code>onAcquire</code>、<code>onRelease</code>。</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="物件池">
+import { createPool } from '@engine/core';
+import { MeshRenderer, spawn } from '@engine/render';
+
+const bullets = createPool({
+  create: () => spawn.mesh(world, { geometry: { sphere: 0.1 }, material: '#ffd166' }),
+  onAcquire: (e) => (world.require(e, MeshRenderer).visible = true),   // 拿出來：顯示
+  onRelease: (e) => (world.require(e, MeshRenderer).visible = false),  // 放回去：藏起來
+  max: 50,                                                             // 最多留 50 個閒置的
+  destroy: (e) => world.destroy(e),                                    // 多的、或 clear 時銷毀
+});
+bullets.prewarm(20);                 // 先建立 20 個
+const b = bullets.acquire();         // 拿一個（池子空了就建立新的）
+bullets.release(b);                  // 用完放回去
+</script>
+
+<h2>存檔</h2>
+<p><code>createSave</code>（<code>@engine/core</code>）：把進度存在瀏覽器裡（localStorage），下次打開還在。每個存檔記錄格式的版本號：遊戲改了存檔格式時把 <code>version</code> 加 1，讀到舊版本的存檔會交給 <code>migrate</code> 轉換。</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="存檔">
+import { SaveError, createSave } from '@engine/core';
+
+interface Progress { level: number; coins: number }
+const save = createSave<Progress>({
+  name: 'my-game',                                   // 同一個網站的不同遊戲不會互相蓋掉
+  version: 2,
+  migrate: (old, from) => ({ level: (old as { lv: number }).lv, coins: 0 }), // 第 1 版的存檔轉成第 2 版
+  validate: (d) => typeof (d as Progress).level === 'number',
+});
+
+save.write('slot1', { level: 3, coins: 120 });
+try {
+  const p = save.read('slot1');                      // 沒有存檔時是 null
+} catch (error) {
+  if (error instanceof SaveError) ui.toast(`存檔讀不到：${error.message}`);
+}
+save.list();                                         // [{ slot, savedAt, version }]（新的在前面）
+save.remove('slot1');
+</script>
+<ul>
+  <li>存檔壞掉、比遊戲還新、轉換失敗、<code>validate</code> 沒通過時，<code>read</code> 會丟出 <code>SaveError</code>，訊息說明是哪個存檔、什麼問題；<code>list</code> 照樣會列出壞掉的存檔，讓玩家可以刪除。</li>
+  <li>存檔欄位名稱可以用英數字、中文、<code>-</code>、<code>_</code>；資料要能轉成 JSON。</li>
+  <li>瀏覽器不允許使用 localStorage 時改存在記憶體裡（關掉頁面就沒了），並警告一次。測試或其他平台可以用 <code>storage</code> 自己提供（例如 <code>memoryStorage()</code>）。</li>
+</ul>
+
+<h2>記錄器</h2>
+<p>引擎的訊息都透過記錄器輸出，前面標出模組名稱（例如 <code>[physics] …</code>），可以依等級過濾。遊戲也可以用同一套：</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="記錄器">
+import { createLogger, onLog, setLogLevel } from '@engine/core';
+
+const log = createLogger('shop');
+log.debug('細節');                // 預設不顯示（new Engine({ debug: true }) 時顯示）
+log.info('開店');                 // 主控台：[shop] 開店
+log.warn('庫存不足', item);
+log.error('付款失敗', error);
+
+setLogLevel('warn');              // 只顯示警告與錯誤（例如正式版）；'silent' 全部不顯示
+const off = onLog((e) => {        // 收到每一則訊息：顯示在遊戲畫面上、測試檢查有沒有警告
+  if (e.level === 'error') ui.toast(`錯誤：${e.module}`);
+});
+</script>
+<p>等級由低到高是 <code>debug</code>、<code>info</code>、<code>warn</code>、<code>error</code>，預設 <code>info</code>；等級是整個頁面共用的。</p>
+
+<h2>除錯繪製</h2>
+<p><code>render.debug</code>：在 3D 畫面上畫線、射線、方框、球、點、路徑，檢查 AI 的視線、射線、偵測範圍、路線。這些只是畫面上的線：不會被點選，也不會出現在場景檔裡。</p>
+<script type="text/plain" class="example" data-lang="ts" data-readonly data-title="除錯繪製">
+render.debug.line([0, 0, 0], [2, 1, 0]);                        // 這一幀畫一條線
+render.debug.ray(eye, forward, 8, { color: '#ff4040' });        // 射線（末端有箭頭）
+render.debug.box(center, [1, 2, 1], { duration: 2 });           // 畫 2 秒（真實時間）
+render.debug.box(someBox3);                                     // 也可以直接給 Box3
+render.debug.sphere(enemyPos, viewRange, { color: '#ffd166' }); // 偵測範圍
+render.debug.point(hit.point);                                  // 小十字
+render.debug.path(points, { closed: true });                    // 連起來的線
+render.debug.enabled = false;                                   // 全部不畫（例如正式版）
+</script>
+<ul>
+  <li>沒給 <code>duration</code> 只畫這一幀：每幀都要看到，就每幀呼叫（例如寫在系統裡）。</li>
+  <li>預設畫在最上面（不會被擋住）；<code>depthTest: true</code> 時會被前面的物體擋住。</li>
+  <li>物理的碰撞形狀另外有 <code>physicsPlugin.debug = true</code>（見<a href="#/physics">物理</a>）。</li>
+</ul>

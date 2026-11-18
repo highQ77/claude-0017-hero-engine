@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hero Engine 使用手冊</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <button id="menu-toggle" class="icon-btn" type="button" aria-label="目錄">☰</button>
+      <a class="brand" href="#/"><span class="brand-mark">H</span>Hero Engine <span class="brand-sub">使用手冊</span></a>
+      <nav class="doc-tabs" id="tabs" aria-label="手冊分頁">
+        <a href="#/" data-tab="guide">說明文件</a>
+        <a href="#/api" data-tab="api">API</a>
+      </nav>
+    </header>
+    <aside id="sidebar">
+      <div class="search-box">
+        <input id="search" type="search" placeholder="搜尋手冊（按 / ）" autocomplete="off" aria-label="搜尋手冊" />
+      </div>
+      <div id="search-results" hidden></div>
+      <nav id="nav" aria-label="章節"></nav>
+    </aside>
+    <div id="scrim"></div>
+    <main id="content"></main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

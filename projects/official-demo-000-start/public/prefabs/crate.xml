@@ -1,0 +1,16 @@
+<Scene format="hero-scene" version="1">
+  <Entity id="crate" name="箱子">
+    <Transform/>
+    <RigidBody linearDamping="0.1" angularDamping="0.3"/>
+    <Collider halfExtents="0.3 0.3 0.3" friction="0.8" restitution="0.2"/>
+    <Entity id="visual" name="外觀">
+      <Transform scale="0.6 0.6 0.6"/>
+      <MeshRenderer castShadow="true" receiveShadow="true">
+        <geometry box="1"/>
+        <material>
+          <standard color="#8bd17c" roughness="0.6"/>
+        </material>
+      </MeshRenderer>
+    </Entity>
+  </Entity>
+</Scene>

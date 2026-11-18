@@ -1,0 +1,275 @@
+<!-- group: 畫面與操作 -->
+<h1>繪製：攝影機、燈光、網格</h1>
+<p class="lead"><code>RenderPlugin</code> 把有 <code>Camera</code>、<code>Light</code>、<code>MeshRenderer</code> 元件的實體同步成 three.js 物件並畫出來。遊戲邏輯只碰元件，不需要直接操作 three.js 的場景。</p>
+
+<h2>RenderPlugin 設定</h2>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="new RenderPlugin(設定)（寫在 engine.ts）">
+export const render = use(new RenderPlugin({
+  background: 0x15181f,      // 背景顏色；null 為透明
+  shadows: true,             // 啟用陰影
+  antialias: true,
+  pixelRatio: 2,             // 預設為裝置像素比（最高 2）
+  container: document.body,  // 畫布放在哪裡（預設 body，尺寸跟隨視窗）
+  adaptiveResolution: true,  // 跟不上 60 FPS 時自動降低解析度（介面不受影響）
+  orbitControls: true,       // 用滑鼠轉動目前的攝影機（見下面的「攝影機繞轉控制」）
+}));
+</script>
+
+<h2>元件</h2>
+<table>
+  <thead><tr><th>元件</th><th>常用欄位</th></tr></thead>
+  <tbody>
+    <tr><td><code>Camera</code></td><td><code>kind</code>（perspective／orthographic）、<code>fov</code>、<code>near</code>、<code>far</code>、<code>size</code>（正交的可視半高）、<code>priority</code>（多台攝影機時最高的負責繪製）</td></tr>
+    <tr><td><code>Light</code></td><td><code>kind</code>（ambient／hemisphere／directional／point／spot）、<code>color</code>、<code>intensity</code>、<code>castShadow</code>、<code>distance</code>、<code>angle</code></td></tr>
+    <tr><td><code>MeshRenderer</code></td><td><code>geometry</code>、<code>material</code>、<code>castShadow</code>、<code>receiveShadow</code>、<code>visible</code></td></tr>
+    <tr><td><code>SceneObject</code></td><td><code>object</code>：直接放任何 three.js 物件（例如載入的模型、自己組的群組）</td></tr>
+  </tbody>
+</table>
+<p>攝影機、平行光、聚光燈朝向自己的 -Z 方向。建立時用 <code>spawn.camera</code>／<code>spawn.light</code> 的 <code>target</code> 指定看向哪裡；之後要改朝向時用 <code>math.lookAt(transform, 目標)</code>。</p>
+
+<h2>簡潔的寫法：小工具與描述</h2>
+<p>常用的攝影機、燈光、網格有小工具，放在 <code>spawn</code> 底下，一行完成「建立實體＋位置＋朝向」；位置可以寫 <code>[x, y, z]</code>。每個都回傳建立的實體，用 <code>const</code> 接住，之後可以再加元件或移動它。網格的幾何與材質可以寫<strong>描述</strong>，不用 import three.js：</p>
+<table>
+  <thead><tr><th>寫法</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>spawn.camera(world, { position, target, fov })</code></td><td>攝影機（預設在 [0, 2, 6] 看向原點）</td></tr>
+    <tr><td><code>spawn.defaultLights(world, { intensity, shadows })</code></td><td>半球光＋從斜上方照下的平行光；回傳 <code>{ ambient, sun }</code></td></tr>
+    <tr><td><code>spawn.light(world, { kind, position, target, … })</code></td><td>任一種燈光</td></tr>
+    <tr><td><code>spawn.mesh(world, { geometry, material, position, rotation, scale })</code></td><td>網格</td></tr>
+    <tr><td><code>spawn.grid(world, { size, divisions, color })</code></td><td>地面格線</td></tr>
+  </tbody>
+</table>
+<p>幾何描述：<code>{ box: 1 }</code>、<code>{ box: [寬, 高, 深] }</code>、<code>{ sphere: 半徑 }</code>、<code>{ plane: [寬, 高, 橫向分段, 縱向分段] }</code>、<code>{ circle: 半徑 }</code>、<code>{ cylinder: [半徑, 高] }</code>、<code>{ cone: [半徑, 高] }</code>、<code>{ capsule: [半徑, 長] }</code>、<code>{ torus: [半徑, 管徑] }</code>、<code>{ torusKnot: [半徑, 管徑] }</code>、<code>{ dodecahedron: 半徑 }</code>（還有 <code>icosahedron</code>、<code>octahedron</code>、<code>tetrahedron</code>）。都可以加 <code>rotation: [x, y, z]</code>（先把幾何轉好，例如立起來的硬幣）和 <code>offset: [x, y, z]</code>（移動幾何，例如以底部為中心縮放的方塊 <code>{ box: 1, offset: [0, 0.5, 0] }</code>）。</p>
+<p>材質描述：<code>'#ffb347'</code>（顏色簡寫，等於 standard）、<code>{ standard: { color, roughness, metalness, emissive… } }</code>、<code>{ physical: {…} }</code>、<code>{ basic: {…} }</code>（不受光照）、<code>{ lambert: {…} }</code>、<code>{ phong: {…} }</code>；參數和 three.js 材質一樣，另外：</p>
+<ul>
+  <li><code>side</code>：<code>'front'</code>、<code>'back'</code>、<code>'double'</code>；<code>blending</code>：<code>'normal'</code>、<code>'additive'</code>（發光特效）、<code>'subtractive'</code>、<code>'multiply'</code>。</li>
+  <li>貼圖直接寫網址，自動載入：<code>{ standard: { map: 'textures/wood.png', repeat: 4 } }</code>（<code>repeat</code> 重複幾次，<code>wrap</code> 可以是 <code>'repeat'</code>、<code>'clamp'</code>、<code>'mirror'</code>）。<code>normalMap</code>、<code>roughnessMap</code> 等也一樣；同樣的網址與設定共用同一張貼圖。</li>
+  <li>要在執行中修改材質（例如點擊後換顏色、依狀態改發光）時，用 <code>create.material(描述)</code> 建立自己的一份（不會和其他物件共用），回傳的就是對應的 three.js 材質（<code>{ standard }</code> → <code>MeshStandardMaterial</code>）。</li>
+</ul>
+<p>常用的型別名稱（<code>MeshStandardMaterial</code>、<code>Material</code>、<code>Texture</code>、<code>Object3D</code>…）可以從 <code>@engine/render</code> 引用；向量、四元數、顏色從 <code>@engine/math</code> 引用（就是 three.js 的類別）。一般的遊戲程式不需要 <code>import three</code>。</p>
+<p>內容一樣的描述共用同一份（下面 40 顆球只有 1 份幾何、4 份材質），沒有實體在用時自動釋放。也可以用總入口 <code>import * as hero from '@engine'</code>，所有模組都在 <code>hero</code> 底下：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="小工具與描述" data-height="340">
+import * as hero from '@engine';
+import { engine, render, world } from './engine';
+
+const camera = hero.spawn.camera(world, { position: [0, 4, 9], target: [0, 0.5, 0], fov: 45 });
+world.add(camera, hero.OrbitControl, { maxPolarAngle: Math.PI / 2 - 0.05 }); // 拖曳轉動，不會轉到地板下
+hero.spawn.defaultLights(world, { shadows: true });
+
+// 地板：平面轉 -90° 躺平
+hero.spawn.mesh(world, { geometry: { plane: 14 }, material: '#2a2f25', rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+
+// 40 顆球：一樣的描述共用同一份幾何與材質
+const colors = ['#ff6b6b', '#ffb347', '#9acd32', '#6aa8ff'];
+for (let i = 0; i < 40; i++) {
+  const angle = (i / 40) * Math.PI * 4;
+  hero.spawn.mesh(world, {
+    geometry: { sphere: 0.3 },
+    material: { standard: { color: colors[i % 4], roughness: 0.35 } },
+    position: [Math.cos(angle) * (1 + i * 0.1), 0.3 + i * 0.05, Math.sin(angle) * (1 + i * 0.1)],
+    castShadow: true,
+  });
+}
+// 發光的繩結（emissive）
+hero.spawn.mesh(world, { geometry: { torusKnot: [0.5, 0.15] }, material: { standard: { color: '#222', emissive: '#4fd1c5' } }, position: [0, 1.4, 0], castShadow: true });
+
+engine.start();
+setTimeout(() => console.log('共用的資源：', render.resources.stats), 300);
+</script>
+<div class="note">
+  <p>描述建立後不要直接改裡面的值（例如 <code>desc.standard.color = …</code>）；要換外觀時指定一個新的描述：<code>world.require(e, hero.MeshRenderer).material = '#ff0000'</code>。需要實際的 three.js 物件時用 <code>render.getObject(實體)</code>。自訂著色器、載入的模型、貼圖等，照樣直接給 three.js 物件。</p>
+</div>
+
+<h2>攝影機繞轉控制</h2>
+<p>在攝影機上加 <code>OrbitControl</code>，就能用滑鼠或手指繞著目標點轉動、縮放、平移（像模型檢視器）：</p>
+<table>
+  <thead><tr><th>操作</th><th>滑鼠</th><th>觸控</th></tr></thead>
+  <tbody>
+    <tr><td>轉動</td><td>左鍵拖曳</td><td>單指拖曳</td></tr>
+    <tr><td>縮放</td><td>滾輪</td><td>雙指捏合</td></tr>
+    <tr><td>平移</td><td>右鍵拖曳，或 <kbd>Shift</kbd> + 左鍵拖曳</td><td>雙指一起移動</td></tr>
+  </tbody>
+</table>
+<p>點到 2D 介面（按鈕、滑桿…）的操作不會轉動攝影機。放開後有一點慣性（<code>damping</code>，0 為沒有）。這本手冊的所有範例都預設開啟（範例的執行環境設定了 <code>RenderPlugin.defaults.orbitControls</code>），試著拖曳下面的畫面：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="OrbitControl" data-height="340">
+import { Vector3 } from '@engine/math';
+import { OrbitControl, spawn } from '@engine/render';
+import { engine, world } from './engine';
+
+const camera = spawn.camera(world, { position: [4, 3, 6], fov: 50 });
+world.add(camera, OrbitControl, {
+  target: new Vector3(0, 0.5, 0), // 繞著這一點轉（null：從攝影機的朝向推算）
+  minDistance: 3,                       // 最近
+  maxDistance: 15,                      // 最遠
+  maxPolarAngle: Math.PI / 2 - 0.05,    // 不能轉到地面以下
+  autoRotate: 0.3,                      // 沒操作時自動慢慢轉（弧度／秒）
+  damping: 0.08,                        // 慣性（秒）
+});
+
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { plane: 12 }, material: '#2a2f3a', rotation: [-Math.PI / 2, 0, 0] });
+spawn.mesh(world, { geometry: { torusKnot: [0.6, 0.2] }, material: { standard: { color: '#ffb347', metalness: 0.4, roughness: 0.3 } }, position: [0, 1, 0] });
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2;
+  spawn.mesh(world, { geometry: { box: 0.5 }, material: '#4f9dff', position: [Math.cos(a) * 3, 0.25, Math.sin(a) * 3] });
+}
+engine.start();
+</script>
+<p>其他設定：<code>rotate</code>、<code>zoom</code>、<code>pan</code>（關掉某個操作）、<code>rotateSpeed</code>／<code>zoomSpeed</code>／<code>panSpeed</code>、<code>minPolarAngle</code>、<code>enabled</code>。正交攝影機縮放時改變它的 <code>zoom</code>。</p>
+<p>不想自己加元件時，<code>new RenderPlugin({ orbitControls: true })</code> 會自動控制目前的攝影機：使用者第一次操作前不會動攝影機，遊戲自己的攝影機動畫照常運作；沒有操作時，遊戲移動攝影機後，下次會從新的位置接著轉。</p>
+<div class="note">
+  <p>攝影機要是最上層的實體（沒有父節點）。手冊範例不想要這個功能時，寫 <code>new RenderPlugin({ orbitControls: false })</code>。嵌在網頁裡時可以設 <code>wheelNeedsFocus: true</code>：先點一下畫面，滾輪才會縮放，捲動頁面時不會誤觸。</p>
+</div>
+
+<h2>攝影機跟隨與晃動</h2>
+<p>攝影機加上 <code>CameraFollow</code>：平滑地跟著目標、一直看著它，可以限制攝影機的範圍。<code>shakeCamera(world, 攝影機, 0~1)</code> 讓畫面晃一下（受傷、爆炸、落地），可以疊加，會自己慢慢停下來。下面的球自己亂走，攝影機跟著它；每 2 秒晃一下：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="跟隨與晃動" data-height="360">
+import { Vector3 } from '@engine/math';
+import { Transform } from '@engine/scene';
+import { CameraFollow, shakeCamera, spawn } from '@engine/render';
+import { engine, world } from './engine';
+
+spawn.defaultLights(world, { shadows: true });
+spawn.mesh(world, { geometry: { plane: 30 }, material: { standard: { map: 'textures/checker.png', repeat: 15 } }, rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+for (let i = 0; i < 12; i++) {
+  const a = i * 0.52;
+  spawn.mesh(world, { geometry: { box: [1, 1 + (i % 3), 1] }, material: '#5a6b52', position: [Math.cos(a) * 8, 0.5, Math.sin(a) * 8], castShadow: true });
+}
+
+const ball = spawn.mesh(world, { geometry: { sphere: 0.5 }, material: '#ffa94f', position: [0, 0.5, 0], castShadow: true });
+const camera = spawn.camera(world, { position: [0, 4, 8], fov: 55 });
+world.add(camera, CameraFollow, {
+  target: ball,
+  offset: new Vector3(0, 4, 7),     // 在球的後上方
+  smoothTime: 0.4,                   // 越大跟得越慢、越柔和
+  lookOffset: new Vector3(0, 0.5, 0),
+});
+
+// 球沿著一條彎曲的路線亂走
+engine.on('update', (time) => {
+  const t = time.elapsed * 0.6;
+  world.require(ball, Transform).position.set(Math.sin(t) * 6, 0.5, Math.sin(t * 1.7) * 4);
+});
+// 每 2 秒晃一下
+engine.timers.every(2, () => shakeCamera(world, camera, 0.6));
+
+engine.start();
+</script>
+<table>
+  <thead><tr><th>CameraFollow 欄位</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>target</code></td><td>跟隨的實體（<code>null</code> 或被銷毀時攝影機不動）</td></tr>
+    <tr><td><code>offset</code></td><td>攝影機相對目標的位置（預設後上方 <code>(0, 3, 6)</code>）</td></tr>
+    <tr><td><code>offsetSpace</code></td><td><code>'world'</code>：固定方向（俯視、橫向捲軸）；<code>'target'</code>：跟著目標的左右轉向，一直待在它背後（第三人稱）</td></tr>
+    <tr><td><code>smoothTime</code></td><td>位置的平滑時間（秒）；<code>0</code> 立刻跟上（預設 0.25）</td></tr>
+    <tr><td><code>lookAt</code>、<code>lookOffset</code>、<code>rotationSmoothTime</code></td><td>一直看著目標的哪裡（例如頭部 <code>(0, 1.5, 0)</code>），轉向的平滑時間</td></tr>
+    <tr><td><code>bounds</code></td><td><code>{ min, max }</code>：攝影機不會超出這個範圍（不要拍到地圖外面）</td></tr>
+    <tr><td><code>enabled</code></td><td>暫停跟隨</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li>第一幀直接就位（不會從原點飛過去）；傳送或換場景之後要直接跳過去，呼叫 <code>render.snapCamera(攝影機)</code>。</li>
+  <li>晃動只加在繪製用的攝影機上，<b>不會改到攝影機的 Transform</b>：不會越晃越偏，也不會和自己寫的攝影機程式或 <code>OrbitControl</code> 互相干擾。設定：<code>shakeCamera(world, cam, 0.5, { maxOffset, maxAngle, decay, frequency })</code>（位移公尺、旋轉度數、每秒衰減、快慢）。</li>
+  <li>跟隨和滑鼠繞轉（<code>OrbitControl</code>）不要放在同一台攝影機上；有 <code>CameraFollow</code> 的攝影機，<code>orbitControls: true</code> 也不會自動加上繞轉控制。</li>
+  <li>範例專案 official-demo-000-start：按 <kbd>C</kbd> 在「自動環繞」和「跟隨方塊」之間切換；爆炸、用力撞擊時畫面會晃。</li>
+</ul>
+
+<h2>繪製圖層與子畫面</h2>
+<p>圖層決定<b>哪台攝影機畫哪些物件</b>：物件加上 <code>RenderLayer</code> 指定它在哪些圖層，攝影機加上 <code>CameraLayers</code> 指定它畫哪些圖層。<code>CameraViewport</code> 把另一台攝影機畫在畫面的一塊範圍裡（小地圖、後照鏡、子母畫面）。下面右上角是俯視的小地圖：黃色的大記號只在 <code>minimap</code> 圖層，主畫面看不到它。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="小地圖：圖層與子畫面" data-height="360">
+import { Vector3 } from '@engine/math';
+import { Transform } from '@engine/scene';
+import { CameraFollow, CameraLayers, CameraViewport, RenderLayer, spawn } from '@engine/render';
+import { engine, world } from './engine';
+
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { plane: 30 }, material: '#2f3a2c', rotation: [-Math.PI / 2, 0, 0] });
+for (let i = 0; i < 16; i++) {
+  const a = i * 0.39;
+  spawn.mesh(world, { geometry: { box: [1, 1 + (i % 4), 1] }, material: '#6b7f5a', position: [Math.cos(a) * 9, 0.5, Math.sin(a) * 9] });
+}
+
+const ball = spawn.mesh(world, { geometry: { sphere: 0.5 }, material: '#ffa94f', position: [0, 0.5, 0] });
+// 小地圖上的記號：只在 minimap 圖層（主畫面看不到），跟著球
+const marker = spawn.mesh(world, { geometry: { sphere: 1.2 }, material: '#ffd166', position: [0, 3, 0], parent: ball });
+world.add(marker, RenderLayer, { layers: ['minimap'] });
+
+// 主畫面：跟著球（沒有 CameraLayers：只畫 default）
+const main = spawn.camera(world, { fov: 55 });
+world.add(main, CameraFollow, { target: ball, offset: new Vector3(0, 5, 8) });
+
+// 小地圖：從正上方往下看的正交攝影機，畫 default 和 minimap，放在右上角
+const map = spawn.camera(world, { kind: 'orthographic', size: 11, position: [0, 30, 0.01], target: [0, 0, 0] });
+world.add(map, CameraLayers, { layers: ['default', 'minimap'] });
+world.add(map, CameraViewport, { x: 0.68, y: 0.04, width: 0.3, height: 0.42, background: '#101210' });
+
+engine.on('update', (time) => {
+  const t = time.elapsed * 0.5;
+  world.require(ball, Transform).position.set(Math.sin(t) * 6, 0.5, Math.sin(t * 1.6) * 5);
+});
+engine.start();
+</script>
+<ul>
+  <li>沒有 <code>RenderLayer</code> 的物件在 <code>'default'</code> 圖層；沒有 <code>CameraLayers</code> 的攝影機只畫 <code>'default'</code>。圖層名稱第一次用到時自動配編號（最多 32 個）。</li>
+  <li><code>RenderLayer</code> 套用到物件與它的子物件（例如模型裡的每個零件）；移除後恢復成 <code>'default'</code>。</li>
+  <li>燈光預設照亮所有圖層；給燈光 <code>RenderLayer</code> 時只照亮那些圖層。</li>
+  <li><code>render.pick</code> 只會選到主畫面攝影機看得到的圖層。</li>
+  <li><code>CameraViewport</code> 的 <code>x</code>、<code>y</code>、<code>width</code>、<code>height</code> 是畫面的比例（0~1，從左上角算起）；<code>background: null</code> 時是透明的，直接疊在主畫面上。有 <code>CameraViewport</code> 的攝影機不會被選為主畫面，在主畫面（含後製）之後、2D 介面之前繪製，不套用後製。</li>
+  <li>三個元件都能存進場景檔（圖層寫成 <code>layers="default minimap"</code>），3D 場景編輯器的屬性面板可以直接編輯。</li>
+</ul>
+
+<h2>陰影與點選物件</h2>
+<p>平行光加上 <code>castShadow</code>、物件加上 <code>castShadow</code>／<code>receiveShadow</code> 就有陰影。<code>render.pick(ndcX, ndcY)</code> 回傳滑鼠指到的實體，搭配輸入外掛的 <code>input.pointer</code> 使用。在下面的畫面上點擊方塊，它會換顏色：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="陰影與點選" data-height="360">
+import { create, MeshRenderer, type MeshStandardMaterial, spawn } from '@engine/render';
+import { engine, input, render, world } from './engine';
+
+const camera = spawn.camera(world, { position: [4, 5, 7], target: [0, 0.5, 0], fov: 45 });
+
+spawn.light(world, { kind: 'hemisphere', color: 0xcfe0ff, groundColor: 0x40342a, intensity: 0.8 });
+spawn.light(world, { kind: 'directional', intensity: 2.5, castShadow: true, shadowArea: 10, position: [3, 8, 4], target: [0, 0, 0] });
+
+// 地板：接收陰影（平面轉成水平）
+const floor = spawn.mesh(world, {
+  geometry: { plane: [12, 12] },
+  material: create.material({ standard: { color: 0x3a4030 } }),
+  receiveShadow: true,
+  rotation: [-Math.PI / 2, 0, 0],
+});
+
+// 三個方塊：投射陰影
+const geometry = { box: 1 };
+for (const x of [-2, 0, 2]) {
+  spawn.mesh(world, {
+    geometry,
+    material: create.material({ standard: { color: 0x9acd32 } }),
+    castShadow: true,
+    receiveShadow: true,
+    position: [x, 0.5, 0],
+  });
+}
+
+// 點擊：找出滑鼠指到的實體，換一個隨機顏色
+engine.on('update', () => {
+  if (!input.mouse.wasPressed('Left')) return;
+  // 第三個參數可以過濾：不要點到地板
+  const hit = render.pick(input.pointer.ndcX, input.pointer.ndcY, (h) => h.entity !== floor);
+  if (!hit) return;
+  const mesh = world.require(hit.entity, MeshRenderer);
+  (mesh.material as MeshStandardMaterial).color.setHSL(Math.random(), 0.7, 0.55);
+  console.log(`點到實體 ${hit.entity}，位置 (${hit.point.x.toFixed(2)}, ${hit.point.y.toFixed(2)}, ${hit.point.z.toFixed(2)})`);
+});
+
+engine.start();
+</script>
+
+<h2>取得 three.js 物件</h2>
+<p>需要特別的 three.js 功能時，可以從實體取回對應的物件：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="getObject／entityOf">
+const mesh = render.getObject(entity);              // 實體 → THREE.Mesh
+const cameraObj = render.getObject(cam, 'camera');  // 攝影機
+const e = render.entityOf(someObject3D);            // three.js 物件 → 實體
+render.renderer;                                    // THREE.WebGLRenderer
+render.onResize((w, h) => console.log(w, h));       // 畫面尺寸改變
+</script>
+<p>反過來，要把自己組的物件放進場景時，用 <code>SceneObject</code> 元件：<code>world.spawn(Transform, SceneObject.with({ object: 物件 }))</code>，物件會跟著實體的 Transform 移動。組物件不用 import three：<code>create.mesh(幾何描述, 材質描述, { name, position })</code> 建立網格、<code>create.group(...子物件)</code> 包成群組、<code>create.points(位置)</code> 建立點雲；模型動畫片段用 <code>create.clip</code>（見〈動畫〉）。常見的地面格線不用自己建立，用 <code>spawn.grid(world, { size: 10, divisions: 10 })</code>。</p>

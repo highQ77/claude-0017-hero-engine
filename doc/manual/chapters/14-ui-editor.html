@@ -1,0 +1,49 @@
+<!-- group: 介面 -->
+<h1>UI 編輯器</h1>
+<p class="lead">UI 編輯器是開發時使用的網頁工具，用來建立、編輯專案 <code>public/ui</code> 裡的介面檔。它只在 <code>node hero dev</code> 時提供，不會被打包到遊戲裡。</p>
+
+<h2>開啟</h2>
+<script type="text/plain" class="example" data-lang="sh" data-readonly data-title="開啟 UI 編輯器">
+node hero select my-game
+node hero dev
+# 瀏覽器打開 http://localhost:5173/ui-editor.html
+# 直接打開某個介面檔：http://localhost:5173/ui-editor.html?file=forest/hud.xml（相對於 public/ui）
+</script>
+
+<h2>畫面配置</h2>
+<table>
+  <thead><tr><th>區域</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td>XML 管理器（左側）</td><td>列出 <code>public/ui</code> 的介面檔，依資料夾分組（「共用」與每個場景）：新增、重新命名、刪除、切換。<kbd>＋ 場景</kbd> 建立場景資料夾，裡面放好 <code>hud.xml</code> 與 <code>loading.xml</code>；重新命名檔案時寫成「資料夾/檔名.xml」可以移到別的場景</td></tr>
+    <tr><td>結構樹</td><td>介面的元件階層；可以拖曳調整順序、放進其他容器</td></tr>
+    <tr><td>預覽（中間）</td><td>即時排版結果；點元件可以選取，上方可以切換手機／平板／桌機寬度</td></tr>
+    <tr><td>原始碼</td><td>按「打開原始碼」開啟浮動視窗（拖曳標題列移動、拉邊緣調整大小、雙擊全螢幕），直接編輯 XML；打字時會依 a～z 列出標籤的屬性提示與說明</td></tr>
+    <tr><td>屬性面板（右側）</td><td>選取元件的屬性；顏色、圖片、九宮格都有專用的編輯器</td></tr>
+    <tr><td>元件庫（右側）</td><td>點一下加入元件；滑鼠移上去看說明，按右邊的預覽鈕彈出視窗看實際運作的樣子</td></tr>
+    <tr><td>資源管理器</td><td>列出 <code>public/ui</code> 裡的圖片，可以拖到背景圖片欄位</td></tr>
+    <tr><td>紀錄面板（下方）</td><td>錯誤訊息、存檔紀錄</td></tr>
+  </tbody>
+</table>
+
+<h2>常用流程</h2>
+<ol>
+  <li>在 XML 管理器新增一個檔案，例如 <code>shop.xml</code>。</li>
+  <li>從元件庫加入版面（垂直排版、視窗），再放入按鈕、文字、列表。</li>
+  <li>在屬性面板調整間距、顏色；常用的組合存成 <code>&lt;UIStyle&gt;</code>，或放到共用的 <code>theme.xml</code> 用 <code>&lt;UIImport&gt;</code> 匯入。</li>
+  <li>切換預覽寬度檢查手機版排版，需要時加上 <code>md:</code> 等斷點屬性。</li>
+  <li>存檔後在遊戲裡用 <code>screens.register('shop', { url: 'ui/shop.xml' })</code> 或 <code>UIPlugin.create({ scene: 'ui/shop.xml' })</code> 載入。</li>
+</ol>
+<div class="tip">
+  <p>這本手冊的 XML 範例和 UI 編輯器用同一套排版與繪製程式，在手冊裡試好的 XML 可以直接貼到編輯器的原始碼視窗。</p>
+</div>
+
+<h2>和 3D 場景編輯器一起用</h2>
+<p>3D 場景編輯器可以把場景搭配的介面檔疊在 3D 畫面上（UI 層），方便對照介面和場景的位置，見<a href="#/scene-editor">3D 場景編輯器</a>的「UI 層」。</p>
+<ul>
+  <li>在 3D 場景編輯器按「編輯 UI ↗」（或屬性面板裡介面檔的「編輯」），會在另一個分頁用 UI 編輯器打開那個介面檔（網址的 <code>?file=</code>）。</li>
+  <li>在 UI 編輯器的<b>每個修改都會即時</b>顯示在 3D 場景編輯器的 UI 層，不用先存檔；存檔或還原後，3D 場景編輯器改回讀磁碟上的檔案。用到同一個介面檔的 3D 介面面板（<code>UIPanel3D</code>）也會跟著更新。</li>
+  <li>兩個編輯器要開在同一個瀏覽器（用 BroadcastChannel 傳送）。並排兩個視窗最方便；3D 場景編輯器在背景分頁時，瀏覽器會暫停它的畫面，切回去就會更新。</li>
+</ul>
+
+<h2>打包時的介面檔</h2>
+<p>開發時介面檔直接從 <code>public/ui</code> 讀取；<code>node hero build</code> 打包時會把 XML 轉成 JS 模組（<code>tools/ui-xml-bundle.ts</code>），載入方式不變，遊戲程式不用修改。</p>

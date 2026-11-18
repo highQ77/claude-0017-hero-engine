@@ -1,0 +1,454 @@
+{
+  "format": "hero-shader-graph",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "type": "objectPos",
+        "x": 40,
+        "y": 300,
+        "values": {},
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 2,
+        "type": "split",
+        "x": 260,
+        "y": 300,
+        "values": {
+          "v": 0
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 3,
+        "type": "combine",
+        "x": 480,
+        "y": 0,
+        "values": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 4,
+        "type": "combine",
+        "x": 480,
+        "y": 300,
+        "values": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 5,
+        "type": "combine",
+        "x": 480,
+        "y": 600,
+        "values": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 6,
+        "type": "fbm",
+        "x": 720,
+        "y": 0,
+        "values": {
+          "scale": 5
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 7,
+        "type": "fbm",
+        "x": 720,
+        "y": 300,
+        "values": {
+          "scale": 5
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 8,
+        "type": "fbm",
+        "x": 720,
+        "y": 600,
+        "values": {
+          "scale": 5
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 9,
+        "type": "add",
+        "x": 960,
+        "y": 120,
+        "values": {
+          "a": 0,
+          "b": 0
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 10,
+        "type": "add",
+        "x": 1180,
+        "y": 300,
+        "values": {
+          "a": 0,
+          "b": 0
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 11,
+        "type": "multiply",
+        "x": 1400,
+        "y": 300,
+        "values": {
+          "a": 0,
+          "b": 0.3333
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 12,
+        "type": "multiply",
+        "x": 1640,
+        "y": 40,
+        "values": {
+          "a": 0,
+          "b": 0.12
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 13,
+        "type": "vertexOutput",
+        "x": 1880,
+        "y": 40,
+        "values": {
+          "displacement": 0,
+          "offset": 0
+        },
+        "params": {
+          "normals": "flat"
+        },
+        "preview": true
+      },
+      {
+        "id": 14,
+        "type": "smoothstep",
+        "x": 1640,
+        "y": 300,
+        "values": {
+          "edge0": 0.3,
+          "edge1": 0.36,
+          "x": 0
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 15,
+        "type": "oneMinus",
+        "x": 1880,
+        "y": 320,
+        "values": {
+          "x": 0
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 16,
+        "type": "color",
+        "x": 1640,
+        "y": 600,
+        "values": {},
+        "params": {
+          "color": "#3a2620"
+        },
+        "preview": true
+      },
+      {
+        "id": 17,
+        "type": "color",
+        "x": 1880,
+        "y": 600,
+        "values": {},
+        "params": {
+          "color": "#ff5a1f"
+        },
+        "preview": true
+      },
+      {
+        "id": 18,
+        "type": "lambert",
+        "x": 1880,
+        "y": 760,
+        "values": {},
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 19,
+        "type": "remap",
+        "x": 2120,
+        "y": 760,
+        "values": {
+          "x": 0,
+          "inMin": 0,
+          "inMax": 1,
+          "outMin": 0.15,
+          "outMax": 1.2
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 20,
+        "type": "multiply",
+        "x": 2360,
+        "y": 560,
+        "values": {
+          "a": 0,
+          "b": 1
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 21,
+        "type": "multiply",
+        "x": 2120,
+        "y": 300,
+        "values": {
+          "a": 0,
+          "b": 1
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 22,
+        "type": "add",
+        "x": 2600,
+        "y": 380,
+        "values": {
+          "a": 0,
+          "b": 0
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 23,
+        "type": "output",
+        "x": 2840,
+        "y": 420,
+        "values": {
+          "color": 0,
+          "alpha": 1
+        },
+        "params": {
+          "side": "front"
+        },
+        "preview": true
+      }
+    ],
+    "links": [
+      {
+        "from": 1,
+        "fromPort": "pos",
+        "to": 2,
+        "toPort": "v"
+      },
+      {
+        "from": 2,
+        "fromPort": "x",
+        "to": 3,
+        "toPort": "x"
+      },
+      {
+        "from": 2,
+        "fromPort": "y",
+        "to": 3,
+        "toPort": "y"
+      },
+      {
+        "from": 2,
+        "fromPort": "y",
+        "to": 4,
+        "toPort": "x"
+      },
+      {
+        "from": 2,
+        "fromPort": "z",
+        "to": 4,
+        "toPort": "y"
+      },
+      {
+        "from": 2,
+        "fromPort": "z",
+        "to": 5,
+        "toPort": "x"
+      },
+      {
+        "from": 2,
+        "fromPort": "x",
+        "to": 5,
+        "toPort": "y"
+      },
+      {
+        "from": 3,
+        "fromPort": "xy",
+        "to": 6,
+        "toPort": "p"
+      },
+      {
+        "from": 4,
+        "fromPort": "xy",
+        "to": 7,
+        "toPort": "p"
+      },
+      {
+        "from": 5,
+        "fromPort": "xy",
+        "to": 8,
+        "toPort": "p"
+      },
+      {
+        "from": 6,
+        "fromPort": "out",
+        "to": 9,
+        "toPort": "a"
+      },
+      {
+        "from": 7,
+        "fromPort": "out",
+        "to": 9,
+        "toPort": "b"
+      },
+      {
+        "from": 9,
+        "fromPort": "out",
+        "to": 10,
+        "toPort": "a"
+      },
+      {
+        "from": 8,
+        "fromPort": "out",
+        "to": 10,
+        "toPort": "b"
+      },
+      {
+        "from": 10,
+        "fromPort": "out",
+        "to": 11,
+        "toPort": "a"
+      },
+      {
+        "from": 11,
+        "fromPort": "out",
+        "to": 12,
+        "toPort": "a"
+      },
+      {
+        "from": 12,
+        "fromPort": "out",
+        "to": 13,
+        "toPort": "displacement"
+      },
+      {
+        "from": 11,
+        "fromPort": "out",
+        "to": 14,
+        "toPort": "x"
+      },
+      {
+        "from": 14,
+        "fromPort": "out",
+        "to": 15,
+        "toPort": "x"
+      },
+      {
+        "from": 18,
+        "fromPort": "out",
+        "to": 19,
+        "toPort": "x"
+      },
+      {
+        "from": 16,
+        "fromPort": "rgb",
+        "to": 20,
+        "toPort": "a"
+      },
+      {
+        "from": 19,
+        "fromPort": "out",
+        "to": 20,
+        "toPort": "b"
+      },
+      {
+        "from": 17,
+        "fromPort": "rgb",
+        "to": 21,
+        "toPort": "a"
+      },
+      {
+        "from": 15,
+        "fromPort": "out",
+        "to": 21,
+        "toPort": "b"
+      },
+      {
+        "from": 20,
+        "fromPort": "out",
+        "to": 22,
+        "toPort": "a"
+      },
+      {
+        "from": 21,
+        "fromPort": "out",
+        "to": 22,
+        "toPort": "b"
+      },
+      {
+        "from": 22,
+        "fromPort": "out",
+        "to": 23,
+        "toPort": "color"
+      }
+    ],
+    "nextId": 24
+  },
+  "preview": {
+    "mesh": "sphere"
+  },
+  "assets": {}
+}

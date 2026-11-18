@@ -1,0 +1,70 @@
+<!-- group: 核心 -->
+<h1>著色器編輯器</h1>
+<p class="lead">著色器編輯器是開發時使用的網頁工具，用<b>節點</b>拼出自訂著色器（不用寫 GLSL），存在專案 <code>public/shaders</code> 裡的節點圖檔（<code>名稱.shader.json</code>）。預覽用和遊戲一樣的引擎著色器庫繪製，看到的就是遊戲裡的樣子。它只在 <code>node hero dev</code> 時提供，不會被打包到遊戲裡（節點圖檔本身在 <code>public/</code>，會照常發佈）。編輯器移植自 Shader Composer。</p>
+
+<h2>開啟</h2>
+<p>執行 <code>node hero dev</code> 後打開 <code>/shader-editor.html</code>，或按任何一個編輯器頁首切換列的「著色器」（UI／3D 場景／著色器，會在另一個分頁打開）。網址加上 <code>?file=名稱</code> 會直接開啟那個節點圖檔。</p>
+
+<h2>畫面配置</h2>
+<ul>
+  <li><b>工具列</b>：第一排是檔案（開啟、新增、刪除、儲存 ⌘/Ctrl+S），檔名旁的圓點代表還沒儲存；第二排是範例、復原／重做、置中、匯入／匯出 JSON、清空。</li>
+  <li><b>左邊</b>：節點庫（可以搜尋，拖到節點圖或雙擊加入）與預覽（球體、立方體、圓環、平面 3D、平面 2D；拖曳旋轉、滾輪縮放，可以截圖、全螢幕）。</li>
+  <li><b>中間</b>：節點圖。每個節點都有即時縮圖，顯示那個節點輸出的結果。</li>
+  <li><b>右邊</b>：「屬性」編輯選取節點的參數與輸入；沒有選取時顯示在遊戲裡使用的程式。「GLSL」分頁是產生的著色器程式。</li>
+</ul>
+
+<h2>操作</h2>
+<ul>
+  <li>右鍵、空白鍵或雙擊空白處：新增節點選單。從連接埠拖曳連線到空白處，選好節點後會自動接上。</li>
+  <li>從已連接的輸入拖曳會把連線拔起來；雙擊連線刪除。</li>
+  <li>拖曳背景平移、滾輪縮放、F 全部置中；Shift＋點擊多選，Delete 刪除，⌘/Ctrl+D 複製，⌘/Ctrl+A 全選。</li>
+  <li>把圖檔拖進節點圖會建立貼圖節點，拖到既有的貼圖節點上會替換圖片（縮到最長邊 1024px，存在節點圖檔裡）。</li>
+</ul>
+
+<h2>節點與型別</h2>
+<ul>
+  <li>分類：輸入（UV、時間、滑鼠、數值、顏色、貼圖、法線、世界座標、物件座標、視線、光的方向）、數學、向量／UV、形狀與雜訊（圓、方形、棋盤、雜訊、FBM、Voronoi）、光照（Lambert、Specular、Fresnel）、顏色（調色盤、HSV、亮度）、輸出。</li>
+  <li>型別有 float、vec2、vec3、vec4，連線依型別上色。型別不同時自動轉換：float 擴展成向量，向量截取前幾個分量。數學節點的輸出維度取決於輸入中最大的那個。</li>
+  <li><b>Fragment Output</b>：最後的顏色與透明度（alpha 有連接或小於 1 時是半透明材質），可以選畫正面、兩面或背面。</li>
+  <li><b>Vertex Output</b>（可以沒有）：頂點沿法線位移，加上位置偏移。接到它的節點在頂點著色器計算，所以雜訊、貼圖都能當高度圖。「法線：依位移重算」讓位移後的光照正確，建議搭配「平面 3D」預覽。</li>
+  <li><b>世界座標與物件座標</b>：用世界座標算的花紋，物件移動時會「流過」物件表面；要讓花紋固定在物件上，用 Object Position（物件座標，例如熔岩星球範例）。</li>
+  <li>節點圖的顏色就是畫面上看到的顏色，不套用色調映射，遊戲裡和預覽一樣。</li>
+</ul>
+
+<h2>範例</h2>
+<p>工具列「範例…」有 16 個範例，載入時會切換合適的預覽網格，可以用復原還原：2D 圖案（同心波紋、電漿、催眠螺旋、旋轉棋盤、霓虹光環、色相環、FBM 雲、Voronoi 細胞）、互動（滑鼠光暈）、3D 材質（Fresnel 邊緣光、卡通渲染、全息投影）、頂點位移（地形、水面波浪、熔岩星球、貼圖＋位移）。</p>
+
+<h2>在場景裡使用</h2>
+<p>不用寫程式：在 3D 場景編輯器把素材面板「著色器」裡的節點圖拖到物件上，或在網格的「材質」選「節點圖」再選檔案（旁邊的「編輯 ↗」會在著色器編輯器打開它）。場景檔裡寫成：</p>
+<script type="text/plain" class="example" data-lang="xml" data-run="false" data-title="場景檔的節點圖材質">
+<MeshRenderer>
+  <geometry sphere="0.5 64 48"/>
+  <material shaderGraph="shaders/lava.shader.json"/>
+</MeshRenderer>
+</script>
+<ul>
+  <li>需要安裝 <code>ShaderPlugin</code>；節點圖載入前物件不會顯示。程式裡一樣可以寫 <code>material: { shaderGraph: 'shaders/lava.shader.json' }</code>。</li>
+  <li>開發時在著色器編輯器存檔，開著的遊戲和 3D 場景編輯器會自動換成新的內容，不用重新整理。</li>
+  <li>用到同一個節點圖檔的物件共用同一個材質（uniform 也共用）；要每個物件各自調整 uniform 時，改用下面的 <code>loadShaderGraph</code>。</li>
+  <li>範例專案 official-demo-000-start 的月亮就是 <code>shaders/lava.shader.json</code>（熔岩星球範例，配合月亮的大小調過雜訊尺度與位移）。</li>
+</ul>
+
+<h2>在遊戲程式裡使用</h2>
+<p>用 <code>loadShaderGraph</code> 載入節點圖檔，轉成自訂著色器的定義（著色器名稱預設是檔名），再用著色器庫註冊、建立材質。材質的 uniform 可以在遊戲裡修改：<code>uMouse</code>（滑鼠，0~1）、<code>uLightDir</code>（光的方向）、<code>uAspect</code>（長寬比，平面 2D 用）；時間用引擎內建的 <code>uTime</code>。</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="載入節點圖檔">
+import { loadShaderGraph } from '@engine/shaders';
+import { spawn } from '@engine/render';
+import { shaders, world } from './engine';
+
+shaders.define(await loadShaderGraph('shaders/lava.shader.json')); // 名稱是 lava
+const material = shaders.createMaterial('lava');
+spawn.mesh(world, { geometry: { sphere: [1, 96, 64] }, material });
+
+// 修改節點圖的 uniform
+material.uniforms.uLightDir.value.set(0.3, 1, 0.2).normalize();
+</script>
+<ul>
+  <li>已經讀進來的內容用 <code>shaderGraphDefinition(parseShaderGraphFile(文字), '名稱')</code>；只想要 GLSL 片段用 <code>compileShaderGraph(graph)</code>。</li>
+  <li>也讀得懂 Shader Composer 匯出的 JSON：用「匯入 JSON」打開後儲存。</li>
+  <li>自己的節點：<code>defineShaderNode({ type, title, category, inputs, outputs, glsl })</code>（見 <code>src/shaders/graph/nodes.ts</code> 開頭的說明），編輯器和遊戲都要先執行這段程式。</li>
+</ul>

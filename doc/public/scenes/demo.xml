@@ -1,0 +1,18 @@
+<!-- 使用手冊範例用的小場景（API 參考：notifySceneFileChanged、loadSceneFile） -->
+<Scene format="hero-scene" version="1">
+  <Entity id="camera" name="攝影機">
+    <Transform position="0 1.5 4" rotation="-20 0 0"/>
+    <Camera fov="55"/>
+  </Entity>
+  <Entity id="sun" name="太陽">
+    <Transform position="3 6 4" rotation="-56 22 30"/>
+    <Light intensity="2"/>
+  </Entity>
+  <Entity id="box" name="方塊">
+    <Transform/>
+    <MeshRenderer>
+      <geometry box="1"/>
+      <material><standard color="#9acd32"/></material>
+    </MeshRenderer>
+  </Entity>
+</Scene>

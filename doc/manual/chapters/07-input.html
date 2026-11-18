@@ -1,0 +1,90 @@
+<!-- group: 畫面與操作 -->
+<h1>輸入：鍵盤、滑鼠、觸控、手把</h1>
+<p class="lead"><code>InputPlugin</code> 把瀏覽器的事件整理成每一幀的狀態：哪些鍵按住、這一幀剛按下、剛放開。建議用「動作」（跳躍、移動）來寫遊戲，同一個動作可以對應鍵盤、手把等多種按鍵。</p>
+
+<h2>按鍵狀態</h2>
+<p>遊戲程式從專案的 <code>engine.ts</code> 引用輸入：<code>import { input } from './engine'</code>（就是 <code>inputPlugin.input</code>；腳本裡是 <code>this.input</code>）。</p>
+<table>
+  <thead><tr><th>寫法</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td><code>input.keyboard.isDown('KeyW')</code></td><td>按住中（每一幀都是 true）</td></tr>
+    <tr><td><code>input.keyboard.wasPressed('Space')</code></td><td>這一幀剛按下（只有一幀是 true）</td></tr>
+    <tr><td><code>input.keyboard.wasReleased('Space')</code></td><td>這一幀剛放開</td></tr>
+    <tr><td><code>input.mouse.isDown('Left')</code></td><td>滑鼠按鍵：Left、Middle、Right</td></tr>
+    <tr><td><code>input.pointer</code></td><td>指標位置：<code>x</code>、<code>y</code>（像素）、<code>ndcX</code>、<code>ndcY</code>（-1～1，點選物件用）、<code>deltaX</code>、<code>deltaY</code>（這一幀的移動量）、<code>wheel</code></td></tr>
+    <tr><td><code>input.gamepad</code></td><td>第一支手把（沒有接手把時是 undefined）</td></tr>
+  </tbody>
+</table>
+<p>鍵盤用 <code>KeyboardEvent.code</code> 的名稱，和鍵盤配置無關：<code>KeyA</code>～<code>KeyZ</code>、<code>Digit0</code>～<code>Digit9</code>、<code>Space</code>、<code>Enter</code>、<code>Escape</code>、<code>ShiftLeft</code>、<code>ArrowUp</code>…</p>
+
+<h2>動作對應</h2>
+<p>在 <code>input.actions</code> 定義動作，遊戲程式只問「跳躍有沒有按」，不用管是哪個鍵：</p>
+<ul>
+  <li><code>bind(動作, [按鍵…])</code>：按鍵動作，用 <code>isDown</code>／<code>wasPressed</code>／<code>wasReleased</code> 查詢。</li>
+  <li><code>bindAxis(動作, { negative, positive, padAxis })</code>：軸動作，<code>axis(動作)</code> 回傳 -1～1。</li>
+  <li>綁定字串：鍵盤 <code>'KeyW'</code>、滑鼠 <code>'Mouse:Left'</code>、手把 <code>'Pad:A'</code>（任一手把）或 <code>'Pad0:A'</code>（第 0 支）。</li>
+</ul>
+<p>先點一下畫面（讓預覽框取得鍵盤焦點），再用 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 或方向鍵移動、<kbd>空白鍵</kbd> 跳躍。有手把的話也可以用左搖桿和 A 鍵。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="移動與跳躍" data-height="360">
+import { MathUtils } from '@engine/math';
+import { Transform } from '@engine/scene';
+import { spawn } from '@engine/render';
+import { GamepadAxis } from '@engine/input';
+import { engine, input, world } from './engine';
+
+// 定義動作：鍵盤和手把都可以
+input.actions
+  .bind('jump', ['Space', 'Pad:A'])
+  .bindAxis('moveX', { negative: ['KeyA', 'ArrowLeft'], positive: ['KeyD', 'ArrowRight'], padAxis: GamepadAxis.LeftX })
+  .bindAxis('moveZ', { negative: ['KeyW', 'ArrowUp'], positive: ['KeyS', 'ArrowDown'], padAxis: GamepadAxis.LeftY });
+
+const camera = spawn.camera(world, { position: [0, 6, 8], target: [0, 0, 0], fov: 50 });
+spawn.light(world, { kind: 'hemisphere', intensity: 1.2 });
+spawn.light(world, { intensity: 2, position: [2, 5, 3], target: [0, 0, 0] });
+
+// 地面格線
+spawn.grid(world, { size: 10, divisions: 10, centerColor: 0x556048, color: 0x2c3326 });
+
+const playerEntity = spawn.mesh(world, { geometry: { box: 0.8 }, material: { standard: { color: 0x9acd32 } }, position: [0, 0.4, 0] });
+const player = world.require(playerEntity, Transform);
+
+const SPEED = 4;
+let vy = 0;
+engine.on('update', (time) => {
+  const actions = input.actions;
+  const dt = time.delta;
+  player.position.x = MathUtils.clamp(player.position.x + actions.axis('moveX') * SPEED * dt, -4.6, 4.6);
+  player.position.z = MathUtils.clamp(player.position.z + actions.axis('moveZ') * SPEED * dt, -4.6, 4.6);
+
+  const onGround = player.position.y <= 0.4;
+  if (actions.wasPressed('jump') && onGround) {
+    vy = 6;
+    console.log('跳！');
+  }
+  vy -= 15 * dt;
+  player.position.y = Math.max(0.4, player.position.y + vy * dt);
+});
+
+engine.start();
+</script>
+<div class="note">
+  <p>暫停時主迴圈（包含輸入外掛）不會執行。像「按 P 暫停／繼續」這種在暫停中也要有反應的按鍵，請直接聽瀏覽器的 <code>keydown</code> 事件。</p>
+</div>
+
+<h2>觸控與虛擬搖桿</h2>
+<p>觸控會當成指標處理（第一根手指就是 <code>input.pointer</code>，所有手指在 <code>input.pointer.active</code>）。手機上的移動操作可以用 2D 介面的 <code>&lt;UIJoystick&gt;</code>，在遊戲裡讀它的 <code>x</code>、<code>y</code>：</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="讀取虛擬搖桿">
+const stick = ui.get<UIJoystick>('stick');
+const moveX = actions.axis('moveX') + (stick?.x ?? 0);
+const moveZ = actions.axis('moveZ') + (stick?.y ?? 0);
+</script>
+
+<h2>滑鼠鎖定（第一人稱視角）</h2>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="pointer lock">
+canvas.addEventListener('click', () => inputPlugin.requestPointerLock());
+engine.on('update', () => {
+  if (!input.pointer.locked) return;
+  yaw -= input.pointer.deltaX * 0.002;   // 鎖定時移動量仍然有值
+  pitch -= input.pointer.deltaY * 0.002;
+});
+</script>
