@@ -8,7 +8,8 @@
  *
  * 在套用烘焙材質之後呼叫 animateSails(船帆網格)。sailSettings 可以在執行中調整。
  */
-import * as THREE from 'three';
+import { Box3, Vector3 } from '@engine/math';
+import { create, type BufferGeometry, type Material, type Mesh } from '@engine/render';
 import { ecs } from './engine';
 
 /** 船帆的動態設定（修改後下一幀生效） */
@@ -31,7 +32,7 @@ const uniforms = {
 };
 
 /** 把網格的頂點分成相連的幾塊（位置相同的頂點也算相連），回傳每個頂點屬於哪一塊 */
-function pieces(geometry: THREE.BufferGeometry): Int32Array {
+function pieces(geometry: BufferGeometry): Int32Array {
   const pos = geometry.getAttribute('position');
   const n = pos.count;
   const parent = Int32Array.from({ length: n }, (_, i) => i);
@@ -62,17 +63,17 @@ function pieces(geometry: THREE.BufferGeometry): Int32Array {
 }
 
 /** 讓船帆隨風擺動 */
-export function animateSails(mesh: THREE.Mesh): void {
+export function animateSails(mesh: Mesh): void {
   const geometry = mesh.geometry;
   const pos = geometry.getAttribute('position');
   const owner = pieces(geometry);
 
   // 每片帆的範圍
-  const box = new Map<number, THREE.Box3>();
-  const p = new THREE.Vector3();
+  const box = new Map<number, Box3>();
+  const p = new Vector3();
   for (let i = 0; i < pos.count; i++) {
     let b = box.get(owner[i]);
-    if (!b) box.set(owner[i], (b = new THREE.Box3()));
+    if (!b) box.set(owner[i], (b = new Box3()));
     b.expandByPoint(p.fromBufferAttribute(pos, i));
   }
   // 每片帆一個不同的相位，才不會整齊劃一地一起擺
@@ -95,9 +96,9 @@ export function animateSails(mesh: THREE.Mesh): void {
     flutter[i * 2] = vertical * horizontal;
     flutter[i * 2 + 1] = phase.get(owner[i])!;
   }
-  geometry.setAttribute('aFlutter', new THREE.BufferAttribute(flutter, 2));
+  geometry.setAttribute('aFlutter', create.attribute(flutter, 2));
 
-  const material = mesh.material as THREE.Material;
+  const material = mesh.material as Material;
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader

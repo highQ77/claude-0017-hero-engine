@@ -1388,3 +1388,114 @@ ui.loadString(`<UI padding="20" dir="h" gap="8"><UIButton text="劍" onClick="bu
 ui.setHandler('buy', onBuy);
 engine.start();
 ```
+
+## UICanvas
+畫布：用 Canvas 2D 的寫法自己畫（底層是 WebGL）。`ui.require<UICanvas>(id).getContext()` 取得 ctx，取代 `canvas.getContext('2d')`；畫完介面會自動重畫。背景預設 `#333333FF`，完整的繪圖 API 見說明文件的「UICanvas 畫布」一章。
+
+```ts
+ui.loadString(`<UI align="center" justify="center"><UICanvas id="paint" width="320" height="200" radius="12"/></UI>`);
+const uicanvas = ui.require<UICanvas>('paint');
+const ctx = uicanvas.getContext();
+const g = ctx.createLinearGradient(0, 0, 320, 0);
+g.addColorStop(0, '#9acd32');
+g.addColorStop(1, '#7fd6c2');
+ctx.fillStyle = g;
+ctx.beginPath();
+ctx.arc(160, 100, 70, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#ffffff';
+ctx.font = 'bold 20px system-ui, sans-serif';
+ctx.textAlign = 'center';
+ctx.fillText('UICanvas', 160, 107);
+console.log('WebGL 2：', ctx.isWebGL2, '，大小：', uicanvas.width, '×', uicanvas.height, '，像素比：', uicanvas.pixelRatio);
+engine.start();
+```
+
+尺寸改變時內容會清空並觸發 `resize` 事件（XML 寫 `onResize`），在那裡重畫。
+
+```ts
+ui.loadString(`<UI align="center" justify="center"><UICanvas id="c" width="160" height="120"/></UI>`);
+const uicanvas = ui.require<UICanvas>('c');
+const draw = () => {
+  const ctx = uicanvas.getContext();
+  ctx.fillStyle = 'tomato';
+  ctx.fillRect(10, 10, uicanvas.width - 20, uicanvas.height - 20);
+};
+uicanvas.on('resize', () => {
+  console.log('新的大小：', uicanvas.width, '×', uicanvas.height);
+  draw();
+});
+draw();
+engine.timers.after(1, () => uicanvas.resize(300, 160));
+engine.start();
+```
+
+## WebGL2DRenderingContext
+`uicanvas.getContext()` 回傳的繪圖 context：方法、屬性和 `CanvasRenderingContext2D` 相同，另外有 `gl`、`isWebGL2`、`pixelRatio`、`createShaderFilter`、`applyFilter`。
+
+```ts
+ui.loadString(`<UI align="center" justify="center"><UICanvas id="c" width="320" height="200"/></UI>`);
+const ctx: WebGL2DRenderingContext = ui.require<UICanvas>('c').getContext();
+ctx.filter = 'blur(2px) hue-rotate(90deg)';
+ctx.fillStyle = '#f59e0b';
+ctx.fillRect(40, 40, 240, 120);
+ctx.filter = 'none';
+console.log('GL 版本：', ctx.gl.getParameter(ctx.gl.VERSION));
+engine.start();
+```
+
+## ShaderFilter
+自訂 GLSL 濾鏡：`ctx.createShaderFilter(source, uniforms)` 建立，放進 `ctx.filter` 或傳給 `ctx.applyFilter`。source 要定義 `vec4 effect(vec2 uv)`。
+
+```ts
+ui.loadString(`<UI align="center" justify="center"><UICanvas id="c" width="320" height="200"/></UI>`);
+const ctx = ui.require<UICanvas>('c').getContext();
+ctx.fillStyle = '#2457d6';
+ctx.fillRect(20, 20, 280, 160);
+ctx.fillStyle = '#ffffff';
+ctx.font = 'bold 36px system-ui, sans-serif';
+ctx.fillText('ShaderFilter', 50, 115);
+const wave: ShaderFilter = ctx.createShaderFilter(`
+  uniform float amp;
+  vec4 effect(vec2 uv) {
+    uv.x += sin(uv.y * 30.0) * amp;
+    return texture2D(u_src, uv);
+  }
+`, { amp: 0.01 });
+ctx.applyFilter(wave);
+console.log('uniform：', wave.uniformNames);
+engine.start();
+```
+
+## WebGL2DOptions
+建立 context 的選項（`uicanvas.getContext(options)`，只在第一次呼叫時有效）：反鋸齒、透明通道、WebGL 版本、保留畫面內容。
+
+```ts
+ui.loadString(`<UI align="center" justify="center"><UICanvas id="c" width="320" height="200"/></UI>`);
+const options: WebGL2DOptions = { antialias: true, webgl2: true, preserveDrawingBuffer: true };
+const ctx = ui.require<UICanvas>('c').getContext(options);
+ctx.strokeStyle = '#9acd32';
+ctx.lineWidth = 6;
+ctx.strokeRect(40, 40, 240, 120);
+console.log('context 設定：', ctx.getContextAttributes());
+engine.start();
+```
+
+## WebGL2DHiDPIOptions
+`UICanvas.contextOfHiDPI(canvas, options)` 的選項：介面以外的畫布（離屏圖層）以 CSS 尺寸 × 螢幕像素比的解析度繪製。
+
+```ts
+ui.loadString(`<UI align="center" justify="center"><UICanvas id="c" width="320" height="200"/></UI>`);
+const options: WebGL2DHiDPIOptions = { width: 160, height: 100, setStyle: false };
+const layer = UICanvas.contextOfHiDPI(document.createElement('canvas'), options);
+layer.fillStyle = '#1e3a8a';
+layer.fillRect(0, 0, 160, 100);
+layer.fillStyle = '#f59e0b';
+layer.beginPath();
+layer.arc(80, 50, 34, 0, Math.PI * 2);
+layer.fill();
+const ctx = ui.require<UICanvas>('c').getContext();
+ctx.drawImage(layer.canvas, 80, 50, 160, 100);
+console.log('離屏圖層 backing store：', layer.canvas.width, '×', layer.canvas.height);
+engine.start();
+```

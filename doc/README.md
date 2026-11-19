@@ -14,6 +14,7 @@ doc/
 │       ├── main.ts         分頁（說明文件／API）、目錄、章節切換、搜尋
 │       ├── api.ts          自動產生「API 參考」（每個模組一章、內文自動連結、搜尋 API 名稱）
 │       ├── example.ts      範例區塊（編輯器 + 執行結果）
+│       ├── canvasExample.ts  UICanvas 繪圖範例（頁面內執行、原生 Canvas 2D 對照）
 │       ├── editor.ts       程式碼編輯器（textarea 疊在高亮的 pre 上）
 │       ├── highlight.ts    語法高亮（TypeScript、終端機；XML 沿用 UI 編輯器的 highlightXml）
 │       ├── reference.ts    自動產生「UI 元件參考」
@@ -98,7 +99,7 @@ engine.start();
 
 | 屬性 | 說明 |
 | --- | --- |
-| `data-lang` | `ts`（預設）、`xml`、`sh`、`text` |
+| `data-lang` | `ts`（預設）、`xml`、`sh`、`text`、`canvas`（UICanvas 繪圖範例） |
 | `data-title` | 標題列的文字 |
 | `data-height` | 預覽高度（像素）：XML 預設 240、TypeScript 預設 320 |
 | `data-run="false"` | 程式片段：可以編輯，但沒有執行按鈕（也不做檢查） |
@@ -106,6 +107,7 @@ engine.start();
 
 - **TypeScript 範例**要能獨立執行：和遊戲專案一樣 `import '@engine/...'`、`'three'`，在預覽框（iframe）裡執行，每次執行都是全新的環境。圖片、音效放在 `doc/public/`。
 - **XML 範例**直接在頁面裡用 UI2D 排版，邊打邊更新；圖片與 `<UIComponent>`、`<UIImport>` 的檔案從 `doc/public/ui/` 讀取。XML 裡的 `onClick` 等事件會自動接到輸出區。
+- **UICanvas 範例**（`data-lang="canvas"`，`chapters/135-ui-canvas.html`）直接在頁面裡執行（`src/canvasExample.ts`）：所有範例共用一個 `<UICanvas>`，可用 `ctx`、`uicanvas`、`canvas`、`UICanvas`、`Path2D`、`log`、`sampleImage`、`tile`；旁邊是原生 Canvas 2D 的對照，`data-native="false"` 時沒有。
 - 新增範例後執行 `node doc/scripts/check-examples.mjs --run` 確認沒有錯誤。
 
 ## UI 元件參考

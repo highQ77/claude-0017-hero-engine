@@ -1,11 +1,12 @@
 /**
  * official-demo-003-ui2d-ui3d：2D 與 3D 介面。
  *
- * 四個分頁，每一頁是一個場景（切換分頁時換場景），右邊的 2D 疊加層也跟著換：
+ * 五個分頁，每一頁是一個場景（切換分頁時換場景），右邊的 2D 疊加層也跟著換：
  *   ① HUD（hud）：血條、魔力、金幣、角標、技能冷卻、提示訊息，按鈕和技能讓 3D 角色做動作
  *   ② 背包（bag）：可拖曳的視窗、列表樣板 + 資料（物品格可以拖曳交換）、可排序的表格；點物品在 3D 顯示
  *   ③ 3D 面板（panels）：3D 空間裡可以點擊的商店看板、永遠面向攝影機的名牌血條
  *   ④ 對話（talk）：點 3D 角色（render.pick）開始 2D 對話，頭上的泡泡是 3D 面板
+ *   ⑤ 畫布（canvas）：UICanvas 畫板（滑鼠畫圖，同時貼到 3D 看板）與即時折線圖（3D 彈跳球的高度）
  *
  * 介面在 public/ui/scene.xml（左邊的說明面板與右邊的疊加層）、public/ui/kiosk.xml（商店看板）。
  */
@@ -13,7 +14,7 @@ import type { Entity, World } from '@engine/ecs';
 import { Color, Vector3 } from '@engine/math';
 import { PluginManager } from '@engine/plugins';
 import perfMonitor from '@engine/packages/perf-monitor';
-import { OrbitControl, create, spawn } from '@engine/render';
+import { OrbitControl, create, spawn, type Texture } from '@engine/render';
 import { type Scene, Transform, math } from '@engine/scene';
 import * as ui2d from '@engine/ui2d';
 import type {
@@ -27,6 +28,7 @@ import type {
   UISlider,
   UISlot,
   UIStackView,
+  UICanvas,
   UITable,
   UIToggle,
   UIWindow,
@@ -600,11 +602,402 @@ ui.setHandlers({
   },
 });
 
+// ───────── ⑤ 畫布（UICanvas） ─────────
+
+const PEN_COLORS = ['#9acd32', '#ff6b6b', '#4cc9f0', '#ffd166', '#ffffff'];
+let penColor = PEN_COLORS[0];
+/** 3D 看板用的貼圖：來源是畫板底下的 <canvas>，畫了新東西就設定 needsUpdate */
+let padTexture: Texture | null = null;
+
+const pad = ui.require<UICanvas>('pad');
+const padCtx = pad.getContext(); // 取代 canvas.getContext('2d')
+/** 畫板有新內容、3D 看板還沒更新 */
+let padDirty = false;
+const padChanged = () => {
+  padDirty = true;
+};
+/**
+ * 更新 3D 看板的貼圖（每幀呼叫）。把 WebGL 畫布上傳到另一個 WebGL（three.js）時，
+ * 瀏覽器每次都要建立再銷毀一份畫布快照，很耗 GPU；畫圖中每秒最多更新 15 次，放開滑鼠時馬上補上最後的樣子
+ */
+let padUploadWait = 0;
+function syncPadTexture(dt: number): void {
+  padUploadWait -= dt;
+  if (!padDirty || !padTexture || (penDown && padUploadWait > 0)) return;
+  padTexture.needsUpdate = true;
+  padDirty = false;
+  padUploadWait = 1 / 15;
+}
+
+/** 清除畫板：淡淡的格線與提示文字 */
+function clearPad(): void {
+  const { width: w, height: h } = pad;
+  padCtx.clearRect(0, 0, w, h);
+  padCtx.strokeStyle = 'rgba(255,255,255,0.06)';
+  padCtx.lineWidth = 1;
+  padCtx.beginPath();
+  for (let x = 20; x < w; x += 20) {
+    padCtx.moveTo(x + 0.5, 0);
+    padCtx.lineTo(x + 0.5, h);
+  }
+  for (let y = 20; y < h; y += 20) {
+    padCtx.moveTo(0, y + 0.5);
+    padCtx.lineTo(w, y + 0.5);
+  }
+  padCtx.stroke();
+  padCtx.fillStyle = 'rgba(255,255,255,0.35)';
+  padCtx.font = '13px system-ui, sans-serif';
+  padCtx.fillText('按住滑鼠在這裡畫圖', 12, 22);
+  padChanged();
+}
+
+/** 筆的樣式：顏色、粗細、發光（陰影模糊） */
+function penStyle(): void {
+  padCtx.strokeStyle = padCtx.fillStyle = penColor;
+  padCtx.lineWidth = ui.require<UISlider>('penSize').value;
+  padCtx.lineCap = padCtx.lineJoin = 'round';
+  const glow = ui.require<UIToggle>('penGlow').checked;
+  padCtx.shadowColor = penColor;
+  padCtx.shadowBlur = glow ? 10 : 0;
+}
+
+// 滑鼠拖曳：event.value 是畫板的繪圖座標 { x, y }
+// 滑鼠事件一秒可能上百次（比畫面更新還頻繁）：事件裡只記下座標，每幀一次畫成一條路徑（flushPen），
+// 畫圖、更新介面、上傳 3D 貼圖都是每幀一次，GPU 才不會忙不過來；筆跡的轉角也比較圓順
+type Point = { x: number; y: number };
+/** 還沒畫的點（第一個是上一幀畫到的位置，用來接上） */
+let penPoints: Point[] = [];
+let penDown = false;
+/** 剛按下：只點一下也要畫出一個點 */
+let penDot = false;
+pad.on('pointerdown', (e) => {
+  penDown = penDot = true;
+  penPoints = [e.value as Point];
+});
+pad.on('pointermove', (e) => {
+  if (penDown) penPoints.push(e.value as Point);
+});
+pad.on('pointerup', () => {
+  flushPen();
+  penDown = false;
+  penPoints = [];
+});
+
+/** 把累積的點畫出來（每幀呼叫一次） */
+function flushPen(): void {
+  if (penPoints.length === 0 || (penPoints.length === 1 && !penDot)) return;
+  penStyle();
+  padCtx.beginPath();
+  if (penPoints.length === 1) {
+    const p = penPoints[0];
+    padCtx.arc(p.x, p.y, padCtx.lineWidth / 2, 0, Math.PI * 2);
+    padCtx.fill();
+  } else {
+    padCtx.moveTo(penPoints[0].x, penPoints[0].y);
+    for (const p of penPoints.slice(1)) padCtx.lineTo(p.x, p.y);
+    padCtx.stroke();
+  }
+  penDot = false;
+  penPoints = penDown ? [penPoints[penPoints.length - 1]] : [];
+  padChanged();
+}
+clearPad();
+
+/** 折線圖：最近 3 秒的高度紀錄 */
+const chart = ui.require<UICanvas>('chart');
+const chartCtx = chart.getContext();
+const CHART_MAX = 3; // 公尺
+const CHART_SECONDS = 3;
+/** 取樣間隔（秒）：固定時間取一點，和畫面更新率無關 */
+const CHART_STEP = 1 / 30;
+/** 紀錄（t 是秒、y 是高度）：位置依時間算，所以不管畫面更新率多少，捲動都是平滑的 */
+const samples: { t: number; y: number }[] = [];
+let chartTime = 0;
+/** 上一幀的時間與高度（取樣點落在兩幀之間時用來內插） */
+let prevTime = 0;
+let prevY = 0;
+/** 曲線下方的漸層：建立一次重複使用（每幀建立新的漸層會一直配置新的 GPU 紋理） */
+const chartFill = chartCtx.createLinearGradient(0, 0, 0, chart.height);
+chartFill.addColorStop(0, 'rgba(154,205,50,0.45)');
+chartFill.addColorStop(1, 'rgba(154,205,50,0)');
+
+function resetChart(y: number): void {
+  samples.length = 0;
+  chartTime = prevTime = 0;
+  prevY = y;
+  samples.push({ t: 0, y });
+}
+
+/**
+ * 記錄高度：每隔 CHART_STEP 秒取一點，落在兩幀之間的用前後兩幀內插。
+ * 時間和高度一定對得上，畫面更新率高低、偶爾掉幀，曲線都不會抖
+ */
+function recordHeight(dt: number, y: number): void {
+  chartTime += dt;
+  let next = samples[samples.length - 1].t + CHART_STEP;
+  while (next <= chartTime) {
+    const f = (next - prevTime) / Math.max(1e-6, chartTime - prevTime);
+    samples.push({ t: next, y: prevY + (y - prevY) * f });
+    next += CHART_STEP;
+  }
+  prevTime = chartTime;
+  prevY = y;
+  // 只留看得到的（左邊多留一點，給左邊界內插用）
+  while (samples.length > 2 && samples[1].t < chartTime - CHART_SECONDS) samples.shift();
+}
+
+/** 沿著紀錄點畫平滑曲線：相鄰兩點的中點用二次曲線接起來（沒有折角） */
+function smoothPath(c: typeof chartCtx, pts: { x: number; y: number }[]): void {
+  c.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i].x + pts[i + 1].x) / 2;
+    const my = (pts[i].y + pts[i + 1].y) / 2;
+    c.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+  }
+  const end = pts[pts.length - 1];
+  c.lineTo(end.x, end.y);
+}
+
+function drawChart(): void {
+  const { width: w, height: h } = chart;
+  const c = chartCtx;
+  const left = 20;
+  const right = w - 6;
+  c.clearRect(0, 0, w, h);
+  // 刻度
+  c.strokeStyle = 'rgba(255,255,255,0.08)';
+  c.lineWidth = 1;
+  c.fillStyle = 'rgba(255,255,255,0.4)';
+  c.font = '10px system-ui, sans-serif';
+  c.beginPath();
+  for (let m = 0; m <= CHART_MAX; m++) {
+    const y = h - 6 - (m / CHART_MAX) * (h - 14);
+    c.moveTo(left - 2, Math.round(y) + 0.5);
+    c.lineTo(w, Math.round(y) + 0.5);
+    c.fillText(String(m), 4, y + 3);
+  }
+  c.stroke();
+  const toX = (t: number) => right - ((chartTime - t) / CHART_SECONDS) * (right - left);
+  const toY = (v: number) => h - 6 - (v / CHART_MAX) * (h - 14);
+  // 最後一點用目前的高度（取樣點之間也跟著動），左邊界上的點用內插算出來（不用每幀裁切）
+  const data = [...samples, { t: chartTime, y: prevY }];
+  const t0 = chartTime - CHART_SECONDS;
+  const pts: { x: number; y: number }[] = [];
+  for (let i = 0; i < data.length; i++) {
+    const s = data[i];
+    if (s.t < t0) {
+      const n = data[i + 1];
+      if (n && n.t > t0) pts.push({ x: left, y: toY(s.y + ((n.y - s.y) * (t0 - s.t)) / (n.t - s.t)) });
+      continue;
+    }
+    pts.push({ x: toX(s.t), y: toY(s.y) });
+  }
+  if (pts.length < 3) return;
+  // 曲線下方的漸層 + 曲線
+  c.beginPath();
+  smoothPath(c, pts);
+  c.lineTo(pts[pts.length - 1].x, h);
+  c.lineTo(pts[0].x, h);
+  c.closePath();
+  c.fillStyle = chartFill;
+  c.fill();
+  c.beginPath();
+  smoothPath(c, pts);
+  c.strokeStyle = '#c8f07a';
+  c.lineWidth = 2;
+  c.lineJoin = c.lineCap = 'round';
+  c.stroke();
+  // 目前的值
+  const end = pts[pts.length - 1];
+  c.fillStyle = '#ffffff';
+  c.beginPath();
+  c.arc(end.x, end.y, 3.5, 0, Math.PI * 2);
+  c.fill();
+}
+
+// ───────── 點 3D 看板長出花朵 ─────────
+
+interface Flower {
+  x: number;
+  y: number;
+  /** 花的半徑（繪圖座標） */
+  size: number;
+  petals: number;
+  hue: number;
+  spin: number;
+  /** 綻放的進度（秒） */
+  age: number;
+}
+/** 正在綻放的花（綻放完就不用再畫，留在畫板上） */
+const flowers: Flower[] = [];
+const BLOOM_SECONDS = 0.6;
+
+function addFlower(x: number, y: number): void {
+  flowers.push({
+    x,
+    y,
+    size: 16 + Math.random() * 16,
+    petals: 5 + Math.floor(Math.random() * 4),
+    hue: [330, 350, 280, 200, 45, 15][Math.floor(Math.random() * 6)] + Math.random() * 20,
+    spin: Math.random() * Math.PI,
+    age: 0,
+  });
+}
+
+/** 畫一朵花：scale 0～1 是綻放程度（每幀用更大的尺寸畫在原本的上面，花瓣不透明，所以不會越疊越深） */
+function drawFlower(f: Flower, scale: number): void {
+  const c = padCtx;
+  const r = f.size * scale;
+  c.save();
+  c.shadowBlur = 0;
+  c.translate(f.x, f.y);
+  c.rotate(f.spin + (1 - scale) * 0.8); // 一邊轉一邊打開
+  for (let i = 0; i < f.petals; i++) {
+    const a = (i / f.petals) * Math.PI * 2;
+    c.save();
+    c.rotate(a);
+    c.fillStyle = `hsl(${f.hue} 75% 62%)`;
+    c.beginPath();
+    c.ellipse(r * 0.55, 0, r * 0.52, r * 0.3, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = `hsl(${f.hue} 90% 80%)`;
+    c.beginPath();
+    c.ellipse(r * 0.5, 0, r * 0.3, r * 0.14, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+  c.fillStyle = '#ffd166';
+  c.beginPath();
+  c.arc(0, 0, r * 0.24, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = '#c9822b';
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    c.beginPath();
+    c.arc(Math.cos(a) * r * 0.12, Math.sin(a) * r * 0.12, Math.max(0.5, r * 0.035), 0, Math.PI * 2);
+    c.fill();
+  }
+  c.restore();
+}
+
+/** 讓花綻放（每幀呼叫） */
+function growFlowers(dt: number): void {
+  if (flowers.length === 0) return;
+  for (const f of flowers) {
+    f.age = Math.min(BLOOM_SECONDS, f.age + dt);
+    const t = f.age / BLOOM_SECONDS;
+    // 先快後慢地打開（cubicOut）；只會越畫越大，新的一層剛好蓋住上一層
+    const scale = 1 - (1 - t) ** 3;
+    drawFlower(f, scale);
+  }
+  for (let i = flowers.length - 1; i >= 0; i--) if (flowers[i].age >= BLOOM_SECONDS) flowers.splice(i, 1);
+  padChanged();
+}
+
+const canvasPage: Scene = {
+  name: 'canvas',
+  setup(w) {
+    camera([0, 2.4, 7], [0, 1.4, 0]);
+    flowers.length = 0;
+    // 3D 看板：畫板的內容當成貼圖（同一張 <canvas>，畫了新東西就更新）
+    padTexture = create.texture(pad.canvas);
+    spawn.mesh(w, {
+      geometry: { box: [3.3, 2.3, 0.08] },
+      material: '#4a5340',
+      position: [-1.2, 1.75, -0.05],
+      castShadow: true,
+    });
+    // 畫板沒畫到的地方是透明的（介面裡露出 UICanvas 的背景 #333333）：看板也墊一塊同色的底板，再疊上半透明的貼圖
+    const boardSize: [number, number] = [3.1, 3.1 * (pad.height / pad.width)];
+    const boardBack = spawn.mesh(w, {
+      geometry: { plane: boardSize },
+      material: { basic: { color: '#333333' } },
+      position: [-1.2, 1.75, 0],
+    });
+    const board = spawn.mesh(w, {
+      geometry: { plane: boardSize },
+      material: { basic: { map: padTexture, transparent: true, depthWrite: false } },
+      position: [-1.2, 1.75, 0.005],
+    });
+    for (const x of [-2.6, 0.2])
+      spawn.mesh(w, { geometry: { box: [0.12, 0.7, 0.12] }, material: '#3a4232', position: [x, 0.35, -0.05] });
+
+    // 彈跳球：高度畫在折線圖上
+    const ball = spawn.mesh(w, {
+      geometry: { sphere: 0.3 },
+      material: { standard: { color: '#ffd166', roughness: 0.35 } },
+      position: [2.2, 0.3, 0.5],
+      castShadow: true,
+    });
+    const t = w.require(ball, Transform);
+    const sim = { y: 2.5, vy: 0 };
+    resetChart(sim.y);
+    pageUpdate = (dt) => {
+      // 點 3D 看板：射線點選拿到貼圖座標（uv，左下 0,0），換算成畫板的繪圖座標（左上 0,0），在那裡長出一朵花
+      if (clicked()) {
+        const hit = render.pick(input.pointer.ndcX, input.pointer.ndcY);
+        if (hit?.uv && (hit.entity === board || hit.entity === boardBack)) {
+          addFlower(hit.uv.x * pad.width, (1 - hit.uv.y) * pad.height);
+          audio.play('sounds/pop.wav', { volume: 0.45, pitch: 1.1 + Math.random() * 0.4 });
+        }
+      }
+      flushPen();
+      growFlowers(dt);
+      syncPadTexture(dt);
+      // 簡單的重力與反彈；彈不動了就再丟高一次
+      sim.vy -= 9.8 * dt;
+      sim.y += sim.vy * dt;
+      if (sim.y < 0) {
+        sim.y = 0;
+        sim.vy = Math.abs(sim.vy) * 0.78;
+        if (sim.vy < 1.2) sim.vy = 7;
+      }
+      t.position.y = 0.3 + sim.y;
+      // 折線圖每幀重畫（捲動才平滑；UICanvas 每幀最多更新介面一次）
+      recordHeight(dt, sim.y);
+      drawChart();
+    };
+    padChanged();
+  },
+};
+
+ui.setHandlers({
+  penColor: (e) => {
+    penColor = PEN_COLORS[Number(e.target?.id?.replace('pen', '') ?? 0)] ?? PEN_COLORS[0];
+  },
+  clearPad: () => clearPad(),
+  // 程式畫一顆星星（路徑、漸層、描邊）
+  drawStar: () => {
+    const cx = 40 + Math.random() * (pad.width - 80);
+    const cy = 40 + Math.random() * (pad.height - 80);
+    const r = 22 + Math.random() * 18;
+    padCtx.save();
+    padCtx.shadowBlur = 0;
+    padCtx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const rr = i % 2 === 0 ? r : r * 0.45;
+      padCtx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    padCtx.closePath();
+    const g = padCtx.createRadialGradient(cx, cy - r * 0.3, 2, cx, cy, r);
+    g.addColorStop(0, '#fff6cc');
+    g.addColorStop(1, penColor);
+    padCtx.fillStyle = g;
+    padCtx.fill();
+    padCtx.lineWidth = 2;
+    padCtx.strokeStyle = 'rgba(0,0,0,0.35)';
+    padCtx.stroke();
+    padCtx.restore();
+    padChanged();
+  },
+});
+
 // ───────── 分頁切換 ─────────
 
-scenes.register(hudPage, bagPage, panelsPage, talkPage);
+scenes.register(hudPage, bagPage, panelsPage, talkPage, canvasPage);
 /** 每一頁對應的 2D 疊加層 */
-const LAYERS: Record<string, string> = { hud: 'hudLayer', bag: 'bagLayer', talk: 'talkLayer' };
+const LAYERS: Record<string, string> = { hud: 'hudLayer', bag: 'bagLayer', talk: 'talkLayer', canvas: 'canvasLayer' };
 let currentPage = '';
 function showPage(name: string): void {
   if (name === currentPage) return;

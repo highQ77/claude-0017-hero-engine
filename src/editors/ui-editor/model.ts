@@ -43,6 +43,7 @@ export function isContainer(node: XmlNode): boolean {
     'UIChoice',
     'UIJoystick',
     'UIMinimap',
+    'UICanvas',
     'UITable',
     'UIColumn',
     'UIRow',
@@ -245,6 +246,13 @@ export const PALETTE: PaletteItem[] = [
     tag: 'UIImage',
     desc: '顯示圖片。只給寬或高時維持比例；fit 可設 contain、cover、fill。',
     xml: '<UIImage src="coin.png" width="48"/>',
+  },
+  {
+    group: '基本',
+    label: '畫布',
+    tag: 'UICanvas',
+    desc: '用 Canvas 2D 的寫法自己畫（底層是 WebGL）：程式裡 ui.require<UICanvas>(id).getContext() 取得 ctx。width、height 是繪圖座標大小，background 預設 #333333FF；尺寸改變會清空並觸發 onResize；滑鼠拖曳觸發 onPointerdown／onPointermove／onPointerup（value 是繪圖座標）。',
+    xml: '<UICanvas id="canvas" width="320" height="200" background="#333333FF"/>',
   },
   {
     group: '基本',
@@ -668,6 +676,18 @@ export const ATTRIBUTE_HINTS: Record<string, string[]> = {
   UISkin: ['for'],
   UIImport: ['src'],
   UIFpsMeter: ['format', 'interval', 'color', 'fontSize'],
+  UICanvas: [
+    'id',
+    'width',
+    'height',
+    'background',
+    'pixelRatio',
+    'radius',
+    'onResize',
+    'onPointerdown',
+    'onPointermove',
+    'onPointerup',
+  ],
   UIMinimap: [
     'range',
     'shape',
@@ -729,6 +749,7 @@ const ICON_HINTS = [
 export const VALUE_HINTS: Record<string, string[]> = {
   dir: ['v', 'h'],
   pointerEvents: ['none', 'auto'],
+  pixelRatio: ['auto', '1', '2'],
   align: ['start', 'center', 'end', 'stretch'],
   self: ['start', 'center', 'end', 'stretch'],
   justify: ['start', 'center', 'end', 'between', 'around', 'evenly'],

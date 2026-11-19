@@ -14,6 +14,7 @@
       "vite.config.ts",
       "vitest.config.ts",
       "!src/text3d/fonts",
+      "!src/ui2d/canvas2d/webgl2d.js",
       "!**/*.html"
     ]
   },

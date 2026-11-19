@@ -9,7 +9,7 @@
  *   </script>
  *
  * 屬性：
- * - data-lang：ts（預設）、xml、sh、text
+ * - data-lang：ts（預設）、xml、sh、text、canvas（UICanvas 繪圖範例，見 canvasExample.ts）
  * - data-title：標題
  * - data-height：預覽高度（像素），XML 預設 240、TypeScript 預設 320
  * - data-run="false"：只能編輯不能執行（程式片段）
@@ -18,9 +18,11 @@
  *
  * 執行方式：
  * - XML：直接在頁面裡用 UI2D 排版顯示，邊打邊更新；onClick 等事件會記錄到下方的輸出。
+ * - canvas：在頁面裡用共用的 <UICanvas> 執行，旁邊是原生 Canvas 2D 的對照（data-native="false" 時沒有）。
  * - TypeScript：放進預覽框（iframe）執行，和遊戲專案一樣可以 import '@engine/...'、'three'。
  *   同一時間只執行一個 TypeScript 範例（WebGL 畫面數量有限），執行另一個時前一個會停止。
  */
+import { CanvasExample } from './canvasExample';
 import { CodeEditor } from './editor';
 import type { Lang } from './highlight';
 import { UI2D, uiXml, type UIEvent } from '@engine/ui2d';
@@ -57,7 +59,16 @@ function button(label: string, title: string, cls = ''): HTMLButtonElement {
   return b;
 }
 
-const LANG_LABEL: Record<Lang, string> = { ts: 'TypeScript', xml: 'XML 介面', sh: '終端機', text: '文字' };
+/** 範例的種類：程式語言，加上 UICanvas 繪圖範例（TypeScript 高亮、在頁面裡執行） */
+type ExampleLang = Lang | 'canvas';
+
+const LANG_LABEL: Record<ExampleLang, string> = {
+  ts: 'TypeScript',
+  xml: 'XML 介面',
+  sh: '終端機',
+  text: '文字',
+  canvas: 'UICanvas',
+};
 
 /** 目前在執行的 TypeScript 範例 */
 let runningTs: Example | null = null;
@@ -66,7 +77,7 @@ export class Example {
   readonly element: HTMLElement;
   private readonly editor: CodeEditor;
   private readonly original: string;
-  private readonly lang: Lang;
+  private readonly lang: ExampleLang;
   private readonly runnable: boolean;
   private readonly height: number;
   /** 只看輸出（不顯示預覽畫面） */
@@ -78,6 +89,7 @@ export class Example {
   private readonly stage: HTMLElement;
   private readonly log: HTMLElement;
   private frame: HTMLIFrameElement | null = null;
+  private canvas: CanvasExample | null = null;
   private ui: UI2D | null = null;
   private uiCreating: Promise<UI2D> | null = null;
   private xmlTimer = 0;
@@ -85,10 +97,13 @@ export class Example {
   private readonly sizeInfo = document.createElement('span');
 
   constructor(source: HTMLElement) {
-    this.lang = (source.dataset.lang as Lang) || 'ts';
+    this.lang = (source.dataset.lang as ExampleLang) || 'ts';
     this.original = dedent(source.textContent ?? '');
     const readOnly = source.hasAttribute('data-readonly');
-    this.runnable = source.dataset.run !== 'false' && !readOnly && (this.lang === 'ts' || this.lang === 'xml');
+    this.runnable =
+      source.dataset.run !== 'false' &&
+      !readOnly &&
+      (this.lang === 'ts' || this.lang === 'xml' || this.lang === 'canvas');
     this.consoleOnly = source.hasAttribute('data-console');
     this.height = this.consoleOnly ? 44 : Number(source.dataset.height) || (this.lang === 'xml' ? 240 : 320);
 
@@ -111,6 +126,7 @@ export class Example {
     this.resetBtn.addEventListener('click', () => {
       this.editor.setValue(this.original);
       if (this.lang === 'ts' && this.frame) this.run();
+      if (this.canvas) void this.canvas.run();
     });
     const copyBtn = button('複製', '複製程式碼');
     copyBtn.addEventListener('click', async () => {
@@ -131,17 +147,28 @@ export class Example {
       this.runBtn.addEventListener('click', () => this.run());
       tools.append(this.stopBtn, this.runBtn);
     }
+    if (this.runnable && this.lang === 'canvas') {
+      const run = button('▶ 執行', '執行（Ctrl 或 ⌘ + Enter）', 'ex-run');
+      run.addEventListener('click', () => void this.canvas?.run());
+      tools.append(run);
+    }
     bar.append(lang, title, tools);
 
     // ── 編輯器 ──
     this.editor = new CodeEditor(this.original, {
-      lang: this.lang,
+      lang: this.lang === 'canvas' ? 'ts' : this.lang,
       readOnly,
       onChange: (code) => {
         this.resetBtn.hidden = code === this.original;
         if (this.lang === 'xml' && this.runnable) this.scheduleXml();
+        this.canvas?.schedule();
       },
-      onRun: () => this.runnable && (this.lang === 'xml' ? this.renderXml() : this.run()),
+      onRun: () => {
+        if (!this.runnable) return;
+        if (this.lang === 'xml') void this.renderXml();
+        else if (this.canvas) void this.canvas.run();
+        else this.run();
+      },
     });
 
     // ── 執行結果 ──
@@ -159,6 +186,7 @@ export class Example {
     if (this.runnable) {
       el.append(this.output);
       if (this.lang === 'xml') this.setupXml();
+      else if (this.lang === 'canvas') this.setupCanvas(source.dataset.native !== 'false');
       else this.showPlaceholder();
     }
   }
@@ -238,8 +266,35 @@ export class Example {
     if (this.runnable && this.lang === 'ts') this.showPlaceholder();
   }
 
+  // ───────── UICanvas：頁面內執行 ─────────
+
+  private setupCanvas(native: boolean): void {
+    this.stage.classList.add('ex-stage-canvas');
+    this.stage.style.height = '';
+    this.canvas = new CanvasExample(
+      () => this.editor.value,
+      (level, text) => this.print(level, text),
+      () => this.clearLog(),
+      native,
+    );
+    this.stage.append(this.canvas.element);
+    // 捲到畫面附近才執行（一頁有很多範例）
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting) && this.canvas && !this.canvas.ran) {
+          io.disconnect();
+          void this.canvas.run();
+        }
+      },
+      { rootMargin: '300px 0px' },
+    );
+    io.observe(this.element);
+  }
+
   /** 離開章節：停止執行、釋放介面 */
   dispose(): void {
+    this.canvas?.dispose();
+    this.canvas = null;
     clearTimeout(this.xmlTimer);
     if (this.frame) this.stop();
     this.xmlVisible = true; // 還沒建立的不要再建立

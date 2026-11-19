@@ -9,6 +9,7 @@ import {
   type WrapName,
 } from './descriptors';
 import { createGroup, createMesh, createPoints } from './objects';
+import { BufferAttribute, type TypedArray } from 'three';
 export { MeshRenderer, Camera, Light, SceneObject } from './components';
 export type { MeshRendererData, CameraData, CameraKind, LightData, LightKind, SceneObjectData } from './components';
 export {
@@ -117,6 +118,12 @@ export const create = {
   group: createGroup,
   /** 點雲：create.points([[x, y, z], …], { color: '#fff', size: 0.05 }) */
   points: createPoints,
+  /**
+   * 幾何的頂點資料（自訂著色器用）：create.attribute(new Float32Array(n * 2), 2)，
+   * 再用 geometry.setAttribute('aWeight', …) 加到幾何上；itemSize 是每個頂點幾個數字
+   */
+  attribute: (array: TypedArray, itemSize: number, normalized = false): BufferAttribute =>
+    new BufferAttribute(array, itemSize, normalized),
 } as const;
 
 /** 數學小工具：朝向、世界座標、向量轉換、緩動曲線（render 模組的部分；總入口 hero.math 有全部） */

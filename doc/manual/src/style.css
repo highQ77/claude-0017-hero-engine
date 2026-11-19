@@ -1108,3 +1108,96 @@ a.api-link:hover code {
   font-size: 13.5px;
   padding: 4px 0;
 }
+
+/* ───────── UICanvas 章節（data-lang="canvas" 範例、API 卡片） ───────── */
+
+.cv-api {
+  margin: 22px 0 28px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.cv-sig {
+  font-family: var(--mono);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+.cv-ret {
+  font-weight: 400;
+  color: var(--text-faint);
+  margin-left: 6px;
+}
+.cv-table {
+  overflow-x: auto;
+}
+.cv-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cv-badge.ok {
+  color: var(--accent-strong);
+  background: var(--accent-bg);
+}
+.cv-badge.part {
+  color: #9a5b00;
+  background: rgba(240, 184, 96, 0.2);
+}
+.cv-badge.no {
+  color: #b42318;
+  background: rgba(255, 138, 128, 0.18);
+}
+.cv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.example .ex-stage-canvas {
+  height: auto;
+  padding: 12px;
+  background: var(--stage-bg);
+}
+.cv-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.cv-result figure {
+  margin: 0;
+  flex: 0 1 320px;
+  min-width: 0;
+}
+.cv-result figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--code-faint);
+  margin-bottom: 4px;
+}
+.cv-result canvas {
+  display: block;
+  width: 320px;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 320 / 200;
+  border-radius: 6px;
+  /* 淺色棋盤格：預設的黑色填色、描邊看得清楚，透明的地方也看得出來 */
+  background: #ffffff repeating-conic-gradient(#0000000d 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
+.cv-result .cv-only {
+  font-size: 12.5px;
+  color: var(--code-faint);
+  margin: 0;
+  max-width: 320px;
+}
+.cv-hide-native .cv-result .cv-native {
+  display: none;
+}

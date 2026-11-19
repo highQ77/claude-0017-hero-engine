@@ -34,6 +34,8 @@ export interface RaycastHit {
   distance: number;
   /** 打到的面的法線（若有） */
   normal: THREE.Vector3 | null;
+  /** 點到的貼圖座標（0～1，左下為 0,0；幾何沒有 uv 時是 null）：例如換算成畫在貼圖上的位置 */
+  uv: THREE.Vector2 | null;
 }
 
 /** RenderPlugin 的設定 */
@@ -207,6 +209,7 @@ export class RenderPlugin implements Plugin {
         point: i.point,
         distance: i.distance,
         normal: i.face ? i.face.normal.clone().transformDirection(i.object.matrixWorld) : null,
+        uv: i.uv ? i.uv.clone() : null,
       };
       if (!filter || filter(hit)) hits.push(hit);
     }

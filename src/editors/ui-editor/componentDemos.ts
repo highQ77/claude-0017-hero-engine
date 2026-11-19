@@ -6,7 +6,16 @@
  */
 import type { UI2D } from '../../ui2d/UI2D';
 import type { UIElement } from '../../ui2d/elements';
-import type { UIBadge, UICooldown, UIDialogue, UIJoystick, UIMinimap, UIProgressBar, UISlot } from '../../ui2d/widgets';
+import type {
+  UIBadge,
+  UICanvas,
+  UICooldown,
+  UIDialogue,
+  UIJoystick,
+  UIMinimap,
+  UIProgressBar,
+  UISlot,
+} from '../../ui2d/widgets';
 import type { UIRichText } from '../../ui2d/richtext';
 import type { UILabel } from '../../ui2d/elements';
 
@@ -301,4 +310,47 @@ export const COMPONENT_DEMOS: Record<string, ComponentDemo> = {
     },
   },
   按鈕: { hint: '滑鼠移入、按下都有不同外觀；點擊會記錄 onClick', xml: '<UIButton text="按鈕" onClick="clicked"/>' },
+  畫布: {
+    hint: '程式用 getContext() 取得 ctx，以 Canvas 2D 的寫法繪圖（底層是 WebGL）：漸層、路徑、半透明描邊、文字',
+    xml: '<UICanvas id="canvas" width="320" height="200" radius="10"/>',
+    run(ui, log) {
+      const canvas = first<UICanvas>(ui, 'UICanvas');
+      if (!canvas) return () => {};
+      let ctx: ReturnType<UICanvas['getContext']>;
+      try {
+        ctx = canvas.getContext();
+      } catch (error) {
+        log(`無法建立 WebGL：${(error as Error).message}`);
+        return () => {};
+      }
+      log(`getContext() → ${ctx.isWebGL2 ? 'WebGL 2' : 'WebGL 1'}，${canvas.width}×${canvas.height}`);
+      let t = 0;
+      const draw = () => {
+        t += 0.04;
+        ctx.clearRect(0, 0, 320, 200);
+        const g = ctx.createLinearGradient(0, 0, 320, 0);
+        g.addColorStop(0, '#9acd32');
+        g.addColorStop(1, '#7fd6c2');
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = g;
+        ctx.beginPath();
+        for (let x = 0; x <= 320; x += 4) {
+          const y = 100 + Math.sin(x / 30 + t) * 40 * Math.cos(t * 0.5);
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,179,71,0.55)';
+        for (let i = 0; i < 5; i++) {
+          ctx.beginPath();
+          ctx.arc(40 + i * 60, 100 + Math.sin(t * 2 + i) * 50, 14, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 15px system-ui, sans-serif';
+        ctx.fillText('UICanvas · WebGL2D', 12, 24);
+      };
+      return every(33, draw);
+    },
+  },
 };

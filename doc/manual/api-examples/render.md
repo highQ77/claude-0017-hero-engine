@@ -450,6 +450,30 @@ Light 在場景檔裡的寫法（顏色是 '#rrggbb'，角度用度）。
 console.log(lightCodec.write({ ...Light.create(), kind: 'spot', color: 0xffcc00, angle: Math.PI / 6 }));
 ```
 
+`create.attribute`：給幾何加上自訂的頂點資料，著色器裡用 `attribute` 讀取。這裡每個頂點存一個高度權重，頂點著色器依時間上下擺動。
+
+```ts
+spawn.camera(world, { position: [0, 2, 4], target: [0, 0, 0] });
+spawn.defaultLights(world);
+const geometry = create.geometry({ plane: [3, 3, 30, 30] });
+const count = geometry.getAttribute('position').count;
+const weight = new Float32Array(count);
+for (let i = 0; i < count; i++) weight[i] = Math.random();
+geometry.setAttribute('aWeight', create.attribute(weight, 1));
+const material = create.material({ standard: { color: '#9acd32', side: 'double' } });
+const uniforms = { uTime: { value: 0 } };
+material.onBeforeCompile = (shader) => {
+  Object.assign(shader.uniforms, uniforms);
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute float aWeight;\nuniform float uTime;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.z += sin(uTime * 3.0 + aWeight * 6.28) * 0.15 * aWeight;');
+};
+spawn.mesh(world, { geometry, material, rotation: [-Math.PI / 2.5, 0, 0] });
+engine.on('update', (t) => (uniforms.uTime.value = t.elapsed));
+console.log('頂點數：', count, '，每個頂點', geometry.getAttribute('aWeight').itemSize, '個數字');
+engine.start();
+```
+
 ## math
 `math.toVector3`：把 `[x, y, z]` 或 `{ x, y, z }` 轉成 Vector3。
 

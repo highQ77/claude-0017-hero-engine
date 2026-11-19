@@ -8,7 +8,10 @@
 import { describe, expect, test } from 'vitest';
 
 /** 允許直接 import three 的檔案或範例（路徑、或「章節檔名#範例標題」） */
-const ALLOWED: string[] = [];
+const ALLOWED: string[] = [
+  // 自訂後製 pass（render target、全螢幕 shader、three/examples 的 Pass）：引擎的後製外掛沒有提供這一層
+  'projects/desert/src/godrays.ts',
+];
 
 /** import three（包含 three/examples/…）；import type 也算：型別名稱請從 @engine/render 引用 */
 const IMPORTS_THREE = /^\s*import\s[^;]*?from\s+['"]three(?:\/[^'"]*)?['"]/m;

@@ -3,11 +3,18 @@
  * 外掛設定在 engine.ts；這裡寫遊戲本身。引擎用 @engine/... 引用（例如 '@engine/render'），介面檔放在 public/ui。
  * 場景的內容（攝影機、燈光、幽靈船模型）在 public/scenes/main.xml，可以用 3D 場景編輯器（/s3d-editor.html）編輯。
  */
-import * as THREE from 'three';
-import { Quaternion, Vector3 } from '@engine/math';
+import { Color, Quaternion, Vector3 } from '@engine/math';
 import { define, type Entity } from '@engine/ecs';
 import { Transform, create, load, previewScene } from '@engine/scene';
-import { MeshRenderer, OrbitControl } from '@engine/render';
+import {
+  MeshRenderer,
+  OrbitControl,
+  create as createRender,
+  type Mesh,
+  type MeshStandardMaterial,
+  type Object3D,
+  type Texture,
+} from '@engine/render';
 import { assets, ecs, engine, scenes } from './engine';
 import { spawnDust } from './dust';
 import { addGodrays } from './godrays';
@@ -27,47 +34,49 @@ const AO_STRENGTH = 1;
 /** 月亮的亮度：超過光暈門檻（場景檔 bloom 的 threshold）的部分會向外發光，形成月暈 */
 const MOON_BRIGHTNESS = 10;
 
-async function bakedMaps(name: string): Promise<{ lightMap: THREE.Texture; aoMap: THREE.Texture }> {
+async function bakedMaps(name: string): Promise<{ lightMap: Texture; aoMap: Texture }> {
   const [lightMap, aoMap] = await Promise.all([
     assets.load(`${SHIP_DIR}/baked/${name}_Lightmap.hdr`, 'hdr'),
     assets.load(`${SHIP_DIR}/baked/${name}_AO.png`, 'texture'),
   ]);
   // glTF 的 UV 是上下顛倒的慣例（和模型內嵌的貼圖一樣不翻轉）；.hdr 載入時預設是全景圖，要改回一般貼圖
-  lightMap.mapping = THREE.UVMapping;
+  lightMap.mapping = aoMap.mapping; // 一般貼圖的對應方式（UV）
   lightMap.flipY = false;
   aoMap.flipY = false;
-  aoMap.colorSpace = THREE.NoColorSpace; // AO 是資料，不做色彩轉換
+  aoMap.colorSpace = ''; // 不做色彩轉換（AO 是資料）
   lightMap.needsUpdate = aoMap.needsUpdate = true;
   return { lightMap, aoMap };
 }
 
 const ship = await assets.load(`${SHIP_DIR}/ghost_ship_desert.glb`, 'gltf');
-const meshes: THREE.Mesh[] = [];
+const meshes: Mesh[] = [];
 ship.scene.traverse((o) => {
-  if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
+  if ((o as Mesh).isMesh) meshes.push(o as Mesh);
 });
 // 每個物件（DesertTerrain、Ship_Body、Ship_Sails）各有自己的一組烘焙貼圖，檔名用物件名稱開頭
 // （Ship_Body 有多個材質區塊，匯出後是 Ship_Body 底下的多個網格，名稱用最上層的節點）
-const bakedName = (m: THREE.Object3D): string => {
+const bakedName = (m: Object3D): string => {
   let o = m;
   while (o.parent && o.parent !== ship.scene) o = o.parent;
   return o.name;
 };
-const maps = new Map<string, Promise<{ lightMap: THREE.Texture; aoMap: THREE.Texture }>>();
+const maps = new Map<string, Promise<{ lightMap: Texture; aoMap: Texture }>>();
 await Promise.all(
   meshes.map(async (mesh) => {
     const name = bakedName(mesh);
     if (!maps.has(name)) maps.set(name, bakedMaps(name));
     const { lightMap, aoMap } = await maps.get(name)!;
-    const old = mesh.material as THREE.MeshStandardMaterial;
-    mesh.material = new THREE.MeshBasicMaterial({
-      name: old.name,
-      map: old.emissiveMap, // 匯出時把烘焙的底色放在自發光貼圖
-      lightMap,
-      lightMapIntensity: Math.PI * LIGHTMAP_GAIN, // three.js 的基本材質會把光照貼圖除以 π，這裡乘回來
-      aoMap,
-      aoMapIntensity: AO_STRENGTH,
-      side: old.side,
+    const old = mesh.material as MeshStandardMaterial;
+    mesh.material = createRender.material({
+      basic: {
+        name: old.name,
+        map: old.emissiveMap, // 匯出時把烘焙的底色放在自發光貼圖
+        lightMap,
+        lightMapIntensity: Math.PI * LIGHTMAP_GAIN, // three.js 的基本材質會把光照貼圖除以 π，這裡乘回來
+        aoMap,
+        aoMapIntensity: AO_STRENGTH,
+        side: old.side,
+      },
     });
     old.dispose();
   }),
@@ -107,9 +116,11 @@ scenes.register(
       const moon = spawned.entities.get('moon');
       const moonMesh = moon === undefined ? undefined : world.get(moon, MeshRenderer);
       if (moonMesh) {
-        moonMesh.material = new THREE.MeshBasicMaterial({
-          color: new THREE.Color('#fff4e0').multiplyScalar(MOON_BRIGHTNESS),
-          fog: false, // 月亮在霧的範圍外，不能被霧蓋掉
+        moonMesh.material = createRender.material({
+          basic: {
+            color: new Color('#fff4e0').multiplyScalar(MOON_BRIGHTNESS),
+            fog: false, // 月亮在霧的範圍外，不能被霧蓋掉
+          },
         });
         spawned.add('moon', FaceCamera, { camera: spawned.entities.get('camera') ?? null });
         // 月光光束：從船身、桅杆、船帆的縫隙透出來的放射狀光束（godrays.ts）

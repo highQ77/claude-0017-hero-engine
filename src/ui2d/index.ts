@@ -65,10 +65,12 @@ export {
   UIDialog,
   UIJoystick,
   UIMinimap,
+  UICanvas,
   WIDGET_COMPONENTS,
   RARITY_COLORS,
 } from './widgets';
 export type { ToastOptions, DialogChoice, MinimapMarker as MinimapPoint } from './widgets';
+export type { WebGL2DRenderingContext, WebGL2DOptions, WebGL2DHiDPIOptions, ShaderFilter } from './widgets';
 export { ICONS, ICON_NAMES } from './icons';
 
 export type { OverlayPainter, PointerCapture } from './elements';

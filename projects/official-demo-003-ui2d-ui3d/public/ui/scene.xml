@@ -33,6 +33,7 @@
       <UIButton text="背包" style="tab" select="pages:bag"/>
       <UIButton text="3D 面板" style="tab" select="pages:panels"/>
       <UIButton text="對話" style="tab" select="pages:talk"/>
+      <UIButton text="畫布" style="tab" select="pages:canvas"/>
     </UILayout>
 
     <UIStackView id="pages" flex="1" transition="fade" onChange="page">
@@ -109,6 +110,35 @@
         </UILayout>
         <UIButton text="重新開始" onClick="resetTalk"/>
       </UIScrollView>
+
+      <!-- ⑤ 畫布 -->
+      <UIScrollView id="canvas" gap="10">
+        <UILabel style="title">自己畫圖（UICanvas）</UILabel>
+        <UILabel style="text">UICanvas 用和 Canvas 2D 一樣的 API 繪圖，底層是 WebGL。右下是畫板：用滑鼠畫圖，畫好的內容同時貼到 3D 看板上；點 3D 看板會在點到的位置長出花朵。右上的折線圖即時畫出 3D 彈跳球的高度。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">const ctx = ui.require&lt;UICanvas&gt;('pad').getContext()</UILabel>
+          <UILabel style="codeLine">pad.on('pointermove', (e) =&gt; …)  // e.value = { x, y }</UILabel>
+          <UILabel style="codeLine">create.texture(pad.canvas)  // 貼到 3D</UILabel>
+          <UILabel style="codeLine">render.pick(…).uv  // 點到看板的哪裡</UILabel>
+        </UILayout>
+        <UILabel style="field">筆的顏色</UILabel>
+        <UILayout dir="h" gap="6">
+          <UIButton id="pen0" text="綠" background="#9acd32" color="#141a07" flex="1" onClick="penColor"/>
+          <UIButton id="pen1" text="紅" background="#ff6b6b" color="#2a0b0b" flex="1" onClick="penColor"/>
+          <UIButton id="pen2" text="藍" background="#4cc9f0" color="#06202a" flex="1" onClick="penColor"/>
+          <UIButton id="pen3" text="黃" background="#ffd166" color="#2a2000" flex="1" onClick="penColor"/>
+          <UIButton id="pen4" text="白" background="#ffffff" color="#141a07" flex="1" onClick="penColor"/>
+        </UILayout>
+        <UILabel style="field">筆的粗細</UILabel>
+        <UISlider id="penSize" min="1" max="24" step="1" value="6" showValue="true" suffix=" px"/>
+        <UIToggle id="penGlow" text="發光筆（shadowBlur）" checked="true"/>
+        <UILayout dir="h" gap="8">
+          <UIButton text="清除畫板" flex="1" onClick="clearPad"/>
+          <UIButton text="畫一顆星星" flex="1" onClick="drawStar"/>
+        </UILayout>
+        <UILabel style="hint">點 3D 看板：長出花朵（射線點選的 uv 換算成畫板座標）。拖曳是轉動視角，不會長花。</UILabel>
+        <UILabel style="hint">畫布的內容會一直保留，不用每幀重畫；折線圖是動畫，每幀先 clearRect 再畫。</UILabel>
+      </UIScrollView>
     </UIStackView>
 
     <UILabel style="hint">拖曳畫面轉動視角，滾輪縮放（先點一下畫面）。按 ` 鍵顯示效能面板。</UILabel>
@@ -174,6 +204,18 @@
           <UIColumn key="score" title="分數" width="90" align="right" sort="number"/>
         </UITable>
       </UIWindow>
+    </UILayout>
+
+    <!-- ⑤ 畫布：右上折線圖、右下畫板（UICanvas，背景預設 #333333FF） -->
+    <UILayout id="canvasLayer" style="layer" hidden="true" justify="between" align="end">
+      <UILayout style="hudCard" gap="6">
+        <UILabel style="field" fontWeight="bold">彈跳球的高度（公尺）</UILabel>
+        <UICanvas id="chart" width="300" height="120" radius="8" background="rgba(0,0,0,0.35)"/>
+      </UILayout>
+      <UILayout style="hudCard" gap="6">
+        <UILabel style="field" fontWeight="bold">畫板（按住滑鼠拖曳）</UILabel>
+        <UICanvas id="pad" width="360" height="240" radius="8"/>
+      </UILayout>
     </UILayout>
 
     <!-- ④ 對話框：在畫面下方 -->

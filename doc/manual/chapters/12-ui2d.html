@@ -481,3 +481,6 @@ export const minimap = use(new MinimapPlugin({ minimap: 'minimap', follow: () =>
 world.add(enemy, MinimapMarker, { color: '#ff5a5a', shape: 'dot' });
 world.add(chest, MinimapMarker, { color: '#ffd75e', pin: true }); // pin：超出範圍時貼在邊緣
 </script>
+
+<h2>自己畫圖：UICanvas</h2>
+<p>需要圖表、簽名板、小遊戲這類自由繪圖時，用 <code>&lt;UICanvas id="c" width="320" height="200"/&gt;</code>，程式裡 <code>ui.require&lt;UICanvas&gt;('c').getContext()</code> 取得和 Canvas 2D 相同的繪圖 API（底層是 WebGL）。完整說明與每個 API 的範例見 <a href="#/ui-canvas">UICanvas 畫布</a>。</p>

@@ -15,6 +15,8 @@
  *   --run-api    另外用 Chrome 實際執行 API 參考的每個範例（很多，要幾十分鐘）
  *   --api-only   只檢查 API 參考（略過章節的範例）
  *   --api-module=core,scene   只執行這些模組的 API 範例（搭配 --run-api）
+ *
+ * UICanvas 繪圖範例（data-lang="canvas"）在 --run 時打開章節頁面，依序執行並收集錯誤輸出。
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -326,6 +328,26 @@ async function runInBrowser(list) {
         for (const err of page.errors) console.log(`    ${err}`);
       } else {
         console.log(`✓ ${ch}：${items.length} 個 XML 範例`);
+      }
+      await page.close();
+    }
+
+    // UICanvas 繪圖範例（data-lang="canvas"）：在章節頁面裡依序執行，收集錯誤輸出
+    const canvasChapters = process.argv.includes('--api-only')
+      ? []
+      : [...new Set(list.filter((e) => e.lang === 'canvas' && e.runnable).map((e) => e.chapter))];
+    for (const ch of canvasChapters) {
+      const page = await openPage(`${base}/manual/#/${ch}`);
+      await sleep(2000);
+      const items = JSON.parse(await page.evaluate('window.__runCanvasExamples().then((r) => JSON.stringify(r))'));
+      const bad = items.filter((x) => x.errors.length);
+      if (bad.length || page.errors.length || !items.length) {
+        failed += bad.length + page.errors.length + (items.length ? 0 : 1);
+        console.log(`✗ ${ch}：${items.length} 個 UICanvas 範例`);
+        for (const b of bad) console.log(`    [${b.title}] ${b.errors.join('；')}`);
+        for (const err of page.errors) console.log(`    ${err}`);
+      } else {
+        console.log(`✓ ${ch}：${items.length} 個 UICanvas 範例`);
       }
       await page.close();
     }

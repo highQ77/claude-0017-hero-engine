@@ -25,6 +25,8 @@
     <UILayout dir="h" gap="12" align="center">
       <UILabel fontSize="16" color="#b8c0ae">方塊轉速</UILabel>
       <UISlider id="spin" min="0" max="3" step="0.1" value="1" showValue="true" suffix="x" flex="1" onInput="panelSpin"/>
+      <!-- 畫布：程式用 getContext() 畫出轉速的即時波形（src/kiosk.ts） -->
+      <UICanvas id="spinWave" width="96" height="32" radius="8" background="rgba(0,0,0,0.35)"/>
     </UILayout>
   </UILayout>
 </UI>

@@ -136,7 +136,7 @@ engine.use(new RenderPlugin({ shadows: true }));
 | `official-demo-000-start`         | 用到引擎所有功能的完整範例遊戲 |
 | `official-demo-001-animation`     | 動畫                           |
 | `official-demo-002-physics`       | 物理                           |
-| `official-demo-003-ui2d-ui3d`     | 2D／3D 介面                    |
+| `official-demo-003-ui2d-ui3d`     | 2D／3D 介面、UICanvas 畫布     |
 | `official-demo-004-transition`    | 場景轉場                       |
 | `official-demo-005-postfx-shader` | 後製與著色器                   |
 | `official-demo-006-ai`            | AI                             |
