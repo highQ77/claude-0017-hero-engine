@@ -15,6 +15,7 @@ doc/
 │       ├── api.ts          自動產生「API 參考」（每個模組一章、內文自動連結、搜尋 API 名稱）
 │       ├── example.ts      範例區塊（編輯器 + 執行結果）
 │       ├── canvasExample.ts  UICanvas 繪圖範例（頁面內執行、原生 Canvas 2D 對照）
+│       ├── canvasSharedCheck.ts  UICanvas 共用模式檢查（canvas-shared-check.html：每個繪圖範例和獨立模式逐像素比較）
 │       ├── editor.ts       程式碼編輯器（textarea 疊在高亮的 pre 上）
 │       ├── highlight.ts    語法高亮（TypeScript、終端機；XML 沿用 UI 編輯器的 highlightXml）
 │       ├── reference.ts    自動產生「UI 元件參考」

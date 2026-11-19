@@ -128,6 +128,7 @@ export class RenderPlugin implements Plugin {
   } | null = null;
   private engine: Engine | null = null;
   private readonly overlays: { scene: THREE.Scene; camera: THREE.Camera; order: number }[] = [];
+  private readonly beforeDrawListeners = new Set<() => void>();
   private readonly resizeListeners = new Set<(width: number, height: number) => void>();
 
   private meshes: Binding<unknown, THREE.Mesh> | null = null;
@@ -229,6 +230,15 @@ export class RenderPlugin implements Plugin {
     for (const listener of [...this.resizeListeners]) listener(this.width, this.height);
     // 改尺寸會清空畫布：立刻補畫一次（遊戲暫停時畫面才不會變黑）
     if (this.cameras) this.draw();
+  }
+
+  /**
+   * 每次畫面繪製前呼叫（3D 畫面與介面之前）。例如更新要給 3D 物件用的貼圖：
+   * 在這裡更新，同一幀就看得到。回傳取消監聽的函式。
+   */
+  onBeforeDraw(listener: () => void): () => void {
+    this.beforeDrawListeners.add(listener);
+    return () => this.beforeDrawListeners.delete(listener);
   }
 
   /** 監聽畫面尺寸改變（CSS 像素） */
@@ -544,6 +554,7 @@ export class RenderPlugin implements Plugin {
   /** 畫一幀（平常由主迴圈自動呼叫） */
   draw(): void {
     const renderer = this.renderer;
+    for (const listener of [...this.beforeDrawListeners]) listener();
     const camera = this.activeCameraObject;
     if (this.debug.object.parent !== this.scene) this.scene.add(this.debug.object);
     this.debug._beforeDraw();

@@ -30,6 +30,13 @@ export interface PaintState {
   openSelect?: UISelect | null;
   /** 畫在所有元件之上的東西（拖曳中的圖示、浮動說明） */
   overlays?: OverlayPainter[];
+  /**
+   * 蓋帽模式（畫布圖層用）：只畫比這個元件晚畫的東西（之後的元件、捲軸、浮動說明、下拉選單）。
+   * UICanvas 直接疊在介面上時，這些東西要再蓋回畫布上面
+   */
+  paintAfter?: UIElement | null;
+  /** 畫布左上角對應的介面座標（只畫一小塊到小畫布上時用；預設 0, 0） */
+  origin?: { x: number; y: number };
 }
 
 /** 已載入的圖片（給繪圖用） */
@@ -64,6 +71,11 @@ export function parseShadow(v: string | undefined): Shadow | null {
 export class UIPainter {
   /** 最後才畫的東西（數值提示等），確保在所有元件之上 */
   private overlays: (() => void)[] = [];
+  /** 蓋帽模式：還沒走過 paintAfter 指定的元件（只走訪、不畫） */
+  private skipping = false;
+  /** 上一次 paint() 在重畫範圍內畫了幾樣東西（蓋帽模式判斷是不是空的） */
+  paintedCount = 0;
+  private region: Rect | null = null;
 
   constructor(private readonly images: ImageSourceLookup) {}
 
@@ -81,7 +93,10 @@ export class UIPainter {
     region?: Rect,
   ): void {
     ctx.save();
-    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    const tx = -(state.origin?.x ?? 0) * pixelRatio;
+    const ty = -(state.origin?.y ?? 0) * pixelRatio;
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, tx, ty);
+    this.region = region ?? null;
     if (region) {
       ctx.beginPath();
       ctx.rect(region.x, region.y, region.width, region.height);
@@ -92,9 +107,13 @@ export class UIPainter {
     }
     ctx.globalAlpha = 1;
     this.overlays = [];
+    this.skipping = !!state.paintAfter;
+    this.paintedCount = 0;
     this.paintElement(ctx, root, 0, 0, pixelRatio, state);
-    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    this.skipping = false;
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, tx, ty);
     ctx.globalAlpha = 1;
+    this.paintedCount += this.overlays.length + (state.openSelect ? 1 : 0) + (state.overlays?.length ?? 0);
     for (const draw of this.overlays.splice(0)) draw();
     if (state.openSelect) this.paintPopup(ctx, state.openSelect, height, pixelRatio);
     for (const draw of state.overlays ?? []) {
@@ -120,93 +139,98 @@ export class UIPainter {
       return;
     }
 
-    // 按鈕、下拉選單、勾選框的狀態（背景顏色與背景圖片一起決定）
-    let background = a.background;
-    let bgImage = a.bgImage;
-    const hovered = state.hover === el || (el instanceof UISelect && state.openSelect === el);
-    const pressed = state.pressed === el;
-    const disabled = (el as { disabled?: boolean }).disabled === true;
-    if (disabled && a.disabledBgImage) bgImage = a.disabledBgImage;
-    else if (pressed && a.pressedBgImage) bgImage = a.pressedBgImage;
-    else if ((hovered || pressed) && a.hoverBgImage) bgImage = a.hoverBgImage;
-    if ((el instanceof UISelect || el instanceof UICheckBox || el instanceof UISlider) && el.disabled)
-      ctx.globalAlpha *= 0.5;
-    else if (el instanceof UISelect && (state.hover === el || state.openSelect === el))
-      background = a.hoverBackground ?? background;
-    else if (!(el instanceof UIButton) && a.hoverBackground !== undefined) {
-      // 其他元件（例如表格的列）也可以有滑鼠移入、按下的背景
-      if (state.pressed === el && a.pressedBackground !== undefined) background = a.pressedBackground;
-      else if (state.hover === el || state.pressed === el) background = a.hoverBackground;
-    }
-    if (el instanceof UIButton) {
-      if (el.disabled) {
-        background = a.disabledBackground ?? background;
-        ctx.globalAlpha *= 0.5;
-      } else if (state.pressed === el) {
-        background = a.pressedBackground ?? background;
-        // 按下時稍微縮小
-        ctx.translate(x + w / 2, y + h / 2);
-        ctx.scale(0.97, 0.97);
-        ctx.translate(-(x + w / 2), -(y + h / 2));
-      } else if (state.hover === el) {
-        background = a.hoverBackground ?? background;
-      }
-    }
-
     const radius = num(a.radius, 0);
-    if (isVisibleColor(background)) {
-      const shadow = parseShadow(a.shadow);
-      if (shadow) {
-        // 陰影參數不受座標轉換影響，要自己乘上像素比
-        ctx.shadowOffsetX = shadow.x * pr;
-        ctx.shadowOffsetY = shadow.y * pr;
-        ctx.shadowBlur = shadow.blur * pr;
-        ctx.shadowColor = shadow.color;
+    // 蓋帽模式：還沒走過指定的元件時只走訪子元件、不畫自己
+    if (!this.skipping) {
+      const r = this.region;
+      if (!r || (x < r.x + r.width && x + w > r.x && y < r.y + r.height && y + h > r.y)) this.paintedCount++;
+      // 按鈕、下拉選單、勾選框的狀態（背景顏色與背景圖片一起決定）
+      let background = a.background;
+      let bgImage = a.bgImage;
+      const hovered = state.hover === el || (el instanceof UISelect && state.openSelect === el);
+      const pressed = state.pressed === el;
+      const disabled = (el as { disabled?: boolean }).disabled === true;
+      if (disabled && a.disabledBgImage) bgImage = a.disabledBgImage;
+      else if (pressed && a.pressedBgImage) bgImage = a.pressedBgImage;
+      else if ((hovered || pressed) && a.hoverBgImage) bgImage = a.hoverBgImage;
+      if ((el instanceof UISelect || el instanceof UICheckBox || el instanceof UISlider) && el.disabled)
+        ctx.globalAlpha *= 0.5;
+      else if (el instanceof UISelect && (state.hover === el || state.openSelect === el))
+        background = a.hoverBackground ?? background;
+      else if (!(el instanceof UIButton) && a.hoverBackground !== undefined) {
+        // 其他元件（例如表格的列）也可以有滑鼠移入、按下的背景
+        if (state.pressed === el && a.pressedBackground !== undefined) background = a.pressedBackground;
+        else if (state.hover === el || state.pressed === el) background = a.hoverBackground;
       }
-      ctx.fillStyle = background;
-      roundRectPath(ctx, x, y, w, h, radius);
-      ctx.fill();
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
-    }
-    if (bgImage && bgImage !== 'none') this.paintBackgroundImage(ctx, el, bgImage, x, y, w, h, radius);
-    if (el.isEmptyContainer) this.paintEmptyHint(ctx, el, x, y, w, h, radius);
-    if (a.border) {
-      const [bw, ...color] = a.border.split(/\s+/);
-      const lw = num(bw, 1);
-      if (lw > 0) {
-        ctx.lineWidth = lw;
-        ctx.strokeStyle = color.join(' ') || '#ffffff';
-        roundRectPath(ctx, x + lw / 2, y + lw / 2, w - lw, h - lw, Math.max(0, radius - lw / 2));
-        ctx.stroke();
+      if (el instanceof UIButton) {
+        if (el.disabled) {
+          background = a.disabledBackground ?? background;
+          ctx.globalAlpha *= 0.5;
+        } else if (state.pressed === el) {
+          background = a.pressedBackground ?? background;
+          // 按下時稍微縮小
+          ctx.translate(x + w / 2, y + h / 2);
+          ctx.scale(0.97, 0.97);
+          ctx.translate(-(x + w / 2), -(y + h / 2));
+        } else if (state.hover === el) {
+          background = a.hoverBackground ?? background;
+        }
       }
-    }
 
-    // 元件自己的內容（還沒排版、大小為 0 時不畫：有些圖形會算出負的半徑）
-    if (w > 0 && h > 0) {
-      try {
-        if (el instanceof UILabel) {
-          const p = el.padding;
-          this.paintText(ctx, el, x + p.left, y + p.top, w - p.left - p.right, pr);
+      if (isVisibleColor(background)) {
+        const shadow = parseShadow(a.shadow);
+        if (shadow) {
+          // 陰影參數不受座標轉換影響，要自己乘上像素比
+          ctx.shadowOffsetX = shadow.x * pr;
+          ctx.shadowOffsetY = shadow.y * pr;
+          ctx.shadowBlur = shadow.blur * pr;
+          ctx.shadowColor = shadow.color;
         }
-        if (el instanceof UIImage) this.paintImage(ctx, el, x, y, w, h);
-        if (el instanceof UICheckIndicator) this.paintIndicator(ctx, el, x, y, w, h, state);
-        if (el instanceof UISelect) this.paintArrow(ctx, el, x, y, w, h, state.openSelect === el);
-        if (el instanceof UISlider) this.paintSlider(ctx, el, x, y, w, h, state, pr);
-        if (el.paintContent) {
-          ctx.save();
-          try {
-            el.paintContent(ctx, x, y, w, h);
-          } finally {
-            ctx.restore();
+        ctx.fillStyle = background;
+        roundRectPath(ctx, x, y, w, h, radius);
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
+      }
+      if (bgImage && bgImage !== 'none') this.paintBackgroundImage(ctx, el, bgImage, x, y, w, h, radius);
+      if (el.isEmptyContainer) this.paintEmptyHint(ctx, el, x, y, w, h, radius);
+      if (a.border) {
+        const [bw, ...color] = a.border.split(/\s+/);
+        const lw = num(bw, 1);
+        if (lw > 0) {
+          ctx.lineWidth = lw;
+          ctx.strokeStyle = color.join(' ') || '#ffffff';
+          roundRectPath(ctx, x + lw / 2, y + lw / 2, w - lw, h - lw, Math.max(0, radius - lw / 2));
+          ctx.stroke();
+        }
+      }
+
+      // 元件自己的內容（還沒排版、大小為 0 時不畫：有些圖形會算出負的半徑）
+      if (w > 0 && h > 0) {
+        try {
+          if (el instanceof UILabel) {
+            const p = el.padding;
+            this.paintText(ctx, el, x + p.left, y + p.top, w - p.left - p.right, pr);
           }
-        }
-      } catch (error) {
-        // 一個元件畫壞了不要讓整個介面都畫不出來（每種元件只回報一次）
-        if (!reportedPaintErrors.has(el.type)) {
-          reportedPaintErrors.add(el.type);
-          log.error(`繪製 <${el.type}> 時發生錯誤（第 ${el.line} 行）：`, error);
+          if (el instanceof UIImage) this.paintImage(ctx, el, x, y, w, h);
+          if (el instanceof UICheckIndicator) this.paintIndicator(ctx, el, x, y, w, h, state);
+          if (el instanceof UISelect) this.paintArrow(ctx, el, x, y, w, h, state.openSelect === el);
+          if (el instanceof UISlider) this.paintSlider(ctx, el, x, y, w, h, state, pr);
+          if (el.paintContent) {
+            ctx.save();
+            try {
+              el.paintContent(ctx, x, y, w, h);
+            } finally {
+              ctx.restore();
+            }
+          }
+        } catch (error) {
+          // 一個元件畫壞了不要讓整個介面都畫不出來（每種元件只回報一次）
+          if (!reportedPaintErrors.has(el.type)) {
+            reportedPaintErrors.add(el.type);
+            log.error(`繪製 <${el.type}> 時發生錯誤（第 ${el.line} 行）：`, error);
+          }
         }
       }
     }
@@ -218,10 +242,12 @@ export class UIPainter {
       ctx.clip();
       for (const c of el.children) this.paintElement(ctx, c, x - el.scrollLeft, y - el.scrollTop, pr, state);
       ctx.restore();
-      this.paintScrollbar(ctx, el, x, y, w, h);
+      if (!this.skipping) this.paintScrollbar(ctx, el, x, y, w, h);
     } else {
       for (const c of el.children) this.paintElement(ctx, c, x, y, pr, state);
     }
+    // 蓋帽模式：走過指定的元件（含子元件）之後的東西都要畫
+    if (el === state.paintAfter) this.skipping = false;
     ctx.restore();
   }
 

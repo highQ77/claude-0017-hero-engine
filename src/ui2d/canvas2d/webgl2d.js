@@ -858,6 +858,14 @@ void main() { v_uv = a_uv; gl_Position = vec4(a_pos, 0.0, 1.0); }`;
   const FX_QUAD = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, 1, 1, 1, 1, -1, -1, 0, 0, 1, 1, 1, 1, -1, 1, 0, 1]);
   const FX_HEAD = 'precision highp float;\nvarying vec2 v_uv;\nuniform sampler2D u_src;\n';
   const FX_INSIDE = 'uniform vec4 u_box;\nbool inside(vec2 uv) { return uv.x >= u_box.x && uv.x <= u_box.z && uv.y >= u_box.y && uv.y <= u_box.w; }\n';
+  // outputTexture（sRGB 值、預乘）→ 一般的 sRGB 貼圖（未預乘，和圖片、CanvasTexture 一樣，材質設 transparent 即可）：
+  // 輸出線性值，寫進 SRGB8_ALPHA8 時 GPU 會編碼成 sRGB，three.js 取樣時自動解碼
+  const EXPORT_FS = `
+vec3 toLinear(vec3 c) { return mix(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, vec3(lessThanEqual(c, vec3(0.04045)))); }
+void main() {
+  vec4 c = texture2D(u_src, v_uv);
+  gl_FragColor = c.a > 0.0 ? vec4(toLinear(c.rgb / c.a), c.a) : vec4(0.0);
+}`;
   const FX_FS = {
     // 可分離高斯模糊：u_dir 為單一 texel 的方向向量，u_sigma 以實體像素計
     blur: FX_HEAD + FX_INSIDE + `
@@ -1223,15 +1231,29 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
         desynchronized: !!opts.desynchronized, powerPreference: opts.powerPreference || 'default',
       };
       let gl = null;
-      if (opts.webgl2 !== false) gl = canvas.getContext('webgl2', attrs);
-      this.isWebGL2 = !!gl;
-      if (!gl) gl = canvas.getContext('webgl', attrs) || canvas.getContext('experimental-webgl', attrs);
-      if (!gl) throw new Error('WebGL2D: 此瀏覽器或 canvas 無法建立 WebGL context');
+      // 共用模式：借用別人的 WebGL 2（例如 three.js），畫進自己的 framebuffer，結果在 outputTexture。
+      // canvas 只需要有 width、height（backing store 的實體像素）。每次繪圖前後設定、交還 GL 狀態（_begin、_end）
+      const ext = opts.external || null;
+      this._ext = ext;
+      this._depth = 0;
+      this._screenFB = null;   // 「畫面」：自己的 canvas 是 null；共用模式是自己的 framebuffer
+      this._tgt = null;
+      if (ext) {
+        gl = ext.gl;
+        if (typeof WebGL2RenderingContext === 'undefined' || !(gl instanceof WebGL2RenderingContext)) throw new Error('WebGL2D: 共用模式需要 WebGL 2');
+        this.isWebGL2 = true;
+      } else {
+        if (opts.webgl2 !== false) gl = canvas.getContext('webgl2', attrs);
+        this.isWebGL2 = !!gl;
+        if (!gl) gl = canvas.getContext('webgl', attrs) || canvas.getContext('experimental-webgl', attrs);
+        if (!gl) throw new Error('WebGL2D: 此瀏覽器或 canvas 無法建立 WebGL context');
+      }
       this.gl = gl;
+      if (ext) this._depth = 1;   // 建構中：不要觸發 _begin / _end
       this._attrs = attrs;
       const pr = opts.pixelRatio === 'auto' ? (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1) : +opts.pixelRatio;
       this._pr = pr > 0 && Number.isFinite(pr) ? pr : 1;
-      if (!gl.getContextAttributes().stencil) console.warn('WebGL2D: 沒有 stencil buffer，fill/clip 將無法正確運作');
+      if (!ext && !gl.getContextAttributes().stencil) console.warn('WebGL2D: 沒有 stencil buffer，fill/clip 將無法正確運作');
 
       // program
       const sh = (type, src) => {
@@ -1251,6 +1273,9 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
         this._u[n] = gl.getUniformLocation(p, n);
       gl.uniform1i(this._u.u_ramp, 0); gl.uniform1i(this._u.u_tex, 1); gl.uniform1i(this._u.u_mask, 2);
 
+      // 共用模式：頂點設定放在自己的 VAO，不影響別人的
+      this._vao = ext ? gl.createVertexArray() : null;
+      if (this._vao) gl.bindVertexArray(this._vao);
       this._vbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, this._vbo);
       gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1);
@@ -1275,8 +1300,185 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       this._stack = [];
       this._path = new FlatPath(this._pr);
       this._w = -1; this._h = -1;
+      if (ext) { this._allocTarget(); this._bindScreen(); }
       this._prepare();
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+      if (ext) { this._depth = 1; this._end(); }
+    }
+
+    /* ---------------- 共用模式：自己的畫面 framebuffer、交還 GL 狀態 ---------------- */
+    /** 共用模式的結果（WebGLTexture，預乘 alpha、sRGB 值、第 0 列是畫面底部）；一般模式是 null */
+    get outputTexture() { return this._tgt ? this._tgt.tex : null; }
+    /** 依 canvas.width / height 配置畫面 framebuffer（尺寸沒變就不動；改變後內容清空） */
+    _allocTarget() {
+      const gl = this.gl, w = Math.max(1, this.canvas.width | 0), h = Math.max(1, this.canvas.height | 0);
+      const old = this._tgt;
+      if (old && old.w === w && old.h === h) return;
+      if (old) {
+        gl.deleteFramebuffer(old.fb); if (old.resolveFB) gl.deleteFramebuffer(old.resolveFB);
+        old.rbs.forEach((r) => gl.deleteRenderbuffer(r));
+      }
+      // 輸出貼圖沿用同一個 WebGLTexture（外部包裝它的貼圖物件不用更新），只重新配置大小
+      const t = { w, h, tex: old ? old.tex : gl.createTexture(), fb: gl.createFramebuffer(), resolveFB: null, rbs: [], msaa: false };
+      gl.bindTexture(gl.TEXTURE_2D, t.tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, this._dummy || null);
+      const samples = this._attrs.antialias ? Math.min(4, gl.getParameter(gl.MAX_SAMPLES)) : 0;
+      const ds = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, ds);
+      if (samples > 0) {
+        // 多重取樣（反鋸齒）：畫在 renderbuffer，_resolve() 時 blit 到輸出貼圖
+        const color = gl.createRenderbuffer();
+        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH24_STENCIL8, w, h);
+        gl.bindRenderbuffer(gl.RENDERBUFFER, color);
+        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, w, h);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, color);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, ds);
+        t.resolveFB = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, t.resolveFB);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.tex, 0);
+        t.rbs.push(color, ds); t.msaa = true;
+      } else {
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, w, h);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.tex, 0);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, ds);
+        t.rbs.push(ds);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb);
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) console.warn('WebGL2D: 畫面 framebuffer 不完整');
+      gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+      gl.colorMask(true, true, true, true); gl.stencilMask(0xff);
+      gl.clearColor(0, 0, 0, 0); gl.clearStencil(0x80);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+      this._tgt = t; this._screenFB = t.fb;
+      this._w = -1;   // 尺寸改變：_prepare 重新設定 viewport、裁切
+    }
+    /** 綁定「畫面」（之後的繪圖畫在這裡） */
+    _bindScreen() { this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this._screenFB); }
+    /** 綁定可以讀取的畫面（copyTexImage2D、readPixels）：多重取樣的要先解析到輸出貼圖 */
+    _bindScreenRead() {
+      const t = this._tgt;
+      if (t && t.msaa) { this._resolve(); this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, t.resolveFB); }
+      else this._bindScreen();
+    }
+    /** 多重取樣畫面 → 輸出貼圖 */
+    _resolve() {
+      const gl = this.gl, t = this._tgt;
+      if (!t || !t.msaa) return;
+      const scissor = gl.isEnabled(gl.SCISSOR_TEST);
+      if (scissor) gl.disable(gl.SCISSOR_TEST);
+      gl.colorMask(true, true, true, true);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, t.fb); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, t.resolveFB);
+      gl.blitFramebuffer(0, 0, t.w, t.h, 0, 0, t.w, t.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this._curFB || this._screenFB);
+      if (scissor) gl.enable(gl.SCISSOR_TEST);
+    }
+    /**
+     * 共用模式：給 3D 用的貼圖（WebGLTexture，SRGB8_ALPHA8、未預乘 alpha、有 mipmap）。
+     * outputTexture 存的是預乘的 sRGB 值，three.js 會當成線性顏色；這張和一般圖片貼圖一樣，由 GPU 自動解碼。
+     * 第一次取用時建立；內容有變時呼叫 syncExport() 更新（每幀一次就好）
+     */
+    get exportTexture() {
+      if (!this._ext) return null;
+      if (!this._exp) {
+        const gl = this.gl;
+        this._depth++;   // 只建立物件，不需要完整的 _begin
+        const tex = gl.createTexture(), fb = gl.createFramebuffer();
+        const prog = compileProgram(gl, FX_VS, FX_HEAD + EXPORT_FS, 'export');
+        this._exp = { tex, fb, prog, w: 0, h: 0 };
+        this._depth--;
+        this._exportDirty = true;
+        this._ext.onEnd?.();
+      }
+      return this._exp.tex;
+    }
+    /** 共用模式：更新 exportTexture（內容沒變就不做） */
+    syncExport() {
+      const e = this._exp;
+      if (!e || !this._exportDirty || !this._tgt) return;
+      this._exportDirty = false;
+      this._begin();
+      const gl = this.gl, t = this._tgt;
+      try {
+        if (e.w !== t.w || e.h !== t.h) {
+          gl.bindTexture(gl.TEXTURE_2D, e.tex);
+          // 3D 物件上常常縮小顯示：要有 mipmap，細線才不會在縮小時消失
+          // （用 texImage2D：尺寸改變時可以重新配置，外面包裝的貼圖物件不用換；mipmap 由 generateMipmap 產生）
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.SRGB8_ALPHA8, t.w, t.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          this._texParams();
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, e.fb);
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, e.tex, 0);
+          e.w = t.w; e.h = t.h;
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, e.fb);
+        gl.disable(gl.BLEND); gl.disable(gl.STENCIL_TEST);
+        gl.useProgram(e.prog.p);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t.tex);
+        gl.uniform1i(e.prog.u('u_src'), 0);
+        this._drawVerts(FX_QUAD);
+        gl.bindTexture(gl.TEXTURE_2D, e.tex);
+        gl.generateMipmap(gl.TEXTURE_2D);
+      } finally {
+        gl.bindTexture(gl.TEXTURE_2D, this._dummy);
+        this._end(false);
+      }
+    }
+    /** 釋放 GPU 資源（共用模式：不會影響借來的 WebGL；一般模式：連 context 一起釋放） */
+    dispose() {
+      const gl = this.gl;
+      if (!this._ext) { gl.getExtension('WEBGL_lose_context')?.loseContext(); return; }
+      if (gl.isContextLost()) return;
+      const t = this._tgt, e = this._exp, fx = this._fx;
+      if (t) { gl.deleteFramebuffer(t.fb); if (t.resolveFB) gl.deleteFramebuffer(t.resolveFB); t.rbs.forEach((r) => gl.deleteRenderbuffer(r)); gl.deleteTexture(t.tex); }
+      if (e) { gl.deleteTexture(e.tex); gl.deleteFramebuffer(e.fb); gl.deleteProgram(e.prog.p); }
+      if (fx) { fx.tex.forEach((x) => gl.deleteTexture(x)); fx.fb.forEach((f) => gl.deleteFramebuffer(f)); fx.rbs.forEach((r) => gl.deleteRenderbuffer(r)); if (fx.layer !== fx.fb[0]) gl.deleteFramebuffer(fx.layer); }
+      if (this._fxp) for (const k in this._fxp) gl.deleteProgram(this._fxp[k].p);
+      for (const v of this._imgCache instanceof Map ? this._imgCache.values() : []) gl.deleteTexture(v.tex);
+      for (const v of this._textCache.values()) if (v.tex) gl.deleteTexture(v.tex);
+      if (this._dynTex) gl.deleteTexture(this._dynTex);
+      if (this._selfTex) gl.deleteTexture(this._selfTex);
+      gl.deleteTexture(this._dummy); gl.deleteBuffer(this._vbo); gl.deleteVertexArray(this._vao); gl.deleteProgram(this._prog);
+      this._tgt = this._exp = this._fx = null;
+      this._ext.onEnd?.();
+    }
+
+    /** 共用模式：開始一次繪圖（設定這個 context 需要的 GL 狀態；別人可能改過任何東西） */
+    _begin() {
+      if (this._depth++) return;
+      const gl = this.gl;
+      this._allocTarget();
+      this._bindScreen();
+      gl.bindVertexArray(this._vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this._vbo);
+      gl.useProgram(this._prog);
+      for (let i = 0; i < 8; i++) { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, this._dummy); gl.bindSampler(i, null); }
+      gl.activeTexture(gl.TEXTURE0);
+      for (const cap of [gl.DEPTH_TEST, gl.CULL_FACE, gl.SCISSOR_TEST, gl.POLYGON_OFFSET_FILL, gl.SAMPLE_ALPHA_TO_COVERAGE, gl.SAMPLE_COVERAGE, gl.RASTERIZER_DISCARD]) gl.disable(cap);
+      gl.frontFace(gl.CCW);
+      gl.colorMask(true, true, true, true);
+      gl.depthMask(false);
+      gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4); gl.pixelStorei(gl.PACK_ALIGNMENT, 4);
+      for (const k of [gl.UNPACK_ROW_LENGTH, gl.UNPACK_SKIP_ROWS, gl.UNPACK_SKIP_PIXELS, gl.UNPACK_IMAGE_HEIGHT, gl.UNPACK_SKIP_IMAGES, gl.PACK_ROW_LENGTH, gl.PACK_SKIP_ROWS, gl.PACK_SKIP_PIXELS]) gl.pixelStorei(k, 0);
+      if (this._w > 0) gl.viewport(0, 0, this._w, this._h);
+    }
+    /** 共用模式：結束一次繪圖（解析多重取樣、交還 GL 狀態） */
+    _end(drew = true) {
+      if (--this._depth) return;
+      const gl = this.gl;
+      if (drew) { this._resolve(); this._exportDirty = true; }
+      gl.bindVertexArray(null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      if (this._ext.onEnd) this._ext.onEnd();
     }
 
     /* ---------------- 內部：尺寸 / 模板 ---------------- */
@@ -1575,9 +1777,9 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       if (el === this.canvas) {
-        if (this._curFB) gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        this._bindScreenRead();
         gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, tw, th, 0); flip = true;
-        if (this._curFB) gl.bindFramebuffer(gl.FRAMEBUFFER, this._curFB);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this._curFB || this._screenFB);
       } else { gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, el); }
       this._texParams();
       gl.activeTexture(gl.TEXTURE0);
@@ -1642,11 +1844,11 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       if (!fin(x, y, w, h) || !w || !h) return;
       if (w < 0) { x += w; w = -w; } if (h < 0) { y += h; h = -h; }
       this._unbindUnits();
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      this._bindScreenRead();
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fx.tex[0]);
       gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, fx.w, fx.h);
       const res = this._runChain(chain, 0);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      this._bindScreen();
       gl.enable(gl.STENCIL_TEST); gl.stencilMask(0); gl.stencilFunc(gl.EQUAL, 0x80, 0x80); gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
       gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ZERO);
       const u = this._u;
@@ -1715,7 +1917,7 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       }
       if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) console.warn('WebGL2D: 濾鏡圖層 framebuffer 不完整');
       gl.bindRenderbuffer(gl.RENDERBUFFER, null);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this._curFB || null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this._curFB || this._screenFB);
       this._fx = fx;
       return fx;
     }
@@ -1742,7 +1944,7 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       const pr = this._pr, W = fx.w, H = fx.h;
       let sx = 0, sy = 0, sw = W, sh = H;
       if (box) {
-        if (!(box[2] > box[0])) { gl.bindFramebuffer(gl.FRAMEBUFFER, null); return; }   // 沒有畫任何東西
+        if (!(box[2] > box[0])) { this._bindScreen(); return; }   // 沒有畫任何東西
         let m = 2;   // 濾鏡會擴散的範圍（CSS 像素）
         for (const c of chain) {
           if (c.t === 'blur') m += 3 * c.sigma + 2;
@@ -1750,7 +1952,7 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
         }
         const x0 = Math.max(0, Math.floor((box[0] - m) * pr)), y0 = Math.max(0, Math.floor((box[1] - m) * pr));
         const x1 = Math.min(W, Math.ceil((box[2] + m) * pr)), y1 = Math.min(H, Math.ceil((box[3] + m) * pr));
-        if (x1 <= x0 || y1 <= y0) { gl.bindFramebuffer(gl.FRAMEBUFFER, null); return; }
+        if (x1 <= x0 || y1 <= y0) { this._bindScreen(); return; }
         sx = x0; sw = x1 - x0; sy = H - y1; sh = y1 - y0;   // GL 座標（y 向上）
         gl.enable(gl.SCISSOR_TEST); gl.scissor(sx, sy, sw, sh);
       }
@@ -1759,11 +1961,11 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       if (fx.msaa) {
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fx.layer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fx.fb[0]);
         gl.blitFramebuffer(0, 0, fx.w, fx.h, 0, 0, fx.w, fx.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        this._bindScreen();
       }
       this._unbindUnits();
       const res = this._runChain(chain, 0, boxUV);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      this._bindScreen();
       const lw = W / pr, lh = H / pr;
       const q = new Float32Array([0, 0, 0, 1, lw, 0, 1, 1, lw, lh, 1, 0, 0, 0, 0, 1, lw, lh, 1, 0, 0, lh, 0, 0]);
       const mode = BLEND_MODES[op];
@@ -1771,7 +1973,9 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
         // 混合模式：複製目的地區域 → 混合 shader 計算結果（僅寫入裁切區內）
         const D = [0, 1, 2].find((i) => i !== res), P = this._fxp.blend;
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, fx.tex[D]);
+        this._bindScreenRead();
         gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, sx, sy, sx, sy, sw, sh);
+        this._bindScreen();
         gl.useProgram(P.p);
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fx.tex[res]);
         gl.uniform1i(P.u('u_src'), 0); gl.uniform1i(P.u('u_dst'), 1);
@@ -1943,9 +2147,9 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       if (img === this.canvas) {
         if (!this._selfTex) this._selfTex = gl.createTexture();
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this._selfTex);
-        if (this._curFB) gl.bindFramebuffer(gl.FRAMEBUFFER, null);   // 繪製濾鏡圖層時，仍從畫面複製
+        this._bindScreenRead();   // 繪製濾鏡圖層時，仍從畫面複製
         gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, tw, th, 0);
-        if (this._curFB) gl.bindFramebuffer(gl.FRAMEBUFFER, this._curFB);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this._curFB || this._screenFB);
         this._texParams(); gl.activeTexture(gl.TEXTURE0);
         return { tex: this._selfTex, w, h, tw, th, flipY: true };
       }
@@ -2006,7 +2210,9 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       sx = Math.floor(sx); sy = Math.floor(sy); sw = Math.ceil(sw); sh = Math.ceil(sh);
       this._prepare();
       const gl = this.gl, buf = new Uint8Array(sw * sh * 4);
+      this._bindScreenRead();
       gl.readPixels(sx, this._h - sy - sh, sw, sh, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      this._bindScreen();
       const out = new ImageData(sw, sh), d = out.data, row = sw * 4;
       for (let y = 0; y < sh; y++) {
         const si = (sh - 1 - y) * row, di = y * row;
@@ -2115,6 +2321,18 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       const chain = this._effects();
       if (chain || BLEND_MODES[this._state.globalCompositeOperation]) return this._filtered(chain || [], () => orig.apply(this, a));
       return orig.apply(this, a);
+    };
+  }
+
+  // 共用模式：會動到 GL 的公開方法，前後設定、交還 GL 狀態（巢狀呼叫只做一次）
+  const READ_ONLY_GL = new Set(['getImageData', 'createPattern', 'createShaderFilter']);
+  for (const name of ['reset', 'clearRect', 'fillRect', 'strokeRect', 'fill', 'stroke', 'clip', 'fillText', 'strokeText',
+    'drawImage', 'putImageData', 'getImageData', 'createPattern', 'applyFilter', 'createShaderFilter', 'restore']) {
+    const orig = WebGL2DRenderingContext.prototype[name];
+    WebGL2DRenderingContext.prototype[name] = function (...a) {
+      if (!this._ext || this._depth) return orig.apply(this, a);
+      this._begin();
+      try { return orig.apply(this, a); } finally { this._end(!READ_ONLY_GL.has(name)); }
     };
   }
 

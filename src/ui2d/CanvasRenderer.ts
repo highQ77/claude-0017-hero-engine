@@ -1,3 +1,4 @@
+import type { UICanvasHost } from './elements';
 import type { UI2D } from './UI2D';
 import { UIPainter, type Context2D } from './UIPainter';
 
@@ -11,6 +12,8 @@ export interface UIRenderer {
   render(): void;
   /** 釋放 */
   dispose(): void;
+  /** 畫布宿主（UICanvas 直接畫在顯示層的 WebGL 上）；沒有時 UICanvas 自己建立 WebGL 再複製到介面 */
+  readonly canvasHost?: UICanvasHost | null;
   /** 蓋在整個畫面（含介面）上的單色層，改透明度不用重畫介面（場景轉場的淡入淡出用；沒有時用介面圖層代替） */
   readonly fader?: ScreenFader;
 }

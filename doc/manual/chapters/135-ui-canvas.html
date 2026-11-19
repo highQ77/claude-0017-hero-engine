@@ -250,6 +250,22 @@ ctx.fillRect(10, 10, 100, 50);
 </div>
       
 
+<h2 id="shared">兩種顯示方式</h2>
+<p>UICanvas 依介面顯示的地方，自動選擇顯示方式，程式寫法完全相同：</p>
+<table>
+  <thead><tr><th></th><th>共用模式</th><th>獨立模式</th></tr></thead>
+  <tbody>
+    <tr><td>什麼時候</td><td>遊戲裡（<code>UIPlugin</code>，介面由引擎畫在 3D 畫面上）</td><td>網頁版介面（<code>UI2D.create({ container })</code>）、UI 編輯器、3D 面板（<code>UIPanel3D</code>）裡的介面</td></tr>
+    <tr><td>畫在哪裡</td><td>借用 three.js 的 WebGL，畫進一張 GPU 貼圖</td><td>自己的 WebGL（一個 &lt;canvas&gt;）</td></tr>
+    <tr><td>怎麼顯示</td><td>顯示層每幀把貼圖疊在介面上（一塊四邊形）；比畫布晚畫的東西（之後的元件、浮動說明、下拉選單）會再蓋回上面</td><td>畫好後複製到介面的 2D 畫布，介面再上傳成貼圖</td></tr>
+    <tr><td>畫圖的成本</td><td>只有繪圖本身：介面不用重畫、不用複製畫面、不用切換 WebGL context</td><td>每幀最多一次：重畫介面那一塊、複製畫面、上傳</td></tr>
+    <tr><td><code>uicanvas.texture</code>（3D）</td><td>直接用 GPU 貼圖，不用上傳，同一幀就看得到</td><td>用畫布建立的 <code>CanvasTexture</code>，畫圖後自動上傳</td></tr>
+    <tr><td><code>uicanvas.canvas</code></td><td>每次取用都從 GPU 讀回目前的畫面（比較慢，不要每幀用）</td><td>真的 &lt;canvas&gt;</td></tr>
+  </tbody>
+</table>
+<p>用 <code>uicanvas.shared</code> 可以知道目前是哪一種。兩種模式畫出來的結果逐像素相同（手冊的每個範例都在兩種模式下比對過，見 <code>doc/manual/canvas-shared-check.html</code>）。</p>
+<div class="note">共用模式下直接操作 <code>ctx.gl</code>（那是 three.js 的 WebGL）要特別小心：只能在呼叫繪圖方法之間使用，用完要還原狀態。一般用不到。</div>
+
 <h2 id="entry">建立 Context</h2>
 
 <article class="cv-api" data-native="false">
@@ -352,7 +368,47 @@ pad.on('pointermove', (e) => {
 pad.on('pointerup', () => (last = null));
 engine.start();
 </script>
-<div class="tip">更完整的例子在 <code>projects/official-demo-003-ui2d-ui3d</code> 的「畫布」分頁：畫板的內容用 <code>create.texture(pad.canvas)</code> 同時貼到 3D 看板上（畫了新東西後設定 <code>texture.needsUpdate = true</code>），旁邊的折線圖即時畫出 3D 彈跳球的高度。</div>
+<div class="tip">更完整的例子在 <code>projects/official-demo-003-ui2d-ui3d</code> 的「畫布」分頁：畫板的內容用 <code>pad.texture</code> 同時貼到 3D 看板上，點 3D 看板會在點到的位置長出花朵（<code>render.pick(…).uv</code>），旁邊的折線圖即時畫出 3D 彈跳球的高度。</div>
+</article>
+
+<article class="cv-api" data-native="false">
+  <div class="cv-sig">uicanvas.texture <span class="cv-ret">→ THREE.Texture</span></div>
+  <p>把畫布貼到 3D 物件上的貼圖。和一般圖片貼圖一樣（sRGB、未預乘 alpha），有透明的地方材質設 <code>transparent: true</code>。遊戲裡（共用模式）直接使用畫布的 GPU 貼圖：不用上傳，畫圖後同一幀 3D 就看得到，也有 mipmap，縮小顯示時細線不會消失。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="畫布貼到旋轉的方塊上" data-height="300">
+import { Transform, math } from '@engine/scene';
+import { spawn } from '@engine/render';
+import type { UICanvas } from '@engine/ui2d';
+import { engine, ui, world } from './engine';
+
+// 畫布可以不顯示在介面上（hidden），只當成 3D 的貼圖
+ui.loadString(`<UI><UICanvas id="tex" width="256" height="256" hidden="true"/></UI>`);
+const canvas = ui.require<UICanvas>('tex');
+const ctx = canvas.getContext();
+
+spawn.camera(world, { position: [0, 1.5, 3.5], target: [0, 0, 0] });
+spawn.defaultLights(world);
+const cube = spawn.mesh(world, { geometry: { box: 1.4 }, material: { standard: { map: canvas.texture } } });
+
+let t = 0;
+engine.on('update', (time) => {
+  t += time.delta;
+  // 每幀重畫：時鐘
+  ctx.fillStyle = '#1e3a8a';
+  ctx.fillRect(0, 0, 256, 256);
+  ctx.strokeStyle = '#ffd166';
+  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(128, 128, 100, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(128, 128);
+  ctx.lineTo(128 + Math.sin(t) * 80, 128 - Math.cos(t) * 80);
+  ctx.stroke();
+  math.setRotation(world.require(cube, Transform), [0.3, t * 0.5, 0]);
+});
+engine.start();
+</script>
 </article>
 
 <article class="cv-api" data-native="false">
@@ -2294,10 +2350,11 @@ ctx.stroke(p);
 
 <h2 id="perf">效能建議</h2>
 <ul>
-  <li><b>UICanvas 每幀最多更新介面一次</b>：一幀裡呼叫多少次繪圖方法，介面都只重畫、上傳一次。但每次繪圖本身仍有成本，滑鼠事件（一秒可能上百次）裡不要直接畫：先記下座標，每幀一次畫成一條路徑（見 <code>official-demo-003-ui2d-ui3d</code> 的畫板）。</li>
-  <li><b>把 UICanvas 貼到 3D</b>（<code>create.texture(uicanvas.canvas)</code>）時，每次 <code>needsUpdate</code> 瀏覽器都要複製一份畫布快照，成本不低；內容一直變動時降低更新頻率（例如每秒 15 次），停下來時再補一次。</li>
+  <li><b>遊戲裡（共用模式）畫圖只有繪圖本身的成本</b>：介面不用重畫、不用複製畫面，每幀重畫的動畫、圖表都很輕。</li>
+  <li><b>滑鼠事件裡不要直接畫</b>：滑鼠事件一秒可能上百次，每次都畫會多做很多繪圖；先記下座標，每幀一次畫成一條路徑（見 <code>official-demo-003-ui2d-ui3d</code> 的畫板）。</li>
+  <li><b>3D 物件用 <code>uicanvas.texture</code></b>，不要用 <code>create.texture(uicanvas.canvas)</code>：共用模式的 <code>canvas</code> 每次都要從 GPU 讀回畫面，很慢；<code>texture</code> 直接用 GPU 貼圖。</li>
   <li><b>漸層、圖樣建立一次重複使用</b>：每個漸層都有自己的 GPU 紋理，每幀建立新的會一直配置紋理（舊的要等垃圾回收才釋放）。</li>
-  <li>動畫型的圖表不一定要每幀重畫：每次更新都要把畫布複製到介面、再上傳到 GPU，每秒 30 次通常就夠順。</li>
+  <li>獨立模式（網頁版介面、3D 面板裡的介面）每次畫圖後，介面都要重畫那一塊、複製畫面、上傳（每幀最多一次），動畫多時要注意。</li>
   <li>重複出現的形狀做成 <code>Path2D</code>，再搭配 <code>setTransform</code> 重複使用。</li>
   <li><code>fillRect</code>、<code>drawImage</code>、文字是凸四邊形，會走只測試裁切的快速路徑。</li>
   <li>每格都整個重畫的動畫，可以傳入 <code>{ preserveDrawingBuffer: false }</code>。</li>

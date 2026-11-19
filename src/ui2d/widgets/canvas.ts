@@ -1,5 +1,6 @@
 /** 進階介面元件：畫布（用 Canvas 2D 的寫法自己畫，底層以 WebGL 繪製） */
-import { UIElement, type Attrs, type PointerCapture } from '../elements';
+import { CanvasTexture, SRGBColorSpace, type Texture } from 'three';
+import { UIElement, type Attrs, type PointerCapture, type UICanvasHost } from '../elements';
 import { num, roundRectPath, uiFont } from '../draw';
 import WebGL2D, {
   type WebGL2DHiDPIOptions,
@@ -37,6 +38,9 @@ const MAX_PIXEL_RATIO = 4;
  * - width／height 是繪圖座標的大小（CSS 像素）；實際解析度會乘上螢幕的像素比，畫面清晰
  * - background 是畫布後面的底色（預設 #333333FF）；ctx.clearRect 清掉的地方會露出底色
  * - 用 ui.require<UICanvas>('id').getContext() 取得繪圖 context（取代 canvas.getContext('2d')）
+ * - 引擎內（UIPlugin）直接畫在顯示層的 WebGL 上（共用模式）：畫圖不用重畫介面、不用複製畫面；
+ *   網頁版介面、UI 編輯器沒有顯示層，改用自己的 WebGL，畫好再複製到介面
+ * - uicanvas.texture 可以直接貼到 3D 物件上（共用模式不用上傳）
  * - 尺寸改變時畫布內容會清空，並觸發 resize 事件（onResize），在那裡重畫
  * - 滑鼠／觸控：按下、拖曳、放開觸發 pointerdown、pointermove、pointerup 事件
  *   （onPointerdown 等），event.value 是繪圖座標 { x, y }（已換算縮放，可以直接拿來畫）
@@ -78,6 +82,13 @@ export class UICanvas extends UIElement {
 
   private el: HTMLCanvasElement | null = null;
   private gl2d: WebGL2DRenderingContext | null = null;
+  /** 共用模式：顯示層的宿主、畫面大小（實體像素）、取消登記 */
+  private host: UICanvasHost | null = null;
+  private target: { width: number; height: number } | null = null;
+  private removeLayer: (() => void) | null = null;
+  /** 共用模式：讀回來的畫面（canvas、toDataURL 用） */
+  private snapshotEl: HTMLCanvasElement | null = null;
+  private threeTexture: Texture | null = null;
   private logicalW = 0;
   private logicalH = 0;
   private ratio = 1;
@@ -107,8 +118,12 @@ export class UICanvas extends UIElement {
     return Math.max(0.25, Math.min(MAX_PIXEL_RATIO, pr));
   }
 
-  /** 底層的 &lt;canvas&gt;（不在網頁上顯示，畫好的內容由介面繪製；可以當成 drawImage 的來源） */
+  /**
+   * 底層的 &lt;canvas&gt;（不在網頁上顯示，畫好的內容由介面繪製；可以當成 drawImage 的來源）。
+   * 共用模式沒有自己的 canvas：每次取用都從 GPU 讀回目前的畫面（比較慢，不要每幀用；3D 請用 texture）
+   */
   get canvas(): HTMLCanvasElement {
+    if (this.target && this.gl2d) return this.snapshot();
     if (!this.el) {
       if (typeof document === 'undefined') throw new Error('UICanvas：這個環境沒有 document，無法建立畫布');
       this.el = document.createElement('canvas');
@@ -122,15 +137,39 @@ export class UICanvas extends UIElement {
     return this.gl2d !== null;
   }
 
+  /** 是否直接畫在顯示層的 WebGL 上（共用模式；引擎內顯示時） */
+  get shared(): boolean {
+    return this.target !== null;
+  }
+
+  /**
+   * 給 3D 物件用的貼圖（three.js；和一般圖片貼圖一樣，有透明的地方材質設 transparent: true）。
+   * 共用模式直接用畫布的 GPU 貼圖，不用上傳，同一幀就看得到；其他情況用畫布建立 CanvasTexture，畫圖後自動更新
+   */
+  get texture(): Texture {
+    if (this.threeTexture) return this.threeTexture;
+    const ctx = this.getContext();
+    if (this.host && ctx.exportTexture) {
+      this.threeTexture = this.host.wrapTexture(ctx.exportTexture, 'srgb');
+    } else {
+      const t = new CanvasTexture(this.canvas);
+      t.colorSpace = SRGBColorSpace;
+      this.threeTexture = t;
+    }
+    return this.threeTexture;
+  }
+
   /**
    * 取得繪圖 context（和 CanvasRenderingContext2D 用法相同）。
    * 第一次呼叫時建立 WebGL context，之後回傳同一個物件；options 只在第一次有效。
    * 呼叫繪圖方法後介面會自動重畫。
    */
-  getContext(options: Omit<WebGL2DOptions, 'pixelRatio'> = {}): WebGL2DRenderingContext {
+  getContext(options: Omit<WebGL2DOptions, 'pixelRatio' | 'external'> = {}): WebGL2DRenderingContext {
     if (this.gl2d) return this.gl2d;
-    const canvas = this.canvas;
-    const ctx = WebGL2D.getContext(canvas, { ...options, pixelRatio: this.ratio });
+    const host = this.ctx.canvasHost?.() ?? null;
+    const ctx = host
+      ? this.createShared(host, options)
+      : WebGL2D.getContext(this.canvas, { ...options, pixelRatio: this.ratio });
     for (const name of DRAW_METHODS) {
       const original = ctx[name] as (...args: unknown[]) => unknown;
       (ctx as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => {
@@ -151,8 +190,7 @@ export class UICanvas extends UIElement {
 
   /** 要求介面重畫畫布（用繪圖方法畫圖時會自動呼叫；直接操作 ctx.gl 時要自己呼叫） */
   update(): void {
-    this.drawn = true;
-    this.invalidate();
+    this.markDirty();
   }
 
   /** 介面座標 → 繪圖座標（畫布顯示的大小和繪圖座標不同時也正確） */
@@ -182,6 +220,7 @@ export class UICanvas extends UIElement {
 
   /** 把畫布內容輸出成圖片網址（例如截圖、存檔） */
   toDataURL(type?: string, quality?: number): string {
+    // 共用模式：canvas 是讀回來的畫面
     return this.canvas.toDataURL(type, quality);
   }
 
@@ -217,6 +256,8 @@ export class UICanvas extends UIElement {
       roundRectPath(ctx, x, y, w, h, radius);
       ctx.clip();
     }
+    // 共用模式：畫布由顯示層疊上去，介面這裡只畫背景與邊框
+    if (this.target) return;
     if (this.gl2d && this.el && this.el.width > 0 && this.el.height > 0) {
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(this.el, x, y, w, h);
@@ -232,12 +273,15 @@ export class UICanvas extends UIElement {
   }
 
   override destroy(): void {
-    if (this.gl2d) {
-      const lose = this.gl2d.gl.getExtension('WEBGL_lose_context');
-      lose?.loseContext();
-    }
+    this.removeLayer?.();
+    this.removeLayer = null;
+    this.threeTexture?.dispose();
+    this.threeTexture = null;
+    // 共用模式只釋放自己的 GPU 資源；一般模式連 WebGL context 一起釋放
+    this.gl2d?.dispose();
     this.gl2d = null;
     this.el = null;
+    this.target = null;
     super.destroy();
   }
 
@@ -252,13 +296,13 @@ export class UICanvas extends UIElement {
     this.logicalW = width;
     this.logicalH = height;
     this.ratio = pr;
-    if (!this.el) return;
+    if (!this.el && !this.target) return;
     this.resizeBacking();
     if (!first) this.emit('resize', { value: `${width}x${height}` });
   }
 
   private resizeBacking(): void {
-    const el = this.el!;
+    const el = (this.target ?? this.el)!;
     if (!this.logicalW) {
       this.logicalW = Math.max(1, Math.round(num(this.attrs.width, 300)));
       this.logicalH = Math.max(1, Math.round(num(this.attrs.height, 150)));
@@ -281,13 +325,51 @@ export class UICanvas extends UIElement {
    */
   private markDirty(): void {
     this.drawn = true;
+    // 共用模式：顯示層每幀直接讀畫布的 GPU 貼圖，介面不用重畫
+    if (this.target) return;
     if (this.dirtyQueued) return;
     this.dirtyQueued = true;
     const flush = () => {
       this.dirtyQueued = false;
-      if (!this.isDestroyed) this.invalidate();
+      if (this.isDestroyed) return;
+      this.invalidate();
+      if (this.threeTexture) this.threeTexture.needsUpdate = true;
     };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(flush);
     else queueMicrotask(flush);
+  }
+
+  /** 共用模式：借用顯示層的 WebGL，畫進自己的 framebuffer，登記成顯示層的一塊 */
+  private createShared(
+    host: UICanvasHost,
+    options: Omit<WebGL2DOptions, 'pixelRatio' | 'external'>,
+  ): WebGL2DRenderingContext {
+    this.target = { width: 1, height: 1 };
+    this.resizeBacking();
+    const ctx = new WebGL2D.WebGL2DRenderingContext(this.target as unknown as HTMLCanvasElement, {
+      ...options,
+      pixelRatio: this.ratio,
+      external: { gl: host.gl, onEnd: () => host.resetState() },
+    });
+    this.host = host;
+    this.removeLayer = host.add({
+      element: this,
+      texture: () => ctx.outputTexture,
+      // 有人用 texture（3D）時，畫面有變就更新 3D 用的貼圖
+      beforeDraw: () => {
+        if (this.threeTexture) ctx.syncExport();
+      },
+    });
+    return ctx;
+  }
+
+  /** 共用模式：從 GPU 讀回目前的畫面 */
+  private snapshot(): HTMLCanvasElement {
+    const t = this.target!;
+    const el = (this.snapshotEl ??= document.createElement('canvas'));
+    el.width = t.width;
+    el.height = t.height;
+    el.getContext('2d')!.putImageData(this.gl2d!.getImageData(0, 0, t.width, t.height), 0, 0);
+    return el;
   }
 }

@@ -16,7 +16,8 @@
  *   --api-only   只檢查 API 參考（略過章節的範例）
  *   --api-module=core,scene   只執行這些模組的 API 範例（搭配 --run-api）
  *
- * UICanvas 繪圖範例（data-lang="canvas"）在 --run 時打開章節頁面，依序執行並收集錯誤輸出。
+ * UICanvas 繪圖範例（data-lang="canvas"）在 --run 時打開章節頁面，依序執行並收集錯誤輸出；
+ * 另外打開 manual/canvas-shared-check.html，確認共用模式（借用 three.js 的 WebGL）和獨立模式逐像素相同。
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -328,6 +329,27 @@ async function runInBrowser(list) {
         for (const err of page.errors) console.log(`    ${err}`);
       } else {
         console.log(`✓ ${ch}：${items.length} 個 XML 範例`);
+      }
+      await page.close();
+    }
+
+    // UICanvas 共用模式（借用 three.js 的 WebGL）：每個繪圖範例和獨立模式逐像素比較
+    if (!process.argv.includes('--api-only')) {
+      const page = await openPage(`${base}/manual/canvas-shared-check.html`);
+      let result = null;
+      for (let t = 0; t < 120 && !result; t++) {
+        await sleep(500);
+        result = await page.evaluate('window.__sharedCheck ? JSON.stringify(window.__sharedCheck) : null');
+      }
+      const items = result ? JSON.parse(result).filter((x) => !x.skipped) : [];
+      const bad = items.filter((x) => x.error || !(x.mean < 0.5));
+      if (!result || bad.length || page.errors.length) {
+        failed += bad.length + page.errors.length + (result ? 0 : 1);
+        console.log(`✗ UICanvas 共用模式：${items.length} 個範例${result ? '' : '（逾時）'}`);
+        for (const b of bad) console.log(`    [${b.title}] ${b.error ?? `平均差異 ${b.mean.toFixed(3)}`}`);
+        for (const err of page.errors) console.log(`    ${err}`);
+      } else {
+        console.log(`✓ UICanvas 共用模式：${items.length} 個範例和獨立模式逐像素相同`);
       }
       await page.close();
     }

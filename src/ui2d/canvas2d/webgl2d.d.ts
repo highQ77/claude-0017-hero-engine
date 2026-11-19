@@ -39,6 +39,11 @@ export interface WebGL2DOptions {
   desynchronized?: boolean;
   /** 直接傳給 WebGL */
   powerPreference?: WebGLPowerPreference;
+  /**
+   * 共用模式：借用別人的 WebGL 2（例如 three.js）畫進自己的 framebuffer，結果在 outputTexture。
+   * canvas 參數只需要有 width、height（實體像素）。onEnd 在每次繪圖後呼叫，用來讓對方重設 GL 狀態（three.js：renderer.resetState）
+   */
+  external?: { gl: WebGL2RenderingContext; onEnd?: () => void };
 }
 
 /** 高解析度 context 的選項 */
@@ -70,6 +75,14 @@ export interface WebGL2DRenderingContext
   getContextAttributes(): CanvasRenderingContext2DSettings;
   /** 編譯自訂濾鏡：source 需定義 vec4 effect(vec2 uv)，回傳預乘 alpha 的顏色 */
   createShaderFilter(source: string, uniforms?: Record<string, ShaderUniformValue>): ShaderFilter;
+  /** 共用模式的結果貼圖（預乘 alpha、sRGB 值、第 0 列是畫面底部）；一般模式是 null */
+  readonly outputTexture: WebGLTexture | null;
+  /** 共用模式：給 3D 用的貼圖（SRGB8_ALPHA8、未預乘 alpha、有 mipmap，GPU 自動解碼成線性）；一般模式是 null */
+  readonly exportTexture: WebGLTexture | null;
+  /** 共用模式：內容有變時更新 exportTexture（每幀一次就好） */
+  syncExport(): void;
+  /** 釋放 GPU 資源（一般模式會連 WebGL context 一起釋放） */
+  dispose(): void;
   /** 對畫布上已有的內容套用濾鏡（不受變換影響；受裁切影響）。矩形以 CSS 像素計，預設為整個畫布 */
   applyFilter(filter: WebGL2DFilter, x?: number, y?: number, w?: number, h?: number): void;
 }

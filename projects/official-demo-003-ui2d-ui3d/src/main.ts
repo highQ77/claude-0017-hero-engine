@@ -14,7 +14,7 @@ import type { Entity, World } from '@engine/ecs';
 import { Color, Vector3 } from '@engine/math';
 import { PluginManager } from '@engine/plugins';
 import perfMonitor from '@engine/packages/perf-monitor';
-import { OrbitControl, create, spawn, type Texture } from '@engine/render';
+import { OrbitControl, create, spawn } from '@engine/render';
 import { type Scene, Transform, math } from '@engine/scene';
 import * as ui2d from '@engine/ui2d';
 import type {
@@ -606,28 +606,8 @@ ui.setHandlers({
 
 const PEN_COLORS = ['#9acd32', '#ff6b6b', '#4cc9f0', '#ffd166', '#ffffff'];
 let penColor = PEN_COLORS[0];
-/** 3D 看板用的貼圖：來源是畫板底下的 <canvas>，畫了新東西就設定 needsUpdate */
-let padTexture: Texture | null = null;
-
 const pad = ui.require<UICanvas>('pad');
 const padCtx = pad.getContext(); // 取代 canvas.getContext('2d')
-/** 畫板有新內容、3D 看板還沒更新 */
-let padDirty = false;
-const padChanged = () => {
-  padDirty = true;
-};
-/**
- * 更新 3D 看板的貼圖（每幀呼叫）。把 WebGL 畫布上傳到另一個 WebGL（three.js）時，
- * 瀏覽器每次都要建立再銷毀一份畫布快照，很耗 GPU；畫圖中每秒最多更新 15 次，放開滑鼠時馬上補上最後的樣子
- */
-let padUploadWait = 0;
-function syncPadTexture(dt: number): void {
-  padUploadWait -= dt;
-  if (!padDirty || !padTexture || (penDown && padUploadWait > 0)) return;
-  padTexture.needsUpdate = true;
-  padDirty = false;
-  padUploadWait = 1 / 15;
-}
 
 /** 清除畫板：淡淡的格線與提示文字 */
 function clearPad(): void {
@@ -648,7 +628,6 @@ function clearPad(): void {
   padCtx.fillStyle = 'rgba(255,255,255,0.35)';
   padCtx.font = '13px system-ui, sans-serif';
   padCtx.fillText('按住滑鼠在這裡畫圖', 12, 22);
-  padChanged();
 }
 
 /** 筆的樣式：顏色、粗細、發光（陰影模糊） */
@@ -699,7 +678,6 @@ function flushPen(): void {
   }
   penDot = false;
   penPoints = penDown ? [penPoints[penPoints.length - 1]] : [];
-  padChanged();
 }
 clearPad();
 
@@ -891,7 +869,6 @@ function growFlowers(dt: number): void {
     drawFlower(f, scale);
   }
   for (let i = flowers.length - 1; i >= 0; i--) if (flowers[i].age >= BLOOM_SECONDS) flowers.splice(i, 1);
-  padChanged();
 }
 
 const canvasPage: Scene = {
@@ -899,8 +876,7 @@ const canvasPage: Scene = {
   setup(w) {
     camera([0, 2.4, 7], [0, 1.4, 0]);
     flowers.length = 0;
-    // 3D 看板：畫板的內容當成貼圖（同一張 <canvas>，畫了新東西就更新）
-    padTexture = create.texture(pad.canvas);
+    // 3D 看板：直接用畫板的 GPU 貼圖（pad.texture），不用上傳，畫圖時同一幀就看得到
     spawn.mesh(w, {
       geometry: { box: [3.3, 2.3, 0.08] },
       material: '#4a5340',
@@ -916,7 +892,7 @@ const canvasPage: Scene = {
     });
     const board = spawn.mesh(w, {
       geometry: { plane: boardSize },
-      material: { basic: { map: padTexture, transparent: true, depthWrite: false } },
+      material: { basic: { map: pad.texture, transparent: true, depthWrite: false } },
       position: [-1.2, 1.75, 0.005],
     });
     for (const x of [-2.6, 0.2])
@@ -943,7 +919,6 @@ const canvasPage: Scene = {
       }
       flushPen();
       growFlowers(dt);
-      syncPadTexture(dt);
       // 簡單的重力與反彈；彈不動了就再丟高一次
       sim.vy -= 9.8 * dt;
       sim.y += sim.vy * dt;
@@ -957,7 +932,6 @@ const canvasPage: Scene = {
       recordHeight(dt, sim.y);
       drawChart();
     };
-    padChanged();
   },
 };
 
@@ -989,7 +963,6 @@ ui.setHandlers({
     padCtx.strokeStyle = 'rgba(0,0,0,0.35)';
     padCtx.stroke();
     padCtx.restore();
-    padChanged();
   },
 });
 

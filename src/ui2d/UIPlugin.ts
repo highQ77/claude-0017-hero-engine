@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { UICanvasCompositor } from './CanvasLayers';
 import type { Engine, Plugin } from '../core/Engine';
 import type { EcsPlugin, World } from '../ecs';
 import type { RenderPlugin } from '../render/RenderPlugin';
@@ -71,6 +72,8 @@ class EngineUIRenderer implements UIRenderer {
   private readonly quad: THREE.Mesh;
   private removeOverlay: (() => void) | null = null;
   readonly fader: GpuScreenFader;
+  /** UICanvas 直接畫在這個 WebGL 上，每次繪製時疊在介面上（見 CanvasLayers.ts） */
+  readonly canvasHost: UICanvasCompositor;
 
   constructor(render3d: RenderPlugin) {
     this.fader = new GpuScreenFader(render3d);
@@ -78,6 +81,8 @@ class EngineUIRenderer implements UIRenderer {
       () => render3d.renderer,
       (ui) => {
         this.quad.visible = !!ui.root;
+        // 介面重畫了：畫布上面的東西（蓋帽）也要跟著更新
+        this.canvasHost?.afterUIRender();
         // 遊戲暫停時主迴圈不會繪製：補畫一次，介面變化才看得到
         if (render3d.engineState !== 'running') render3d.draw();
       },
@@ -94,6 +99,7 @@ class EngineUIRenderer implements UIRenderer {
     );
     this.quad.frustumCulled = false;
     this.scene.add(this.quad);
+    this.canvasHost = new UICanvasCompositor(render3d, this.scene);
     this.removeOverlay = render3d.addOverlay(this.scene, this.camera, UI_OVERLAY_ORDER);
   }
 
@@ -104,6 +110,7 @@ class EngineUIRenderer implements UIRenderer {
 
   attach(ui: UI2D): void {
     this.target.attach(ui);
+    this.canvasHost.attach(ui);
   }
 
   render(): void {
@@ -113,6 +120,7 @@ class EngineUIRenderer implements UIRenderer {
   dispose(): void {
     this.removeOverlay?.();
     this.removeOverlay = null;
+    this.canvasHost.dispose();
     this.fader.dispose();
     this.target.dispose();
     this.quad.geometry.dispose();

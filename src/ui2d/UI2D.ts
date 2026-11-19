@@ -358,6 +358,7 @@ export class UI2D {
       viewport: () => this.size,
       editorHints: options.editorHints ?? false,
       imageSource: (url) => loadedImages.get(url),
+      canvasHost: () => this.renderer?.canvasHost ?? null,
     };
 
     if (this.container) this.observeContainer(this.container);
