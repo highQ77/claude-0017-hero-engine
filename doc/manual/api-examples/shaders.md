@@ -116,6 +116,20 @@ console.log('定義：', def.name, def.base);
 engine.start();
 ```
 
+## loadShaderGraphEffect
+載入著色器編輯器做的全螢幕效果（節點圖裡有 Effect Output），轉成效果的定義：`shaders.defineEffect` 註冊後，`shaders.createEffect` 建立、交給後製。也可以直接寫在 `postfx.settings.effects`。
+
+```ts
+spawn.camera(world, { position: [0, 1.5, 4], target: [0, 0.5, 0] });
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { torusKnot: [0.7, 0.25] }, material: '#9acd32', position: [0, 0.8, 0] });
+const def = await loadShaderGraphEffect('shaders/crt.shader.json'); // 名稱預設是檔名：crt
+shaders.defineEffect(def);
+postfx.addPass(shaders.createEffect(def.name), 'display');
+console.log('效果：', def.name, '，uniform：', Object.keys(def.uniforms ?? {}).join('、'));
+engine.start();
+```
+
 ## parseShaderGraphFile
 讀取節點圖檔的內容（JSON 文字或物件），格式錯誤時丟出錯誤。
 
@@ -160,6 +174,38 @@ const def = shaderGraphDefinition(file, 'pulse');
 spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
 spawn.mesh(world, { geometry: { icosahedron: 0.9 }, material: shaders.createFromDefinition(def) });
 console.log('base：', def.base, '，uniforms：', Object.keys(def.uniforms ?? {}));
+engine.start();
+```
+
+## shaderGraphEffectDefinition
+全螢幕效果的節點圖（Effect Output）轉成效果的定義。`Screen Color` 讀取畫面原本的顏色，這裡用程式組一張「畫面上下顛倒＋偏紅」的圖。
+
+```ts
+spawn.camera(world, { position: [0, 1.5, 4], target: [0, 0.5, 0] });
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { box: 1 }, material: '#4cc9f0', position: [0, 1, 0] });
+const graph: ShaderGraph = {
+  nodes: [
+    { id: 1, type: 'uv', x: 0, y: 0, values: {}, params: {} },
+    { id: 2, type: 'oneMinus', x: 200, y: 0, values: {}, params: {} },
+    { id: 3, type: 'screenColor', x: 400, y: 0, values: {}, params: {} },
+    { id: 4, type: 'multiply', x: 600, y: 0, values: {}, params: {} },
+    { id: 5, type: 'color', x: 400, y: 200, values: {}, params: { color: '#ffb0a0' } },
+    { id: 6, type: 'effectOutput', x: 800, y: 0, values: { alpha: 1 }, params: {} },
+  ],
+  links: [
+    { from: 1, fromPort: 'uv', to: 2, toPort: 'x' },
+    { from: 2, fromPort: 'out', to: 3, toPort: 'uv' },
+    { from: 3, fromPort: 'rgb', to: 4, toPort: 'a' },
+    { from: 5, fromPort: 'rgb', to: 4, toPort: 'b' },
+    { from: 4, fromPort: 'out', to: 6, toPort: 'color' },
+  ],
+  nextId: 7,
+};
+const def = shaderGraphEffectDefinition({ format: 'hero-shader-graph', version: 1, graph }, 'upsideDown');
+shaders.defineEffect(def);
+postfx.addPass(shaders.createEffect('upsideDown'), 'display');
+console.log(def.fragment.split('\n').slice(-2).join('\n'));
 engine.start();
 ```
 

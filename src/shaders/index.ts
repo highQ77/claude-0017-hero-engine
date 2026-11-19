@@ -15,7 +15,9 @@ export { ShaderPlugin, ShadersKey } from './ShaderPlugin';
 export {
   compileShaderGraph,
   shaderGraphDefinition,
+  shaderGraphEffectDefinition,
   loadShaderGraph,
+  loadShaderGraphEffect,
   parseShaderGraphFile,
   stringifyShaderGraphFile,
   defineShaderNode,

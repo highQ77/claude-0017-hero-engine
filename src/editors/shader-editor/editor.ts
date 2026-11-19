@@ -7,7 +7,7 @@
  *   遊戲裡用 shaders.define(await loadShaderGraph('shaders/<名稱>.shader.json'))
  */
 import * as THREE from 'three';
-import type { ShaderDefinition } from '../../shaders';
+import type { EffectDefinition, ShaderDefinition } from '../../shaders';
 import {
   CATEGORIES,
   NODE_DEFS,
@@ -20,6 +20,7 @@ import {
   TYPE_COLOR,
   analyzeShaderGraphTypes,
   parseShaderGraphFile,
+  shaderGraphKind,
   stringifyShaderGraphFile,
   upstreamHas,
 } from '../../shaders/graph';
@@ -44,6 +45,7 @@ import {
   THUMB_PX,
   ThumbnailRenderer,
   graphDefinition,
+  graphEffectDefinition,
 } from './preview';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector(s) as T;
@@ -986,11 +988,28 @@ function renderPanel(): void {
   const name = fileName ? shaderNameOf(fileName) : '名稱';
   const code = h('pre', 'mono');
   code.style.cssText = 'margin:0 0 8px;white-space:pre-wrap;font-size:11.5px;color:var(--text2)';
-  code.textContent = `shaders.define(await loadShaderGraph('shaders/${name}.shader.json'));\nmesh.material = shaders.createMaterial('${name}');`;
-  use.append(
-    code,
-    h('div', 'desc', '材質的 uniform：uMouse（滑鼠 0..1）、uLightDir（光的方向）、uAspect（長寬比）可以在遊戲裡修改。'),
-  );
+  if (shaderGraphKind(graph) === 'effect') {
+    // 全螢幕效果：寫在後製設定裡最簡單（場景檔也可以）
+    code.textContent = `// 寫法一（建議）：寫在後製設定\npostfx.settings.effects = [{ graph: 'shaders/${name}.shader.json' }];\n\n// 寫法二（擇一）：自己載入、加進後製\nshaders.defineEffect(await loadShaderGraphEffect('shaders/${name}.shader.json'));\npostfx.addPass(shaders.createEffect('${name}'), 'display');`;
+    use.append(
+      code,
+      h(
+        'div',
+        'desc',
+        '全螢幕效果（後製）：套用在色調映射之後、畫面上看到的顏色。uniform：uMouse（滑鼠 0..1）可以在遊戲裡修改；uAspect 是畫面的長寬比。',
+      ),
+    );
+  } else {
+    code.textContent = `shaders.define(await loadShaderGraph('shaders/${name}.shader.json'));\nmesh.material = shaders.createMaterial('${name}');`;
+    use.append(
+      code,
+      h(
+        'div',
+        'desc',
+        '材質的 uniform：uMouse（滑鼠 0..1）、uLightDir（光的方向）、uAspect（長寬比）可以在遊戲裡修改。',
+      ),
+    );
+  }
   wrap.append(use);
 
   const legend = h('section');
@@ -1110,13 +1129,18 @@ const currentFile = (): ShaderGraphFile => ({
 });
 
 /** GLSL 分頁要顯示的段落 */
-const codeSections = (def: ShaderDefinition) =>
-  [
-    ['頂點：宣告與函式（vertexHeader）', def.vertexHeader ?? ''],
-    ['頂點：main 裡（修改 transformed）', def.vertex ?? ''],
-    ['片段：宣告與函式（fragmentHeader）', def.fragmentHeader ?? ''],
-    ['片段：main 裡（設定 color）', def.fragment ?? ''],
-  ] as const;
+type CodeSection = readonly [title: string, src: string];
+const codeSections = (def: ShaderDefinition): CodeSection[] => [
+  ['頂點：宣告與函式（vertexHeader）', def.vertexHeader ?? ''],
+  ['頂點：main 裡（修改 transformed）', def.vertex ?? ''],
+  ['片段：宣告與函式（fragmentHeader）', def.fragmentHeader ?? ''],
+  ['片段：main 裡（設定 color）', def.fragment ?? ''],
+];
+/** 全螢幕效果：顯示遊戲裡實際用的效果程式（shaders.defineEffect 的 header、fragment） */
+const effectSections = (def: EffectDefinition): CodeSection[] => [
+  ['全螢幕效果：宣告與函式（header）', def.header ?? ''],
+  ['全螢幕效果：main 裡（color 是畫面原本的顏色，改成新的顏色）', def.fragment],
+];
 
 function compileAll(): void {
   portTypes = analyzeShaderGraphTypes(graph);
@@ -1124,13 +1148,18 @@ function compileAll(): void {
   drawWires();
 
   const file = currentFile();
+  // 全螢幕效果：在平面 2D 上預覽（效果套用在示範畫面上），不能換網格
+  const effect = shaderGraphKind(graph) === 'effect';
+  meshSelect.disabled = effect;
+  meshSelect.title = effect ? '全螢幕效果固定用平面 2D 預覽' : '';
+  if (effect && main && main.meshKind !== 'quad') setMesh('quad');
   try {
     // 只編譯一次：GLSL 分頁、主預覽都用這份定義
     const def = graphDefinition(file);
-    lastSrc = codeSections(def)
-      .map(([title, src]) => `// ===== ${title} =====\n${src}\n`)
-      .join('');
-    renderCode(def);
+    const effectDef = effect ? graphEffectDefinition(file, fileName ? shaderNameOf(fileName) : 'effect') : null;
+    const sections = effectDef ? effectSections(effectDef) : codeSections(def);
+    lastSrc = sections.map(([title, src]) => `// ===== ${title} =====\n${src}\n`).join('');
+    renderCode(sections, Object.keys((effectDef ?? def).uniforms ?? {}), !!effectDef);
     showError(main ? main.setDefinition(def) : '');
   } catch (error) {
     const msg = (error as Error).message;
@@ -1157,12 +1186,18 @@ function showError(msg: string): void {
   errorEl.textContent = msg;
 }
 
-function renderCode(def: ShaderDefinition): void {
+function renderCode(sections: CodeSection[], uniforms: string[], effect: boolean): void {
   codeEl.textContent = '';
   const frag = document.createDocumentFragment();
   frag.append(h('span', 'code-title', '// ===== uniform =====\n'));
-  frag.append(`// uTime（引擎內建）、${Object.keys(def.uniforms ?? {}).join('、')}\n\n`);
-  for (const [title, src] of codeSections(def)) {
+  frag.append(
+    effect
+      ? `// tDiffuse（畫面）、uTime、uResolution（引擎內建）、${uniforms.join('、')}\n` +
+          `// 遊戲裡：shaders.defineEffect(await loadShaderGraphEffect('shaders/檔名.shader.json'))，\n` +
+          `//         postfx.addPass(shaders.createEffect('檔名'), 'display')，或寫在 postfx.settings.effects\n\n`
+      : `// uTime（引擎內建）、${uniforms.join('、')}\n\n`,
+  );
+  for (const [title, src] of sections) {
     if (!src) continue;
     frag.append(h('span', 'code-title', `// ===== ${title} =====\n`));
     src.split('\n').forEach((line, i) => {
@@ -1399,7 +1434,17 @@ $('#btn-new').onclick = async () => {
   if (!(await confirmDiscard())) return;
   const name = await askName('my-shader');
   if (!name) return;
-  setDocument({ format: 'hero-shader-graph', version: 1, graph: buildExample('blank') }, name, false);
+  const effect = await showConfirm('要做材質（貼在 3D 物件上），還是全螢幕效果（後製，套用在整個畫面上）？', {
+    title: '新增節點圖',
+    ok: '全螢幕效果',
+    cancel: '材質',
+  });
+  setDocument(
+    { format: 'hero-shader-graph', version: 1, graph: buildExample(effect ? 'blankEffect' : 'blank') },
+    name,
+    false,
+  );
+  if (effect) setMesh('quad');
   await save();
 };
 $('#btn-delete').onclick = async () => {

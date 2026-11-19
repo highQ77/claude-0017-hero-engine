@@ -13,8 +13,8 @@
  * 也讀得懂 Shader Composer 匯出的 JSON（format: 'shader-node-editor'）。
  */
 import * as THREE from 'three';
-import type { ShaderDefinition } from '../ShaderLibrary';
-import { type ShaderGraph, compileShaderGraph } from './compile';
+import type { EffectDefinition, ShaderDefinition } from '../ShaderLibrary';
+import { type CompiledShaderGraph, type ShaderGraph, compileShaderGraph, shaderGraphKind } from './compile';
 import { NODE_DEFS } from './nodes';
 import { isObject } from '../../scene/json';
 
@@ -175,6 +175,29 @@ export interface ShaderGraphDefinitionOptions {
   target?: { nodeId: number; port: string };
   /** 貼圖快取（省略時用共用的） */
   textures?: ShaderGraphTextures;
+  /**
+   * 全螢幕效果的圖：當成「畫面」的圖（編輯器預覽用；省略時用內建 UV 格線）。
+   * 效果的圖用 shaderGraphDefinition 會得到一個材質：在平面上顯示效果套用在這張圖上的樣子
+   */
+  screen?: THREE.Texture;
+}
+
+/** 節點圖的 uniform：uMouse、uLightDir（全螢幕效果的 uAspect 由畫面大小算出）、每個貼圖節點的 uTex<編號> */
+function graphUniforms(
+  file: ShaderGraphFile,
+  compiled: CompiledShaderGraph,
+  textures: ShaderGraphTextures,
+): Record<string, THREE.Vector2 | THREE.Vector3 | number | THREE.Texture> {
+  const uniforms: Record<string, THREE.Vector2 | THREE.Vector3 | number | THREE.Texture> = {
+    uMouse: new THREE.Vector2(0.5, 0.5),
+    uLightDir: new THREE.Vector3(0.45, 0.75, 0.5).normalize(),
+  };
+  for (const id of compiled.textures) {
+    const n = file.graph.nodes.find((x) => x.id === id);
+    const image = String(n?.params.image ?? '');
+    uniforms[`uTex${id}`] = textures.get(image ? (file.assets?.[image] ?? '') : '', String(n?.params.wrap ?? 'repeat'));
+  }
+  return uniforms;
 }
 
 /**
@@ -192,14 +215,18 @@ export function shaderGraphDefinition(
   const compiled = compileShaderGraph(file.graph, { target: options.target });
   const textures = options.textures ?? (sharedTextures ??= new ShaderGraphTextures());
   const uniforms: NonNullable<ShaderDefinition['uniforms']> = {
-    uMouse: new THREE.Vector2(0.5, 0.5),
     uAspect: 1,
-    uLightDir: new THREE.Vector3(0.45, 0.75, 0.5).normalize(),
+    ...graphUniforms(file, compiled, textures),
   };
-  for (const id of compiled.textures) {
-    const n = file.graph.nodes.find((x) => x.id === id);
-    const image = String(n?.params.image ?? '');
-    uniforms[`uTex${id}`] = textures.get(image ? (file.assets?.[image] ?? '') : '', String(n?.params.wrap ?? 'repeat'));
+  let fragment = compiled.fragment;
+  let fragmentHeader = compiled.fragmentHeader;
+  if (compiled.kind === 'effect') {
+    // 全螢幕效果當成平面材質預覽：畫面 = screen 這張圖（畫面上的顏色，不做色彩轉換）。
+    // tDiffuse 是引擎保留的名稱，材質裡用 uScreen 代替
+    uniforms.uScreen = options.screen ?? textures.get('', 'clamp');
+    fragmentHeader = `#define tDiffuse uScreen\n${fragmentHeader}`;
+    // 效果的顏色是畫面上的值；材質最後會從線性轉回 sRGB，所以先轉成線性
+    if (!options.target) fragment += '\n  color.rgb = sRGBTransferEOTF(vec4(max(color.rgb, vec3(0.0)), 1.0)).rgb;';
   }
   return {
     name,
@@ -213,9 +240,57 @@ export function shaderGraphDefinition(
     },
     vertexHeader: compiled.vertexHeader,
     vertex: compiled.vertex,
-    fragmentHeader: compiled.fragmentHeader,
+    fragmentHeader,
+    fragment,
+  };
+}
+
+/**
+ * 全螢幕效果的節點圖（有 Effect Output）轉成效果的定義，交給 shaders.defineEffect 註冊，
+ * 再用 shaders.createEffect 建立、postfx.addPass(effect, 'display') 加進後製（或寫在 postfx.settings.effects）。
+ * uniform：uMouse（vec2）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>；uAspect 是畫面的寬高比。
+ * @example
+ * shaders.defineEffect(shaderGraphEffectDefinition(parseShaderGraphFile(json), 'crt'));
+ * postfx.addPass(shaders.createEffect('crt'), 'display');
+ */
+export function shaderGraphEffectDefinition(
+  file: ShaderGraphFile,
+  name: string,
+  options: Pick<ShaderGraphDefinitionOptions, 'textures'> = {},
+): EffectDefinition {
+  const compiled = compileShaderGraph(file.graph);
+  if (compiled.kind !== 'effect')
+    throw new Error(`節點圖「${name}」是材質（Fragment Output），不是全螢幕效果：效果的圖要用 Effect Output`);
+  const textures = options.textures ?? (sharedTextures ??= new ShaderGraphTextures());
+  return {
+    name,
+    uniforms: graphUniforms(file, compiled, textures),
+    header: `#define uAspect (uResolution.x / uResolution.y)\n${compiled.fragmentHeader}`,
     fragment: compiled.fragment,
   };
+}
+
+/**
+ * 載入全螢幕效果的節點圖檔，轉成效果的定義。
+ * @param name 效果名稱（省略時用檔名，例如 shaders/crt.shader.json → crt）
+ * @example
+ * shaders.defineEffect(await loadShaderGraphEffect('shaders/crt.shader.json'));
+ * postfx.addPass(shaders.createEffect('crt'), 'display');
+ */
+export async function loadShaderGraphEffect(url: string, name?: string): Promise<EffectDefinition> {
+  const { file, fileName } = await fetchGraphFile(url);
+  return shaderGraphEffectDefinition(file, name ?? fileName.replace(/(\.shader)?\.json$/, ''));
+}
+
+/** 下載並解析節點圖檔 */
+async function fetchGraphFile(url: string): Promise<{ file: ShaderGraphFile; fileName: string }> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`載入節點圖 ${url} 失敗：${res.status}`);
+  const text = await res.text();
+  // 開發伺服器找不到 public 裡的檔案時會回傳網頁
+  if (text.trimStart().startsWith('<'))
+    throw new Error(`找不到節點圖 ${url}（伺服器回傳的是網頁）：檔名和路徑對嗎？要放在 public/ 底下`);
+  return { file: parseShaderGraphFile(text), fileName: url.split('/').pop()!.split('?')[0] };
 }
 
 /**
@@ -226,12 +301,8 @@ export function shaderGraphDefinition(
  * mesh.material = shaders.createMaterial('lava');
  */
 export async function loadShaderGraph(url: string, name?: string): Promise<ShaderDefinition> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`載入節點圖 ${url} 失敗：${res.status}`);
-  const text = await res.text();
-  // 開發伺服器找不到 public 裡的檔案時會回傳網頁
-  if (text.trimStart().startsWith('<'))
-    throw new Error(`找不到節點圖 ${url}（伺服器回傳的是網頁）：檔名和路徑對嗎？要放在 public/ 底下`);
-  const fileName = url.split('/').pop()!.split('?')[0];
-  return shaderGraphDefinition(parseShaderGraphFile(text), name ?? fileName.replace(/(\.shader)?\.json$/, ''));
+  const { file, fileName } = await fetchGraphFile(url);
+  if (shaderGraphKind(file.graph) === 'effect')
+    throw new Error(`節點圖 ${url} 是全螢幕效果（Effect Output），不是材質：請用 loadShaderGraphEffect`);
+  return shaderGraphDefinition(file, name ?? fileName.replace(/(\.shader)?\.json$/, ''));
 }

@@ -595,6 +595,137 @@ export const EXAMPLES: ShaderExample[] = [
     },
   },
 
+  /* ----------------------------- 全螢幕效果（後製） ----------------------------- */
+  {
+    id: 'fxVignette',
+    group: '全螢幕效果',
+    label: '暗角',
+    desc: '畫面四周變暗：置中 UV 的長度 → smoothstep → 1 − x，乘上畫面顏色',
+    mesh: 'quad',
+    build(N, L) {
+      const cuv = N('centeredUV', 40, 40);
+      const len = N('length', 260, 40);
+      L(cuv, 'uv', len, 'v');
+      const ss = N('smoothstep', 480, 40, { values: { edge0: 0.7, edge1: 1.6 } });
+      L(len, 'out', ss, 'x');
+      const inv = N('oneMinus', 700, 40);
+      L(ss, 'out', inv, 'x');
+      const scr = N('screenColor', 480, 300);
+      const mul = N('multiply', 920, 160);
+      L(scr, 'rgb', mul, 'a');
+      L(inv, 'out', mul, 'b');
+      const out = N('effectOutput', 1140, 160);
+      L(mul, 'out', out, 'color');
+    },
+  },
+  {
+    id: 'fxSepia',
+    group: '全螢幕效果',
+    label: '復古（懷舊色調）',
+    desc: '畫面轉灰階再乘上暖色，和原本的顏色混合',
+    mesh: 'quad',
+    build(N, L) {
+      const scr = N('screenColor', 40, 120);
+      const gray = N('grayscale', 280, 40);
+      L(scr, 'rgb', gray, 'rgb');
+      const tint = N('color', 280, 240, { params: { color: '#ffd29a' } });
+      const mul = N('multiply', 500, 120);
+      L(gray, 'out', mul, 'a');
+      L(tint, 'rgb', mul, 'b');
+      const mix = N('mix', 740, 160, { values: { t: 0.85 } });
+      L(scr, 'rgb', mix, 'a');
+      L(mul, 'out', mix, 'b');
+      const out = N('effectOutput', 980, 160);
+      L(mix, 'out', out, 'color');
+    },
+  },
+  {
+    id: 'fxWave',
+    group: '全螢幕效果',
+    label: '波動扭曲',
+    desc: '讀取畫面時把 UV 往左右推：sin(UV.y × 頻率 + 時間) × 幅度（水面、熱浪、夢境）',
+    mesh: 'quad',
+    build(N, L) {
+      const uv = N('uv', 40, 40);
+      const split = N('split', 240, 40);
+      L(uv, 'uv', split, 'v');
+      const freq = N('multiply', 460, 40, { values: { b: 18 } });
+      L(split, 'y', freq, 'a');
+      const t = N('time', 460, 260);
+      const add = N('add', 680, 60);
+      L(freq, 'out', add, 'a');
+      L(t, 'time', add, 'b');
+      const sin = N('sin', 900, 60);
+      L(add, 'out', sin, 'x');
+      const amp = N('multiply', 1120, 60, { values: { b: 0.01 } });
+      L(sin, 'out', amp, 'a');
+      const comb = N('combine', 1340, 60);
+      L(amp, 'out', comb, 'x');
+      const off = N('add', 1560, 120);
+      L(uv, 'uv', off, 'a');
+      L(comb, 'xy', off, 'b');
+      const scr = N('screenColor', 1780, 120);
+      L(off, 'out', scr, 'uv');
+      const out = N('effectOutput', 2000, 120);
+      L(scr, 'rgb', out, 'color');
+    },
+  },
+  {
+    id: 'fxPixelate',
+    group: '全螢幕效果',
+    label: '像素化',
+    desc: '把 UV 切成格子：floor(UV × 格數) ÷ 格數，再讀畫面（格數 = 畫面大小 ÷ 像素大小）',
+    mesh: 'quad',
+    build(N, L) {
+      const size = N('screenSize', 40, 220);
+      const cells = N('divide', 260, 220, { values: { b: 8 } });
+      L(size, 'size', cells, 'a');
+      const uv = N('uv', 260, 40);
+      const mul = N('multiply', 480, 80);
+      L(uv, 'uv', mul, 'a');
+      L(cells, 'out', mul, 'b');
+      const fl = N('floor', 700, 80);
+      L(mul, 'out', fl, 'x');
+      const div = N('divide', 920, 120);
+      L(fl, 'out', div, 'a');
+      L(cells, 'out', div, 'b');
+      const scr = N('screenColor', 1140, 120);
+      L(div, 'out', scr, 'uv');
+      const out = N('effectOutput', 1360, 120);
+      L(scr, 'rgb', out, 'color');
+    },
+  },
+  {
+    id: 'fxScanlines',
+    group: '全螢幕效果',
+    label: 'CRT 掃描線',
+    desc: '每隔幾個像素變暗一點：sin(UV.y × 畫面高度 × 頻率) 對應到 0.75～1，乘上畫面顏色',
+    mesh: 'quad',
+    build(N, L) {
+      const uv = N('uv', 40, 40);
+      const split = N('split', 240, 40);
+      L(uv, 'uv', split, 'v');
+      const size = N('screenSize', 40, 260);
+      const sizeSplit = N('split', 240, 260);
+      L(size, 'size', sizeSplit, 'v');
+      const rows = N('multiply', 460, 120);
+      L(split, 'y', rows, 'a');
+      L(sizeSplit, 'y', rows, 'b');
+      const freq = N('multiply', 680, 120, { values: { b: 1.5 } });
+      L(rows, 'out', freq, 'a');
+      const sin = N('sin', 900, 120);
+      L(freq, 'out', sin, 'x');
+      const remap = N('remap', 1120, 120, { values: { outMin: 0.75, outMax: 1 } });
+      L(sin, 'out', remap, 'x');
+      const scr = N('screenColor', 1120, 360);
+      const mul = N('multiply', 1360, 200);
+      L(scr, 'rgb', mul, 'a');
+      L(remap, 'out', mul, 'b');
+      const out = N('effectOutput', 1580, 200);
+      L(mul, 'out', out, 'color');
+    },
+  },
+
   /* ----------------------------- 其他 ----------------------------- */
   {
     id: 'blank',
@@ -602,6 +733,18 @@ export const EXAMPLES: ShaderExample[] = [
     label: '空白',
     build(N) {
       N('output', 400, 160);
+    },
+  },
+  {
+    id: 'blankEffect',
+    group: '其他',
+    label: '空白全螢幕效果',
+    desc: 'Screen Color（畫面原本的顏色）接到 Effect Output：從這裡開始改',
+    mesh: 'quad',
+    build(N, L) {
+      const scr = N('screenColor', 120, 160);
+      const out = N('effectOutput', 420, 160);
+      L(scr, 'rgb', out, 'color');
     },
   },
 ];

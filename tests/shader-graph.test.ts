@@ -7,10 +7,13 @@ import {
   normalizeShaderGraph,
   parseShaderGraphFile,
   shaderGraphDefinition,
+  shaderGraphEffectDefinition,
+  shaderGraphKind,
   stringifyShaderGraphFile,
   upstreamHas,
   type ShaderGraph,
 } from '../src/shaders/graph';
+import { Texture } from 'three';
 import { ShaderLibrary } from '../src/shaders';
 import { EXAMPLES, buildExample, createNode } from '../src/editors/shader-editor/examples';
 
@@ -114,5 +117,65 @@ describe('節點圖檔', () => {
     const exported = { format: 'shader-node-editor', version: 2, graph: buildExample('rings'), assets: {} };
     expect(parseShaderGraphFile(JSON.stringify(exported)).graph.nodes.length).toBeGreaterThan(3);
     expect(() => parseShaderGraphFile('{"nodes": 1}')).toThrow(/格式不正確/);
+  });
+});
+
+describe('節點式著色器：全螢幕效果（Effect Output）', () => {
+  const fileOf = (graph: ShaderGraph) => ({ format: 'hero-shader-graph' as const, version: 1 as const, graph });
+  const effectExamples = EXAMPLES.filter((e) => e.group === '全螢幕效果' || e.id === 'blankEffect');
+
+  test('有 Effect Output 的圖是全螢幕效果', () => {
+    expect(effectExamples.length).toBeGreaterThanOrEqual(5);
+    for (const ex of effectExamples) expect(shaderGraphKind(buildExample(ex.id))).toBe('effect');
+    expect(shaderGraphKind(buildExample('blank'))).toBe('material');
+  });
+
+  test('效果範例都能變成 ShaderLibrary 的效果，建立得出後製步驟', () => {
+    const lib = new ShaderLibrary();
+    for (const ex of effectExamples) {
+      const def = shaderGraphEffectDefinition(fileOf(buildExample(ex.id)), `fx-${ex.id}`);
+      // 顏色是畫面上的值：不做 sRGB 轉換；讀畫面用 tDiffuse
+      expect(def.fragment).not.toContain('sRGBTransferEOTF');
+      expect(def.header).toContain('#define uAspect');
+      lib.defineEffect(def);
+      const pass = lib.createEffect(def.name);
+      expect(pass.shaderName).toBe(def.name);
+      expect((pass.material as { fragmentShader: string }).fragmentShader).toContain('tDiffuse');
+    }
+  });
+
+  test('Effect Output 沒有連接時是畫面原本的顏色', () => {
+    const g: ShaderGraph = { nodes: [], links: [], nextId: 1 };
+    createNode(g, 'effectOutput', 0, 0);
+    expect(compileShaderGraph(g).fragment).toContain('texture(tDiffuse, vUv).rgb');
+  });
+
+  test('材質裡用 Screen Color 會給出清楚的錯誤', () => {
+    const g: ShaderGraph = { nodes: [], links: [], nextId: 1 };
+    const scr = createNode(g, 'screenColor', 0, 0);
+    const out = createNode(g, 'output', 200, 0);
+    g.links.push({ from: scr.id, fromPort: 'rgb', to: out.id, toPort: 'color' });
+    expect(() => compileShaderGraph(g)).toThrow(/Screen Color 只能用在全螢幕效果/);
+  });
+
+  test('材質和效果的輸出不能放在同一張圖', () => {
+    const g: ShaderGraph = { nodes: [], links: [], nextId: 1 };
+    createNode(g, 'output', 0, 0);
+    createNode(g, 'effectOutput', 200, 0);
+    expect(() => compileShaderGraph(g)).toThrow(/只能是材質或全螢幕效果/);
+  });
+
+  test('材質的圖不能當效果用，反之亦然', () => {
+    expect(() => shaderGraphEffectDefinition(fileOf(buildExample('blank')), 'x')).toThrow(/不是全螢幕效果/);
+  });
+
+  test('效果的圖在編輯器裡預覽：變成平面材質，畫面換成指定的圖，輸出轉成線性', () => {
+    const lib = new ShaderLibrary();
+    const screen = new Texture();
+    const def = shaderGraphDefinition(fileOf(buildExample('fxVignette')), 'preview-fx', { screen });
+    expect(def.uniforms?.uScreen).toBe(screen);
+    expect(def.fragmentHeader).toContain('#define tDiffuse uScreen');
+    expect(def.fragment).toContain('sRGBTransferEOTF');
+    expect(lib.createFromDefinition(def)).toBeTruthy();
   });
 });

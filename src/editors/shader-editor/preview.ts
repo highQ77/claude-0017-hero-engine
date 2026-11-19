@@ -4,10 +4,16 @@
  *
  * - 主預覽：球體、立方體、圓環、平面 3D、平面 2D（滿版），拖曳旋轉、滾輪縮放
  * - 節點縮圖：共用一個離屏的 three.js 繪製器，每個節點畫一次滿版方塊，再複製到節點上的 2D 畫布
+ * - 全螢幕效果的圖（Effect Output）：在平面 2D 上預覽效果套用在一張示範畫面（screenSample）上的樣子
  */
 import * as THREE from 'three';
-import { ShaderLibrary, type CustomMaterial, type ShaderDefinition } from '../../shaders';
-import { type ShaderGraphFile, ShaderGraphTextures, shaderGraphDefinition } from '../../shaders/graph';
+import { ShaderLibrary, type CustomMaterial, type EffectDefinition, type ShaderDefinition } from '../../shaders';
+import {
+  type ShaderGraphFile,
+  ShaderGraphTextures,
+  shaderGraphDefinition,
+  shaderGraphEffectDefinition,
+} from '../../shaders/graph';
 
 /** 預覽網格 */
 export type PreviewMesh = 'sphere' | 'cube' | 'torus' | 'plane' | 'quad';
@@ -53,9 +59,81 @@ function shaderErrors(gl: WebGLRenderingContext, program: WebGLProgram): string 
 const library = new ShaderLibrary();
 const textures = new ShaderGraphTextures();
 
+let screen: THREE.Texture | null = null;
+/**
+ * 全螢幕效果預覽用的「畫面」：天空、太陽、山、房子、文字（顏色鮮明、有細節，看得出扭曲、模糊、調色的效果）。
+ * 和遊戲裡效果拿到的畫面一樣是畫面上的顏色（不做色彩轉換）
+ */
+export function screenSample(): THREE.Texture {
+  if (screen) return screen;
+  const c = document.createElement('canvas');
+  c.width = 960;
+  c.height = 540;
+  const g = c.getContext('2d')!;
+  const sky = g.createLinearGradient(0, 0, 0, 540);
+  sky.addColorStop(0, '#2b5ea8');
+  sky.addColorStop(0.55, '#f2a65a');
+  sky.addColorStop(1, '#f6d58e');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, 960, 540);
+  g.fillStyle = '#fff3c4';
+  g.beginPath();
+  g.arc(690, 250, 70, 0, Math.PI * 2);
+  g.fill();
+  const hill = (color: string, base: number, amp: number, freq: number, phase: number) => {
+    g.fillStyle = color;
+    g.beginPath();
+    g.moveTo(0, 540);
+    for (let x = 0; x <= 960; x += 8)
+      g.lineTo(x, base - Math.sin(x * freq + phase) * amp - Math.sin(x * freq * 2.7) * amp * 0.3);
+    g.lineTo(960, 540);
+    g.fill();
+  };
+  hill('#5b4a7a', 360, 60, 0.008, 1);
+  hill('#2f5d50', 420, 40, 0.012, 3);
+  hill('#1e3d2f', 470, 25, 0.02, 0);
+  // 房子
+  g.fillStyle = '#c94f3d';
+  g.fillRect(200, 380, 120, 80);
+  g.fillStyle = '#7a2e24';
+  g.beginPath();
+  g.moveTo(185, 385);
+  g.lineTo(260, 330);
+  g.lineTo(335, 385);
+  g.fill();
+  g.fillStyle = '#ffe9a8';
+  g.fillRect(222, 400, 26, 26);
+  g.fillRect(272, 400, 26, 26);
+  // 文字與格線（看得出扭曲、像素化）
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 72px system-ui, sans-serif';
+  g.fillText('HERO ENGINE', 40, 110);
+  g.strokeStyle = 'rgba(255,255,255,0.18)';
+  g.lineWidth = 1;
+  for (let x = 0; x <= 960; x += 48) {
+    g.beginPath();
+    g.moveTo(x + 0.5, 0);
+    g.lineTo(x + 0.5, 540);
+    g.stroke();
+  }
+  screen = new THREE.CanvasTexture(c);
+  screen.colorSpace = THREE.NoColorSpace;
+  screen.minFilter = THREE.LinearFilter;
+  screen.generateMipmaps = false;
+  return screen;
+}
+
 /** 節點圖 → 自訂著色器的定義（用預覽共用的貼圖；編輯器的 GLSL 分頁也用這份，只編譯一次） */
 export const graphDefinition = (file: ShaderGraphFile, target?: { nodeId: number; port: string }) =>
-  shaderGraphDefinition(file, target ? `thumb${target.nodeId}` : 'preview', { target, textures });
+  shaderGraphDefinition(file, target ? `thumb${target.nodeId}` : 'preview', {
+    target,
+    textures,
+    screen: screenSample(),
+  });
+
+/** 全螢幕效果的圖 → 遊戲裡用的效果定義（GLSL 分頁顯示這份） */
+export const graphEffectDefinition = (file: ShaderGraphFile, name = 'effect'): EffectDefinition =>
+  shaderGraphEffectDefinition(file, name, { textures });
 
 /** 每幀共用的狀態：時間、滑鼠 */
 export interface PreviewState {

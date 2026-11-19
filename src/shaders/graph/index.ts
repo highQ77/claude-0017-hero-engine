@@ -24,15 +24,24 @@ export type {
   NodeContext,
   CategoryId,
 } from './nodes';
-export { compileShaderGraph, analyzeShaderGraphTypes, upstreamHas, GRAPH_UNIFORMS } from './compile';
-export type { ShaderGraph, ShaderGraphNode, ShaderGraphLink, CompiledShaderGraph, CompileOptions } from './compile';
+export { compileShaderGraph, analyzeShaderGraphTypes, upstreamHas, shaderGraphKind, GRAPH_UNIFORMS } from './compile';
+export type {
+  ShaderGraph,
+  ShaderGraphNode,
+  ShaderGraphLink,
+  CompiledShaderGraph,
+  CompileOptions,
+  ShaderGraphKind,
+} from './compile';
 export {
   SHADER_GRAPH_FORMAT,
   normalizeShaderGraph,
   parseShaderGraphFile,
   stringifyShaderGraphFile,
   shaderGraphDefinition,
+  shaderGraphEffectDefinition,
   loadShaderGraph,
+  loadShaderGraphEffect,
   builtinUVGrid,
   ShaderGraphTextures,
 } from './file';

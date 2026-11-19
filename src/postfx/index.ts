@@ -1,7 +1,7 @@
 import { defaultPostFxSettings } from './PostProcessingPlugin';
 export { PostProcessingPlugin, PostFxKey } from './PostProcessingPlugin';
-export type { PostFxSettings, ToneMappingName, AntialiasMode, PassStage } from './PostProcessingPlugin';
-export { ColorGradeShader } from './ColorGradeShader';
+export type { PostFxSettings, PostFxEffect, ToneMappingName, AntialiasMode, PassStage } from './PostProcessingPlugin';
+export { ColorGradeEffect } from './ColorGradeEffect';
 
 // ───────── 小工具函式（依用途分類）─────────
 

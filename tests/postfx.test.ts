@@ -5,7 +5,10 @@ import { Engine } from '../src/core';
 import { EcsPlugin } from '../src/ecs';
 import { ScenePlugin, Transform } from '../src/scene';
 import { Camera, RenderPlugin } from '../src/render';
-import { PostFxKey, PostProcessingPlugin } from '../src/postfx';
+import { ColorGradeEffect, PostFxKey, PostProcessingPlugin } from '../src/postfx';
+import { defaultPostFxSettings } from '../src/postfx/PostProcessingPlugin';
+import { postfxSettings } from '../src/postfx/sceneSettings';
+import { ShaderPlugin } from '../src/shaders';
 import { fakeScheduler } from './helpers';
 
 /**
@@ -181,5 +184,144 @@ describe('後製外掛', () => {
   test('同時只能有一個外掛接管繪製', () => {
     const { render } = setup();
     expect(() => render.setDrawHandler(() => {})).toThrow(/已經有其他外掛/);
+  });
+});
+
+describe('後製外掛：效果和著色器庫共用', () => {
+  /** 等非同步載入（動態 import、fetch）完成 */
+  const settle = async () => {
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5));
+  };
+  const chainOf = (postfx: PostProcessingPlugin) =>
+    (postfx as unknown as { chain: { grade: ShaderPass; effects: { index: number; pass: ShaderPass }[] } }).chain;
+
+  function setupWithShaders(settings: ConstructorParameters<typeof PostProcessingPlugin>[0] = {}) {
+    const clock = fakeScheduler();
+    const fake = fakeRenderer();
+    const ecs = new EcsPlugin();
+    const shaders = new ShaderPlugin();
+    const render = new RenderPlugin({ renderer: fake.renderer, size: { width: 200, height: 100 } });
+    const postfx = new PostProcessingPlugin(settings);
+    const engine = new Engine({ scheduler: clock.scheduler, pauseOnHidden: false });
+    engine.use(ecs).use(new ScenePlugin()).use(shaders).use(render).use(postfx);
+    ecs.world.spawn(Transform, Camera);
+    engine.start();
+    return { clock, postfx, library: shaders.library, world: ecs.world };
+  }
+
+  test('調色是著色器庫的效果：有 ShaderPlugin 時註冊在它的庫裡，可以用 update 修改', () => {
+    const { clock, postfx, library } = setupWithShaders({ vignette: { enabled: true } });
+    clock.frame(16);
+    expect(postfx.shaderLibrary).toBe(library);
+    expect(library.has(ColorGradeEffect.name)).toBe(true);
+    expect(library.liveCount(ColorGradeEffect.name)).toBe(1);
+    library.update(ColorGradeEffect.name, { fragment: `${ColorGradeEffect.fragment}\n color.r = 1.0;` });
+    const m = chainOf(postfx).grade.material as THREE.ShaderMaterial;
+    expect(m.fragmentShader).toContain('color.r = 1.0;');
+  });
+
+  test('沒有 ShaderPlugin 時用後製自己的著色器庫', () => {
+    const { clock, postfx } = setup({ color: { enabled: true } });
+    clock.frame(16);
+    expect(postfx.shaderLibrary.has(ColorGradeEffect.name)).toBe(true);
+  });
+
+  test('settings.effects：已註冊的效果依順序加進後製，uniform 每幀寫入，enabled: false 拿掉', () => {
+    const { clock, postfx, library } = setupWithShaders();
+    library.defineEffect({
+      name: 'tintRed',
+      uniforms: { amount: 0.5, tint: new THREE.Color(1, 0, 0) },
+      fragment: 'color.r += amount;',
+    });
+    postfx.settings.effects = [{ name: 'tintRed', uniforms: { amount: 0.8, tint: '#00ff00' } }];
+    clock.frame(16);
+    expect(postfx.passNames).toEqual(['render', 'output', 'fx:0:tintRed']);
+    const u = chainOf(postfx).effects[0].pass.uniforms as Record<string, THREE.IUniform>;
+    expect(u.amount.value).toBe(0.8);
+    expect((u.tint.value as THREE.Color).getHex()).toBe(0x00ff00);
+    // 改數值不用重建
+    const pass = chainOf(postfx).effects[0].pass;
+    (postfx.settings.effects[0] as { uniforms: Record<string, unknown> }).uniforms.amount = 0.1;
+    clock.frame(16);
+    expect(chainOf(postfx).effects[0].pass).toBe(pass);
+    expect(u.amount.value).toBe(0.1);
+    // scene 階段放在色調映射之前；關閉時拿掉
+    postfx.settings.effects = [{ name: 'tintRed', stage: 'scene' }];
+    clock.frame(16);
+    expect(postfx.passNames).toEqual(['render', 'fx:0:tintRed', 'output']);
+    postfx.settings.effects = [{ name: 'tintRed', enabled: false }];
+    clock.frame(16);
+    expect(postfx.passNames).toEqual([]);
+  });
+
+  test('settings.effects：內建的 EffectPresets 名稱會自動註冊', async () => {
+    const { clock, postfx, library } = setupWithShaders({ effects: ['pixelate'] });
+    clock.frame(16);
+    expect(postfx.passNames).toEqual([]); // 還在載入
+    await settle();
+    clock.frame(16);
+    expect(library.has('pixelate')).toBe(true);
+    expect(postfx.passNames).toEqual(['render', 'output', 'fx:0:pixelate']);
+  });
+
+  test('settings.effects：節點圖檔自動載入，存檔後重新載入', async () => {
+    const graph = (color: string) =>
+      JSON.stringify({
+        format: 'hero-shader-graph',
+        version: 1,
+        graph: {
+          nodes: [
+            { id: 1, type: 'color', x: 0, y: 0, values: {}, params: { color } },
+            { id: 2, type: 'effectOutput', x: 200, y: 0, values: { alpha: 1 }, params: {} },
+          ],
+          links: [{ from: 1, fromPort: 'rgb', to: 2, toPort: 'color' }],
+          nextId: 3,
+        },
+      });
+    let content = graph('#ff0000');
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(content)) as typeof fetch;
+    try {
+      const { clock, postfx, library } = setupWithShaders({ effects: [{ graph: 'shaders/red.shader.json' }] });
+      clock.frame(16);
+      await settle();
+      clock.frame(16);
+      expect(postfx.passNames).toEqual(['render', 'output', 'fx:0:red']);
+      expect((chainOf(postfx).effects[0].pass.material as THREE.ShaderMaterial).fragmentShader).toContain(
+        'vec3(1.0, 0.0, 0.0)',
+      );
+      // 存檔（開發伺服器通知）：重新載入、重建
+      content = graph('#0000ff');
+      postfx.reloadGraph('shaders/red.shader.json');
+      await settle();
+      clock.frame(16);
+      expect(library.has('red')).toBe(true);
+      expect((chainOf(postfx).effects[0].pass.material as THREE.ShaderMaterial).fragmentShader).toContain(
+        'vec3(0.0, 0.0, 1.0)',
+      );
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  test('場景檔：effects 整個清單替換，卸載場景時恢復；格式不對時說明哪裡錯', () => {
+    const settings = defaultPostFxSettings();
+    const [handler] = postfxSettings(() => settings, defaultPostFxSettings);
+    const ctx = { world: new EcsPlugin().world, warn: () => {} };
+    const undo = handler.apply(
+      {
+        effects: ['pixelate', { graph: 'shaders/crt.shader.json', uniforms: { uMouse: [0.5, 0.5] } }],
+      },
+      ctx,
+    ) as () => void;
+    expect(settings.effects).toHaveLength(2);
+    undo();
+    expect(settings.effects).toEqual([]);
+    expect(() => handler.apply({ effects: 'pixelate' }, ctx)).toThrow(/effects 要是陣列/);
+    expect(() => handler.apply({ effects: [{ uniforms: {} }] }, ctx)).toThrow(/需要 name 或 graph/);
+    expect(() => handler.apply({ effects: [{ name: 'x', stage: 'later' }] }, ctx)).toThrow(/stage/);
+    expect(() => handler.apply({ effects: [{ name: 'x', speed: 1 }] }, ctx)).toThrow(
+      /不認識的欄位「effects\[0\]\.speed」/,
+    );
   });
 });

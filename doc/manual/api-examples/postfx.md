@@ -31,12 +31,25 @@ engine.timers.after(0.5, () => console.log('效果清單：', postfx.passNames.j
 engine.start();
 ```
 
-## ColorGradeShader
-調色加暗角的著色器（合併成一次全螢幕繪製，後製外掛內部用）。可以直接拿來做自己的 ShaderPass。
+## ColorGradeEffect
+內建的調色加暗角（合併成一次全螢幕繪製），是 ShaderLibrary 的全螢幕效果（名稱 `postfx.colorGrade`）：開啟 `settings.color` 或 `settings.vignette` 時由後製註冊、建立。可以讀它的定義，也可以用 `shaders.update` 在執行中修改著色器。
 
 ```ts
-console.log('名稱：', ColorGradeShader.name);
-console.log('uniforms：', Object.keys(ColorGradeShader.uniforms).join('、'));
+spawn.camera(world, { position: [0, 1.5, 4], target: [0, 0.5, 0] });
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { torusKnot: [0.7, 0.25] }, material: '#4cc9f0', position: [0, 0.8, 0] });
+postfx.settings.color.enabled = true;
+postfx.settings.color.saturation = 1.4;
+postfx.settings.vignette.enabled = true;
+console.log('效果名稱：', ColorGradeEffect.name, '，uniform：', Object.keys(ColorGradeEffect.uniforms ?? {}).join('、'));
+// 管線建立後（下一幀）就註冊好了：把暗角改成藍色調
+engine.timers.after(0.5, () => {
+  console.log('已註冊：', shaders.has(ColorGradeEffect.name));
+  shaders.update(ColorGradeEffect.name, {
+    fragment: `${ColorGradeEffect.fragment}\n    color.rgb = mix(color.rgb, vec3(0.1, 0.2, 0.6), dot(uv - 0.5, uv - 0.5));`,
+  });
+});
+engine.start();
 ```
 
 ## create
@@ -137,3 +150,23 @@ addEventListener('pointerdown', () => {
 console.log('點畫面切換');
 engine.start();
 ```
+
+## PostFxEffect
+`postfx.settings.effects` 的一項：效果名稱（`shaders.defineEffect` 註冊的、內建的 `EffectPresets`），或 `{ graph: '節點圖檔' }`（著色器編輯器做的全螢幕效果，自動載入）。物件寫法可以加 `uniforms`（每幀寫入）、`stage`、`enabled`。載入完成後自動加進後製，點畫面切換。
+
+```ts
+spawn.camera(world, { position: [0, 1.5, 4], target: [0, 0.5, 0] });
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { torusKnot: [0.7, 0.25] }, material: '#ffb347', position: [0, 0.8, 0] });
+const crt: PostFxEffect = { graph: 'shaders/crt.shader.json' };
+const lists: PostFxEffect[][] = [[crt], ['pixelate'], [{ name: 'chromaticAberration', uniforms: { amount: 0.01 } }, crt], []];
+let i = 0;
+postfx.settings.effects = lists[0];
+addEventListener('pointerdown', () => {
+  postfx.settings.effects = lists[++i % lists.length];
+  console.log('effects：', JSON.stringify(postfx.settings.effects));
+});
+engine.timers.after(1, () => console.log('效果清單：', postfx.passNames.join(' → ')));
+engine.start();
+```
+

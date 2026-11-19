@@ -23,6 +23,7 @@
     },
     "resolveJsonModule": true,
     "allowJs": true,
+    "noEmit": true,
     "types": ["vite/client"]
   },
   "include": [

@@ -1,6 +1,6 @@
 <!-- group: 核心 -->
 <h1>著色器編輯器</h1>
-<p class="lead">著色器編輯器是開發時使用的網頁工具，用<b>節點</b>拼出自訂著色器（不用寫 GLSL），存在專案 <code>public/shaders</code> 裡的節點圖檔（<code>名稱.shader.json</code>）。預覽用和遊戲一樣的引擎著色器庫繪製，看到的就是遊戲裡的樣子。它只在 <code>node hero dev</code> 時提供，不會被打包到遊戲裡（節點圖檔本身在 <code>public/</code>，會照常發佈）。編輯器移植自 Shader Composer。</p>
+<p class="lead">著色器編輯器是開發時使用的網頁工具，用<b>節點</b>拼出自訂著色器（不用寫 GLSL）：貼在 3D 物件上的<b>材質</b>，或套用在整個畫面上的<b>全螢幕效果</b>（後製），存在專案 <code>public/shaders</code> 裡的節點圖檔（<code>名稱.shader.json</code>）。預覽用和遊戲一樣的引擎著色器庫繪製，看到的就是遊戲裡的樣子。它只在 <code>node hero dev</code> 時提供，不會被打包到遊戲裡（節點圖檔本身在 <code>public/</code>，會照常發佈）。編輯器移植自 Shader Composer。</p>
 
 <h2>開啟</h2>
 <p>執行 <code>node hero dev</code> 後打開 <code>/shader-editor.html</code>，或按任何一個編輯器頁首切換列的「著色器」（UI／3D 場景／著色器，會在另一個分頁打開）。網址加上 <code>?file=名稱</code> 會直接開啟那個節點圖檔。</p>
@@ -31,8 +31,33 @@
   <li>節點圖的顏色就是畫面上看到的顏色，不套用色調映射，遊戲裡和預覽一樣。</li>
 </ul>
 
+<h2>全螢幕效果（後製）</h2>
+<p>圖裡放 <b>Effect Output</b>（取代 Fragment Output）時，這張圖就是全螢幕效果：每個像素算出新的顏色，套用在整個畫面上。按「新增」時選「全螢幕效果」，或從範例的「全螢幕效果」群組開始。</p>
+<ul>
+  <li><b>Screen Color</b>：畫面上這個位置原本的顏色。UV 可以偏移、切格子，做出扭曲、像素化、色差。只能用在全螢幕效果的圖。</li>
+  <li><b>Screen Size</b>：畫面大小（像素），一個像素在 UV 上是 1 ÷ Screen Size。</li>
+  <li>顏色是畫面上看到的值：效果加在色調映射之後（<code>display</code> 階段），2D 介面不受影響。</li>
+  <li>預覽固定是「平面 2D」，效果套用在一張示範畫面上；GLSL 分頁顯示遊戲裡實際用的效果程式。</li>
+  <li>3D 才有的節點（法線、世界座標、光照）在全螢幕效果裡是固定值，沒有意義。</li>
+  <li>範例：暗角、復古（懷舊色調）、波動扭曲、像素化、CRT 掃描線。</li>
+</ul>
+<p>在遊戲裡使用有兩種寫法，<b>擇一</b>即可：</p>
+<p><b>寫法一：寫在後製設定（建議）</b>。引擎會自動載入節點圖檔、建立效果、加進後製；開發時在著色器編輯器存檔，效果會立刻更新。場景檔的 <code>"postfx": { "effects": [...] }</code> 也可以這樣寫。</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="寫法一：postfx.settings.effects">
+postfx.settings.effects = [{ graph: 'shaders/crt.shader.json' }];
+</script>
+<p><b>寫法二：自己建立</b>。需要自己控制效果加入、移除的時機（例如按鈕開關），或要拿著效果物件改 uniform 時用。</p>
+<script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="寫法二：自己載入、加進後製">
+import { loadShaderGraphEffect } from '@engine/shaders';
+
+shaders.defineEffect(await loadShaderGraphEffect('shaders/crt.shader.json')); // 名稱是檔名：crt
+const crt = shaders.createEffect('crt');
+postfx.addPass(crt, 'display'); // 開
+postfx.removePass(crt);         // 關
+</script>
+
 <h2>範例</h2>
-<p>工具列「範例…」有 16 個範例，載入時會切換合適的預覽網格，可以用復原還原：2D 圖案（同心波紋、電漿、催眠螺旋、旋轉棋盤、霓虹光環、色相環、FBM 雲、Voronoi 細胞）、互動（滑鼠光暈）、3D 材質（Fresnel 邊緣光、卡通渲染、全息投影）、頂點位移（地形、水面波浪、熔岩星球、貼圖＋位移）。</p>
+<p>工具列「範例…」有 23 個範例，載入時會切換合適的預覽網格，可以用復原還原：2D 圖案（同心波紋、電漿、催眠螺旋、旋轉棋盤、霓虹光環、色相環、FBM 雲、Voronoi 細胞）、互動（滑鼠光暈）、3D 材質（Fresnel 邊緣光、卡通渲染、全息投影）、頂點位移（地形、水面波浪、熔岩星球、貼圖＋位移）、全螢幕效果（暗角、復古、波動扭曲、像素化、CRT 掃描線），以及空白的材質與全螢幕效果。</p>
 
 <h2>在場景裡使用</h2>
 <p>不用寫程式：在 3D 場景編輯器把素材面板「著色器」裡的節點圖拖到物件上，或在網格的「材質」選「節點圖」再選檔案（旁邊的「編輯 ↗」會在著色器編輯器打開它）。場景檔裡寫成：</p>

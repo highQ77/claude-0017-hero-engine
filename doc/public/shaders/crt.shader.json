@@ -1,0 +1,197 @@
+{
+  "format": "hero-shader-graph",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "type": "uv",
+        "x": 40,
+        "y": 40,
+        "values": {},
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 2,
+        "type": "split",
+        "x": 240,
+        "y": 40,
+        "values": {
+          "v": 0
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 3,
+        "type": "screenSize",
+        "x": 40,
+        "y": 260,
+        "values": {},
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 4,
+        "type": "split",
+        "x": 240,
+        "y": 260,
+        "values": {
+          "v": 0
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 5,
+        "type": "multiply",
+        "x": 460,
+        "y": 120,
+        "values": {
+          "a": 0,
+          "b": 1
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 6,
+        "type": "multiply",
+        "x": 680,
+        "y": 120,
+        "values": {
+          "a": 0,
+          "b": 1.5
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 7,
+        "type": "sin",
+        "x": 900,
+        "y": 120,
+        "values": {
+          "x": 0
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 8,
+        "type": "remap",
+        "x": 1120,
+        "y": 120,
+        "values": {
+          "x": 0,
+          "inMin": -1,
+          "inMax": 1,
+          "outMin": 0.75,
+          "outMax": 1
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 9,
+        "type": "screenColor",
+        "x": 1120,
+        "y": 360,
+        "values": {},
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 10,
+        "type": "multiply",
+        "x": 1360,
+        "y": 200,
+        "values": {
+          "a": 0,
+          "b": 1
+        },
+        "params": {},
+        "preview": true
+      },
+      {
+        "id": 11,
+        "type": "effectOutput",
+        "x": 1580,
+        "y": 200,
+        "values": {
+          "alpha": 1
+        },
+        "params": {},
+        "preview": true
+      }
+    ],
+    "links": [
+      {
+        "from": 1,
+        "fromPort": "uv",
+        "to": 2,
+        "toPort": "v"
+      },
+      {
+        "from": 3,
+        "fromPort": "size",
+        "to": 4,
+        "toPort": "v"
+      },
+      {
+        "from": 2,
+        "fromPort": "y",
+        "to": 5,
+        "toPort": "a"
+      },
+      {
+        "from": 4,
+        "fromPort": "y",
+        "to": 5,
+        "toPort": "b"
+      },
+      {
+        "from": 5,
+        "fromPort": "out",
+        "to": 6,
+        "toPort": "a"
+      },
+      {
+        "from": 6,
+        "fromPort": "out",
+        "to": 7,
+        "toPort": "x"
+      },
+      {
+        "from": 7,
+        "fromPort": "out",
+        "to": 8,
+        "toPort": "x"
+      },
+      {
+        "from": 9,
+        "fromPort": "rgb",
+        "to": 10,
+        "toPort": "a"
+      },
+      {
+        "from": 8,
+        "fromPort": "out",
+        "to": 10,
+        "toPort": "b"
+      },
+      {
+        "from": 10,
+        "fromPort": "out",
+        "to": 11,
+        "toPort": "color"
+      }
+    ],
+    "nextId": 12
+  },
+  "preview": {
+    "mesh": "quad"
+  },
+  "assets": {}
+}

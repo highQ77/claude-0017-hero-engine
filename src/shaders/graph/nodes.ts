@@ -79,6 +79,10 @@ export interface NodeContext {
   v(name: string): string;
   /** 這個節點的貼圖 uniform 名稱（呼叫後會宣告 sampler2D） */
   texture(): string;
+  /** 'material'：材質（Fragment Output）；'effect'：全螢幕效果（Effect Output） */
+  mode: 'material' | 'effect';
+  /** 畫面原本的顏色（sampler2D 的名稱）；只有全螢幕效果有，材質裡呼叫會丟出錯誤 */
+  screen(): string;
 }
 
 /** 一種節點 */
@@ -260,6 +264,33 @@ N({
   keywords: '時間',
   outputs: [{ name: 'time', type: 'float' }],
   glsl: () => ({ time: 'uTime' }),
+});
+N({
+  type: 'screenColor',
+  title: 'Screen Color',
+  category: 'input',
+  desc: '全螢幕效果：畫面上這個位置原本的顏色（只能用在有 Effect Output 的圖）。UV 可以偏移，做出扭曲、色差、模糊',
+  keywords: '畫面 螢幕 後製 screen 原本的顏色',
+  inputs: [uvIn('uv')],
+  outputs: [
+    { name: 'rgba', type: 'vec4' },
+    { name: 'rgb', type: 'vec3' },
+    { name: 'a', type: 'float' },
+  ],
+  glsl: (i, _p, _T, ctx) => ({
+    rgba: `texture(${ctx.screen()}, ${i.uv})`,
+    rgb: `${ctx.v('rgba')}.rgb`,
+    a: `${ctx.v('rgba')}.a`,
+  }),
+});
+N({
+  type: 'screenSize',
+  title: 'Screen Size',
+  category: 'input',
+  desc: '畫面大小（像素）。一個像素在 UV 上是 1 / Screen Size，像素化、描邊等效果會用到',
+  keywords: '解析度 畫面 寬高 resolution 像素',
+  outputs: [{ name: 'size', type: 'vec2' }],
+  glsl: () => ({ size: 'uResolution' }),
 });
 N({
   type: 'mouse',
@@ -775,6 +806,18 @@ N({
   ],
   inputs: [
     { name: 'color', type: 'vec3', default: 0 },
+    { name: 'alpha', type: 'float', default: 1 },
+  ],
+});
+N({
+  type: 'effectOutput',
+  title: 'Effect Output',
+  category: 'output',
+  unique: true,
+  desc: '全螢幕效果（後製）的輸出：畫面每個像素的新顏色。有這個節點時，這張圖是全螢幕效果而不是材質，用 Screen Color 讀取畫面原本的顏色。沒有連接時是畫面原本的顏色',
+  keywords: '後製 效果 post effect 全螢幕 畫面',
+  inputs: [
+    { name: 'color', type: 'vec3', expr: 'texture(tDiffuse, vUv).rgb', exprType: 'vec3', exprLabel: '畫面' },
     { name: 'alpha', type: 'float', default: 1 },
   ],
 });
