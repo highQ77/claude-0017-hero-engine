@@ -9,6 +9,7 @@
  *   node hero build [--web|--mac] 檢查（格式、程式、型別、測試）後發佈目前選擇的專案：
  *                                   --web（預設）網頁版 → dist/<專案名稱>/web/
  *                                   --mac         macOS App（Tauri）→ dist/<專案名稱>/mac/<專案名稱>.app
+ *                                   --mac -f      App 打開時就是全螢幕（-f 同 --fullscreen）
  *   node hero doc [build]         開啟使用手冊（doc/）；build 打包到 dist/doc/
  *   node hero api                 產生引擎的 API 列表（tips/api.txt）
  *
@@ -177,17 +178,23 @@ function dev(args) {
 const BUILD_TARGETS = ['web', 'mac'];
 /** 還沒支援的平台（給清楚的說明，而不是當成 Vite 的參數） */
 const LATER_TARGETS = ['windows', 'window', 'win', 'ios', 'android', 'linux'];
+/** 桌面版選項：App 打開時就是全螢幕 */
+const FULLSCREEN_FLAGS = ['-f', '--fullscreen'];
 
 function build(args) {
   const flags = args.filter((a) => a.startsWith('--') && [...BUILD_TARGETS, ...LATER_TARGETS].includes(a.slice(2)));
   const later = flags.map((a) => a.slice(2)).filter((t) => LATER_TARGETS.includes(t));
   if (later.length) fail(`還不支援發佈到 ${later.join('、')}（目前可以用 --web、--mac）`);
   const targets = flags.length ? [...new Set(flags.map((a) => a.slice(2)))] : ['web'];
-  const viteArgs = args.filter((a) => !flags.includes(a));
+  const fullscreen = args.some((a) => FULLSCREEN_FLAGS.includes(a));
+  if (fullscreen && !targets.includes('mac'))
+    fail('-f（全螢幕）只用在桌面版：node hero build --mac -f（網頁版請在遊戲裡用 Fullscreen API）');
+  const viteArgs = args.filter((a) => !flags.includes(a) && !FULLSCREEN_FLAGS.includes(a));
   const name = currentProject();
   // 先檢查桌面版需要的工具：不要等網頁版編譯完才發現不能做
   if (targets.includes('mac')) checkMacTools();
-  console.log(`▶ 發佈專案 ${name}（${targets.map((t) => (t === 'web' ? '網頁版' : 'macOS App')).join('、')}）`);
+  const labels = targets.map((t) => (t === 'web' ? '網頁版' : `macOS App${fullscreen ? '，全螢幕' : ''}`));
+  console.log(`▶ 發佈專案 ${name}（${labels.join('、')}）`);
   // 格式與程式檢查（Biome）：格式不符或有錯誤時停止；修正用 npm run fix
   run('格式與程式檢查', BIOME, ['ci']);
   run('型別檢查', TSC, ['--noEmit']);
@@ -196,7 +203,8 @@ function build(args) {
   const webDir = join(ROOT, 'dist', name, 'web');
   run('打包網頁版', VITE, ['build', '--outDir', webDir, '--emptyOutDir', ...viteArgs], { PROJECT: name });
   const done = [`網頁版：dist/${name}/web/（index.html，放到網站的根目錄）`];
-  if (targets.includes('mac')) done.push(`macOS App：${relative(ROOT, buildMac(name, webDir))}`);
+  if (targets.includes('mac'))
+    done.push(`macOS App${fullscreen ? '（全螢幕）' : ''}：${relative(ROOT, buildMac(name, webDir, { fullscreen }))}`);
   console.log(`\n✓ 發佈完成\n${done.map((d) => `    ${d}`).join('\n')}`);
 }
 
@@ -220,8 +228,9 @@ function pageTitle(name) {
  * 1. 在 .tauri/<專案>/src-tauri/ 放好外殼（tools/tauri/ 的範本、這個專案的設定與圖示）
  * 2. tauri build（第一次要下載、編譯 Rust 套件，比較久；之後很快）
  * 3. 把 <專案>.app 複製到 dist/<專案>/mac/
+ * fullscreen：App 打開時就是全螢幕（macOS 原生全螢幕；玩家可以用 ⌃⌘F 或選單「顯示方式」離開）
  */
-function buildMac(name, webDir) {
+function buildMac(name, webDir, { fullscreen = false } = {}) {
   const work = join(TAURI_WORK, name);
   const shell = join(work, 'src-tauri');
   mkdirSync(join(shell, 'src'), { recursive: true });
@@ -233,7 +242,18 @@ function buildMac(name, webDir) {
     identifier: `com.heroengine.${name}`,
     build: { frontendDist: relative(shell, webDir) },
     app: {
-      windows: [{ title: pageTitle(name), width: 1280, height: 720, minWidth: 640, minHeight: 360, center: true }],
+      windows: [
+        {
+          title: pageTitle(name),
+          width: 1280,
+          height: 720,
+          minWidth: 640,
+          minHeight: 360,
+          center: true,
+          // 全螢幕：離開全螢幕時回到上面的 1280×720 視窗
+          fullscreen,
+        },
+      ],
       security: { csp: null },
     },
     bundle: {
@@ -302,6 +322,7 @@ function help() {
   node hero dev                 預覽目前選擇的專案（入口頁 /portal 可以切換、新增、刪除專案）
   node hero build               發佈網頁版（預設，同 --web）→ dist/<專案名稱>/web/
   node hero build --mac         發佈 macOS App（Tauri，需要 Rust）→ dist/<專案名稱>/mac/
+  node hero build --mac -f      同上，App 打開時就是全螢幕（-f 同 --fullscreen）
   node hero doc [build]         開啟使用手冊；build 打包到 dist/doc/
   node hero api                 產生引擎的 API 列表（tips/api.txt）
 

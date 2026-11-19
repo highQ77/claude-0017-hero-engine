@@ -65,7 +65,7 @@ node hero create <專案名稱>   # 建立空專案 projects/<專案名稱>/
 node hero select [專案名稱]   # 選擇要預覽、編譯的專案（不給名稱時列出所有專案）
 node hero remove <專案名稱>   # 刪除專案（需輸入名稱確認，無法復原）
 node hero dev                 # 預覽目前選擇的專案
-node hero build [--web|--mac] # 檢查後發佈：網頁版（預設）或 macOS App
+node hero build [--web|--mac] # 檢查後發佈：網頁版（預設）或 macOS App（--mac -f：打開時全螢幕）
 node hero doc [build]         # 開啟使用手冊；build 打包到 dist/doc/
 node hero api                 # 產生引擎的 API 列表（tips/api.txt）
 ```
@@ -82,6 +82,7 @@ node hero api                 # 產生引擎的 API 列表（tips/api.txt）
 | --------------- | --------------------------------------------------------------------------------------------------------- |
 | `--web`（預設） | `dist/<專案名稱>/web/`                                                                                    |
 | `--mac`         | `dist/<專案名稱>/mac/<專案名稱>.app`（以 [Tauri](https://tauri.app/) 包裝；第一次編譯 Rust 套件會比較久） |
+| `--mac -f`      | 同上，App 打開時就是全螢幕（`-f` 同 `--fullscreen`；玩家可以按 ⌃⌘F 離開）                                |
 
 macOS App 的圖示：專案目錄放 `icon.png`（建議 1024×1024）就會使用，否則用引擎預設圖示。
 

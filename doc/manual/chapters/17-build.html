@@ -8,6 +8,7 @@ node hero select my-game
 node hero build                       # 格式與程式檢查 → 型別檢查 → 測試 → 打包網頁版，輸出到 dist/my-game/web/
 node hero build --web                 # 同上
 node hero build --mac                 # 再包成 macOS App：dist/my-game/mac/my-game.app（也會產生網頁版）
+node hero build --mac -f              # 同上，App 打開時就是全螢幕（-f 同 --fullscreen）
 
 PROJECT=my-game npx vite build        # 只打包（跳過檢查和測試）
 PROJECT=my-game npx vite preview --outDir dist/my-game/web   # 在本機預覽打包結果
@@ -25,6 +26,7 @@ PROJECT=my-game npx vite preview --outDir dist/my-game/web   # 在本機預覽�
   <li><strong>需要</strong>：macOS、Rust（<code>brew install rust</code> 或 <a href="https://rustup.rs" target="_blank" rel="noopener">rustup</a>）、Xcode Command Line Tools（<code>xcode-select --install</code>）。Tauri 的指令工具已經在 <code>npm install</code> 時安裝。</li>
   <li><strong>第一次比較久</strong>：要下載、編譯 Rust 套件（幾分鐘）；之後只重新包裝，很快。編譯結果放在引擎目錄的 <code>.tauri/</code>（不用管它，刪掉也沒關係，下次會重建）。</li>
   <li><strong>視窗</strong>：標題用專案 <code>index.html</code> 的 <code>&lt;title&gt;</code>，大小 1280 × 720（可以縮放）。</li>
+  <li><strong>全螢幕</strong>：加上 <code>-f</code>（或 <code>--fullscreen</code>）時，App 打開就是 macOS 的全螢幕。玩家可以按 <kbd>⌃</kbd> + <kbd>⌘</kbd> + <kbd>F</kbd> 或選單「顯示方式 → 結束全螢幕」離開，離開後回到 1280 × 720 的視窗。<code>-f</code> 只用在桌面版；網頁版要全螢幕請在遊戲裡呼叫瀏覽器的 Fullscreen API（例如按鈕裡呼叫 <code>document.documentElement.requestFullscreen()</code>）。</li>
   <li><strong>圖示</strong>：在專案資料夾放 <code>icon.png</code>（建議 1024 × 1024、正方形）就會用它；沒有時用引擎預設的圖示。</li>
   <li>App 的識別碼是 <code>com.heroengine.專案名稱</code>。沒有簽章：別人的電腦第一次打開時，要在 Finder 裡按右鍵 →「打開」。</li>
   <li>Windows、iOS、Android 還不支援（<code>--windows</code> 等參數會提示）。</li>
