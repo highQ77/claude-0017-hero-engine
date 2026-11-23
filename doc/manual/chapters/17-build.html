@@ -17,10 +17,14 @@ PROJECT=my-game npx vite preview --outDir dist/my-game/web   # 在本機預覽�
 <p>打包時：</p>
 <ul>
   <li>只會打包遊戲頁面，UI 編輯器等開發工具不會包含在內。</li>
-  <li><code>public/ui</code> 的 XML 會轉成 JS 模組，載入時不用再抓 <code>.xml</code> 檔。</li>
+  <li><code>public/scenes</code>、<code>public/prefabs</code>、<code>public/ui</code> 裡的 <code>.xml</code>，和 <code>public/shaders</code> 裡的 <code>.json</code>（著色器節點圖；都包含子資料夾）會轉成 <code>assets/</code> 裡的 JS 模組：內容先壓縮、再用每次打包隨機產生的金鑰混淆，最後轉成 base64，輸出裡看不到明文的 XML（壓縮後通常比原本小）。遊戲讀取時用到才解開，程式不用修改。圖片等其他檔案照常複製；其他資料夾的檔案不會轉換。</li>
+  <li>打包完成時會刪掉輸出資料夾裡的空資料夾（例如只放 XML 的 <code>scenes/</code>、<code>prefabs/</code>，只放節點圖的 <code>shaders/</code>）。</li>
   <li>物理引擎（Rapier）、字型等用動態載入：沒用到的功能不會下載。</li>
   <li>網址用相對路徑（<code>./assets/…</code>）：<code>dist/my-game/web/</code> 可以放在網站的根目錄，也可以放在子路徑（例如 <code>https://example.com/games/my-game/</code>）。</li>
 </ul>
+<div class="note">
+  <p>這是「不讓人直接看到內容」，<strong>不是加密</strong>：金鑰和解開的方法都在遊戲的程式裡，有心人一步一步追還是解得開。瀏覽器要能讀的東西沒辦法真正藏起來；真的不能外流的資料（答案、序號…）要放在伺服器上，不要放進遊戲。</p>
+</div>
 <div class="warn">
   <p>打包結果要用網頁伺服器開啟，<strong>不能直接雙擊 <code>index.html</code></strong>：瀏覽器不允許從 <code>file://</code> 載入 module 程式（主控台會出現 CORS 錯誤），遊戲執行時讀取的模型、場景檔也會被擋。在本機看打包結果用上面的 <code>npx vite preview</code>，或在 <code>dist/my-game/web/</code> 裡執行任何靜態伺服器（例如 <code>python3 -m http.server</code>）。想要雙擊就能玩，請打包成 macOS App。</p>
 </div>

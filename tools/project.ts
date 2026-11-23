@@ -13,7 +13,7 @@
  *
  * 指令：node hero create／select／remove／dev／build／doc（見根目錄的 hero.js）
  * 開發時也可以在入口頁、3D 場景編輯器裡切換專案（projectSwitchPlugin：開發伺服器換成另一個專案後重新啟動）
- * 打包：node hero build 輸出到 dist/<名稱>/web/（public/ui 的 .xml 會轉成 assets/ 裡的 JS 檔）；
+ * 打包：node hero build 輸出到 dist/<名稱>/web/（public/scenes、public/prefabs、public/ui 的 .xml 與 public/shaders 的 .json 轉成保護過的 JS 模組，見 packed-files-plugin.ts）；
  *       --mac 再用 Tauri 包成 dist/<名稱>/mac/<名稱>.app（外殼範本在 tools/tauri/）
  */
 import { promises as fs } from 'node:fs';
@@ -25,11 +25,11 @@ import { readBody, sendError, sendJson } from './dev-http';
 import { ENGINE_DEPS } from './engine-deps';
 import { type BuildTarget, currentBuild, isBuilding, startBuild } from './project-build';
 import { handleImport } from './project-import';
+import { packedFilesPlugin } from './packed-files-plugin';
 import { sceneFilesPlugin } from './scene-files-plugin';
 import { shaderFilesPlugin } from './shader-files-plugin';
 import { soundFilesPlugin } from './sound-files-plugin';
 import { uiFilesPlugin } from './ui-files-plugin';
-import { uiXmlBundlePlugin } from './ui-xml-bundle';
 
 /** 引擎根目錄（這個檔案在 tools/ 底下） */
 export const ENGINE_ROOT = resolve(__dirname, '..');
@@ -65,7 +65,7 @@ export function defineProject(projectDir: string): UserConfig {
       sceneFilesPlugin(),
       shaderFilesPlugin(),
       soundFilesPlugin(),
-      uiXmlBundlePlugin(),
+      packedFilesPlugin(),
       engineEditorPlugin(),
       docServerPlugin(),
       projectSwitchPlugin(root),

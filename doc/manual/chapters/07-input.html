@@ -22,7 +22,7 @@
 <ul>
   <li><code>bind(動作, [按鍵…])</code>：按鍵動作，用 <code>isDown</code>／<code>wasPressed</code>／<code>wasReleased</code> 查詢。</li>
   <li><code>bindAxis(動作, { negative, positive, padAxis })</code>：軸動作，<code>axis(動作)</code> 回傳 -1～1。</li>
-  <li>綁定字串：鍵盤 <code>'KeyW'</code>、滑鼠 <code>'Mouse:Left'</code>、手把 <code>'Pad:A'</code>（任一手把）或 <code>'Pad0:A'</code>（第 0 支）。</li>
+  <li>綁定字串：鍵盤 <code>'KeyW'</code>、滑鼠 <code>'Mouse:Left'</code>、手把 <code>'Pad:A'</code>（任一手把）或 <code>'Pad0:A'</code>（第 0 支），也可以是<a href="#/input/組合鍵">組合鍵</a> <code>'Ctrl+KeyS'</code>。</li>
 </ul>
 <p>先點一下畫面（讓預覽框取得鍵盤焦點），再用 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 或方向鍵移動、<kbd>空白鍵</kbd> 跳躍。有手把的話也可以用左搖桿和 A 鍵。</p>
 <script type="text/plain" class="example" data-lang="ts" data-title="移動與跳躍" data-height="360">
@@ -70,6 +70,66 @@ engine.start();
 <div class="note">
   <p>暫停時主迴圈（包含輸入外掛）不會執行。像「按 P 暫停／繼續」這種在暫停中也要有反應的按鍵，請直接聽瀏覽器的 <code>keydown</code> 事件。</p>
 </div>
+
+<h2>組合鍵</h2>
+<p>綁定字串可以在按鍵前面加上修飾鍵，用 <code>+</code> 連接；<code>input.isDown</code>／<code>wasPressed</code>／<code>wasReleased</code> 和 <code>actions.bind</code> 都可以用：</p>
+<table>
+  <thead><tr><th>寫法</th><th>意思</th></tr></thead>
+  <tbody>
+    <tr><td><code>'Ctrl+KeyS'</code></td><td>Ctrl＋S（左右兩個 Ctrl 都算）</td></tr>
+    <tr><td><code>'Mod+KeyZ'</code></td><td>Mac 是 <kbd>⌘</kbd>＋Z，其他平台是 Ctrl＋Z：一般的「復原」「存檔」快捷鍵用 <code>Mod</code></td></tr>
+    <tr><td><code>'Mod+Shift+KeyZ'</code></td><td>好幾個修飾鍵（順序不重要）</td></tr>
+    <tr><td><code>'Shift+Mouse:Left'</code></td><td>按著 Shift 點滑鼠左鍵</td></tr>
+    <tr><td><code>'Shift'</code>、<code>'Ctrl'</code>、<code>'Alt'</code>、<code>'Meta'</code>、<code>'Mod'</code></td><td>單獨的修飾鍵，不分左右（<code>'ShiftLeft'</code> 只算左邊）</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><strong>修飾鍵要完全符合</strong>：<code>'Ctrl+KeyS'</code> 在按 Ctrl＋Shift＋S 時不成立。</li>
+  <li><strong>沒寫修飾鍵的綁定不管修飾鍵</strong>：按著 Shift 跑步時 <code>'KeyW'</code> 照樣成立；所以按 Ctrl＋S 時 <code>'KeyS'</code> 也成立，不要的話加上 <code>!input.isDown('Mod')</code>。</li>
+  <li><code>wasPressed</code>：修飾鍵按著的時候按下主要的按鍵才算（先按 S 再按 Ctrl 不算）。<code>wasReleased</code>：組合不再成立的那一幀，先放開哪個鍵都一樣。</li>
+  <li>用過的、有 Ctrl／Alt／<kbd>⌘</kbd> 的組合會擋掉瀏覽器的預設動作（例如 Ctrl＋S 不會跳出存檔視窗）；只有 Shift 的組合不擋（不影響打大寫字）。瀏覽器保留的快捷鍵（關分頁、離開瀏覽器…）擋不住，不要拿來用。不想擋時：<code>new InputPlugin({ preventShortcuts: false })</code>。</li>
+  <li>手把按鍵不能和修飾鍵組合；修飾鍵名稱寫錯（例如 <code>'Control+KeyS'</code>）會丟出錯誤。</li>
+</ul>
+<p>先點一下畫面，再用 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動、按著 <kbd>Shift</kbd> 加速，<kbd>Mod</kbd>＋<kbd>S</kbd> 存檔、<kbd>Mod</kbd>＋<kbd>Z</kbd> 回到存檔的位置：</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="組合鍵：加速、存檔、復原" data-height="360">
+import { MathUtils } from '@engine/math';
+import { Transform } from '@engine/scene';
+import { spawn } from '@engine/render';
+import { engine, input, world } from './engine';
+
+input.actions
+  .bindAxis('moveX', { negative: ['KeyA'], positive: ['KeyD'] })
+  .bindAxis('moveZ', { negative: ['KeyW'], positive: ['KeyS'] })
+  .bind('run', ['Shift']) // 左右 Shift 都可以
+  .bind('save', ['Mod+KeyS']) // Mac：⌘S，其他：Ctrl+S（不會跳出瀏覽器的存檔視窗）
+  .bind('undo', ['Mod+KeyZ']);
+
+spawn.camera(world, { position: [0, 6, 8], target: [0, 0, 0], fov: 50 });
+spawn.defaultLights(world);
+spawn.grid(world, { size: 10, divisions: 10, centerColor: 0x556048, color: 0x2c3326 });
+const playerEntity = spawn.mesh(world, { geometry: { box: 0.8 }, material: '#9acd32', position: [0, 0.4, 0] });
+const player = world.require(playerEntity, Transform);
+
+let saved = player.position.clone();
+engine.on('update', (time) => {
+  const a = input.actions;
+  if (a.wasPressed('save')) {
+    saved = player.position.clone();
+    console.log('已存檔', saved);
+  }
+  if (a.wasPressed('undo')) {
+    player.position.copy(saved);
+    console.log('回到存檔的位置');
+  }
+  // 按著 Mod 的時候不移動（Mod+S 的 S 不要讓方塊往後走）
+  if (input.isDown('Mod')) return;
+  const speed = a.isDown('run') ? 8 : 3;
+  player.position.x = MathUtils.clamp(player.position.x + a.axis('moveX') * speed * time.delta, -4.6, 4.6);
+  player.position.z = MathUtils.clamp(player.position.z + a.axis('moveZ') * speed * time.delta, -4.6, 4.6);
+});
+
+engine.start();
+</script>
 
 <h2>觸控與虛擬搖桿</h2>
 <p>觸控會當成指標處理（第一根手指就是 <code>input.pointer</code>，所有手指在 <code>input.pointer.active</code>）。手機上的移動操作可以用 2D 介面的 <code>&lt;UIJoystick&gt;</code>，在遊戲裡讀它的 <code>x</code>、<code>y</code>：</p>

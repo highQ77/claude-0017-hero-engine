@@ -30,6 +30,7 @@ import { looksLikeXml, sceneXmlToData } from './SceneXml';
 import type { Scene, SceneManager } from './SceneManager';
 import { Transform, type TransformData } from './Transform';
 import { createLogger } from '../core/Logger';
+import { readPackedFile } from '../core/packedFiles';
 import { isObject } from './json';
 
 const log = createLogger('scene');
@@ -788,10 +789,15 @@ export function sceneFromFile(name: string, file: SceneFileData, options: SceneF
 async function fetchSceneFile(url: string, label: string): Promise<SceneFileData> {
   const draft = drafts.get(normalizeFilePath(url));
   if (draft) return structuredClone(draft);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`讀取${label} ${url} 失敗（${res.status}）`);
+  // 打包時保護過的檔案（scenes/、prefabs/ 的 .xml）：用到才解開；其他照常下載
+  let text = await readPackedFile(url);
+  if (text === null) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`讀取${label} ${url} 失敗（${res.status}）`);
+    text = await res.text();
+  }
   try {
-    return parseSceneFile(await res.text());
+    return parseSceneFile(text);
   } catch (error) {
     throw new Error(`${label} ${url}：${(error as Error).message}`);
   }

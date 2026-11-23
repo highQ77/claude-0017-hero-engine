@@ -13,6 +13,11 @@ export interface InputPluginOptions extends InputStateOptions {
   preventContextMenu?: boolean;
   /** 阻止空白鍵、方向鍵捲動頁面，預設 true */
   preventScrollKeys?: boolean;
+  /**
+   * 擋掉用過的快捷鍵組合在瀏覽器的預設動作（例如 Ctrl+S 跳出存檔視窗），預設 true。
+   * 只擋程式查詢或綁定過、有 Ctrl／Alt／Meta 的組合；瀏覽器保留的（Ctrl+W 關分頁、Cmd+Q…）擋不住
+   */
+  preventShortcuts?: boolean;
 }
 
 /** 每幀結算輸入的優先度（input 階段最前面） */
@@ -94,7 +99,9 @@ export class InputPlugin implements Plugin {
     listen(window, 'keydown', (e) => {
       if (isTyping(e)) return;
       if ((opts.preventScrollKeys ?? true) && SCROLL_KEYS.has(e.code)) e.preventDefault();
-      if (!e.repeat) input.keyDown(e.code);
+      if ((opts.preventShortcuts ?? true) && input.isShortcut(e)) e.preventDefault();
+      // 長按的重複事件也送：已經按著時不算再按一次；Mac 放開 Cmd 時被放開、其實還按著的鍵會補回來
+      input.keyDown(e.code);
     });
     listen(window, 'keyup', (e) => input.keyUp(e.code));
     listen(window, 'blur', () => input.blur());

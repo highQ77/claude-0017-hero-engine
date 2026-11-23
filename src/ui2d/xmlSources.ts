@@ -1,8 +1,10 @@
 /**
  * 介面 XML 的來源。
- * 開發時直接用網址讀 public/ui 裡的檔案；打包後 XML 會變成 assets/ 裡的 JS 模組，
- * 由打包工具（tools/ui-xml-bundle.ts）在頁面啟動時登記到這裡，讀取時就不用再抓 .xml 檔。
+ * 開發時直接用網址讀 public/ui 裡的檔案；打包後介面檔是保護過的 JS 模組（core/packedFiles.ts，用到才解開）。
+ * 也可以用 registerUIXml（uiXml.register）登記「網址 → 內容」，讀取時就不用再抓 .xml 檔（例如使用手冊的範例）。
  */
+
+import { readPackedFile } from '../core/packedFiles';
 
 type XmlModule = () => Promise<string | { default: string }>;
 
@@ -83,10 +85,12 @@ export function setUIXmlOverride(url: string, xml: string | null): void {
   cache.delete(key);
 }
 
-/** 讀取介面 XML：有開發工具給的內容就用它，再來是打包好的，都沒有就用網址抓 */
+/** 讀取介面 XML：有開發工具給的內容就用它，再來是登記過的、打包時保護過的，都沒有就用網址抓 */
 export async function fetchUIXml(url: string, init?: RequestInit): Promise<string> {
   const override = overrides.get(keyOf(url));
   if (override !== undefined) return override;
+  const packed = readPackedFile(url);
+  if (packed) return packed;
   const load = bundled.get(keyOf(url));
   if (load) {
     const mod = await load();

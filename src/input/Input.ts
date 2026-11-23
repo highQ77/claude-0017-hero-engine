@@ -38,8 +38,41 @@ const MOUSE_BUTTONS: readonly MouseButtonName[] = ['Left', 'Middle', 'Right', 'B
  * - 鍵盤：KeyboardEvent.code，例如 'KeyW'、'Space'、'ArrowLeft'、'ShiftLeft'
  * - 滑鼠：'Mouse:Left'、'Mouse:Right'、'Mouse:Middle'
  * - 手把：'Pad:A'（任一手把）、'Pad0:A'（指定第 0 支）
+ * - 修飾鍵（不分左右）：'Ctrl'、'Shift'、'Alt'、'Meta'（Mac 的 Cmd、Windows 鍵）、'Mod'（Mac 是 Cmd，其他是 Ctrl）
+ * - 組合鍵：修飾鍵 + 按鍵，例如 'Ctrl+KeyS'、'Mod+Shift+KeyZ'、'Shift+Mouse:Left'（手把不能組合）。
+ *   組合鍵的修飾鍵要完全符合：'Ctrl+KeyS' 在按 Ctrl+Shift+S 時不成立。
+ *   沒寫修飾鍵的綁定（'KeyS'）不管修飾鍵：按 Ctrl+S 時 'KeyS' 也成立（不要的話自己加上 !input.isDown('Ctrl')）
  */
 export type Binding = string;
+
+/** 修飾鍵名稱與對應的按鍵（左右兩邊都算） */
+const MODIFIER_CODES = {
+  Ctrl: ['ControlLeft', 'ControlRight'],
+  Shift: ['ShiftLeft', 'ShiftRight'],
+  Alt: ['AltLeft', 'AltRight'],
+  Meta: ['MetaLeft', 'MetaRight'],
+} as const;
+type ModifierName = keyof typeof MODIFIER_CODES;
+const MODIFIERS = Object.keys(MODIFIER_CODES) as ModifierName[];
+/** 按鍵代碼 → 修飾鍵名稱（'ShiftLeft' → 'Shift'） */
+const MODIFIER_OF = new Map<string, ModifierName>(
+  MODIFIERS.flatMap((m) => MODIFIER_CODES[m].map((code) => [code, m] as const)),
+);
+
+/** 解析後的綁定：要按著的修飾鍵（組合鍵才有）＋主要的按鍵 */
+export interface ParsedBinding {
+  /** 組合鍵要按著的修飾鍵；null 表示不是組合鍵（不管修飾鍵） */
+  mods: ReadonlySet<ModifierName> | null;
+  /** 主要的按鍵：修飾鍵名稱、'Mouse:…'、'Pad…:…' 或鍵盤代碼 */
+  key: string;
+}
+
+/** 這個平台的 Mod 是 Cmd（Mac、iPhone、iPad） */
+function detectMac(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const platform = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform;
+  return /Mac|iPhone|iPad|iPod/i.test(platform || navigator.platform || navigator.userAgent || '');
+}
 
 /** 一組按鍵的狀態：按住、這一幀按下、這一幀放開 */
 export class ButtonSet {
@@ -208,6 +241,8 @@ export interface InputStateOptions {
   deadzone?: number;
   /** 取得手把清單（預設 navigator.getGamepads） */
   getGamepads?: () => readonly (Gamepad | null)[];
+  /** 是不是 Mac（'Mod' 對應 Cmd、放開 Cmd 時一起放開其他鍵）；預設從瀏覽器判斷 */
+  mac?: boolean;
 }
 
 /**
@@ -226,11 +261,16 @@ export class Input {
   readonly actions: ActionMap;
   /** 搖桿的死區（0~1，小於這個值視為 0） */
   deadzone: number;
+  /** 是不是 Mac：組合鍵的 'Mod' 是 Cmd（其他平台是 Ctrl） */
+  readonly mac: boolean;
   private readonly getGamepads: () => readonly (Gamepad | null)[];
   private primaryPointer: number | null = null;
+  /** 解析過的綁定（也是「用過哪些組合鍵」的紀錄：瀏覽器的預設動作只擋這些） */
+  private readonly parsed = new Map<string, ParsedBinding>();
 
   constructor(options: InputStateOptions = {}) {
     this.deadzone = options.deadzone ?? 0.15;
+    this.mac = options.mac ?? detectMac();
     this.getGamepads =
       options.getGamepads ??
       (() => (typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : []));
@@ -239,19 +279,33 @@ export class Input {
 
   // ───────── 查詢 ─────────
 
-  /** 現在是否按著（綁定字串：'KeyW'、'Mouse:Left'、'Pad:A'） */
+  /** 現在是否按著（綁定字串：'KeyW'、'Mouse:Left'、'Pad:A'、'Shift'、'Ctrl+KeyS'） */
   isDown(binding: Binding): boolean {
     return this.resolve(binding, 'down');
   }
 
-  /** 這一幀是否剛按下 */
+  /** 這一幀是否剛按下（組合鍵：修飾鍵按著時，這一幀按下主要的按鍵） */
   wasPressed(binding: Binding): boolean {
     return this.resolve(binding, 'pressed');
   }
 
-  /** 這一幀是否剛放開 */
+  /** 這一幀是否剛放開（組合鍵：上一幀成立、這一幀不成立，不管先放開哪一個鍵） */
   wasReleased(binding: Binding): boolean {
     return this.resolve(binding, 'released');
+  }
+
+  /**
+   * 這個鍵盤事件是不是用過（查詢或綁定過）的快捷鍵組合：InputPlugin 用來擋掉瀏覽器的預設動作（例如 Ctrl+S 存檔）。
+   * 只算有 Ctrl、Alt 或 Meta 的組合（只有 Shift 的組合是在打大寫字，不擋）。
+   */
+  isShortcut(e: { code: string; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; metaKey: boolean }): boolean {
+    const held: Record<ModifierName, boolean> = { Ctrl: e.ctrlKey, Shift: e.shiftKey, Alt: e.altKey, Meta: e.metaKey };
+    for (const p of this.parsed.values()) {
+      if (!p.mods || p.key !== e.code) continue;
+      if (!p.mods.has('Ctrl') && !p.mods.has('Alt') && !p.mods.has('Meta')) continue;
+      if (MODIFIERS.every((m) => p.mods!.has(m) === held[m])) return true;
+    }
+    return false;
   }
 
   /** 第一支已連線的手把 */
@@ -269,6 +323,11 @@ export class Input {
   /** 放開鍵盤按鍵 */
   keyUp(code: string): void {
     this.keyboard.release(code);
+    // Mac 按著 Cmd 時，瀏覽器不會送出其他鍵的放開事件：放開 Cmd 時把其他鍵一起放開，免得卡住
+    // （真的還按著的鍵，長按的重複事件會再按下它）
+    if (this.mac && MODIFIER_OF.get(code) === 'Meta' && !this.anyDown(MODIFIER_CODES.Meta, 'down')) {
+      for (const k of [...this.keyboard.held]) if (!MODIFIER_OF.has(k)) this.keyboard.release(k);
+    }
   }
 
   /** 指標移動（輸入外掛呼叫） */
@@ -331,10 +390,67 @@ export class Input {
 
   // ───────── 內部 ─────────
 
-  private resolve(binding: Binding, query: 'down' | 'pressed' | 'released'): boolean {
-    const check = (set: ButtonSet, id: string) =>
-      query === 'down' ? set.isDown(id) : query === 'pressed' ? set.wasPressed(id) : set.wasReleased(id);
+  /** 解析綁定字串（有快取）；寫錯時丟出錯誤 */
+  parse(binding: Binding): ParsedBinding {
+    const hit = this.parsed.get(binding);
+    if (hit) return hit;
+    const parts = binding.split('+');
+    const key = parts.pop()!;
+    let mods: Set<ModifierName> | null = null;
+    if (parts.length) {
+      mods = new Set();
+      for (const raw of parts) {
+        const m = raw === 'Mod' ? (this.mac ? 'Meta' : 'Ctrl') : raw;
+        if (!(m in MODIFIER_CODES))
+          throw new Error(`未知的修飾鍵「${raw}」（${binding}）：可以用 Ctrl、Shift、Alt、Meta、Mod`);
+        mods.add(m as ModifierName);
+      }
+      if (!key) throw new Error(`組合鍵少了按鍵（${binding}）：例如 'Ctrl+KeyS'`);
+      if (/^Pad\d*:/.test(key)) throw new Error(`手把按鍵不能和修飾鍵組合（${binding}）`);
+      // 主要的按鍵本身是修飾鍵（'Ctrl+Shift'）：它也算要按著的修飾鍵
+      const self = key === 'Mod' ? (this.mac ? 'Meta' : 'Ctrl') : key;
+      if (self in MODIFIER_CODES) mods.add(self as ModifierName);
+    }
+    const result: ParsedBinding = { mods, key: key === 'Mod' ? (this.mac ? 'Meta' : 'Ctrl') : key };
+    this.parsed.set(binding, result);
+    return result;
+  }
 
+  /** 這些按鍵裡有沒有一個符合 query（'down' 以外是「這一幀」） */
+  private anyDown(codes: readonly string[], query: 'down' | 'pressed' | 'released' | 'before'): boolean {
+    return codes.some((c) => this.checkKey(this.keyboard, c, query));
+  }
+
+  /** before：上一幀結束時是否按著（從這一幀的按下／放開推回去） */
+  private checkKey(set: ButtonSet, id: string, query: 'down' | 'pressed' | 'released' | 'before'): boolean {
+    if (query === 'down') return set.isDown(id);
+    if (query === 'pressed') return set.wasPressed(id);
+    if (query === 'released') return set.wasReleased(id);
+    return set.isDown(id) ? !set.wasPressed(id) : set.wasReleased(id) && !set.wasPressed(id);
+  }
+
+  private resolve(binding: Binding, query: 'down' | 'pressed' | 'released'): boolean {
+    const { mods, key } = this.parse(binding);
+    if (!mods) return this.resolveKey(key, query);
+    // 組合鍵：修飾鍵完全符合（要的都按著、不要的都沒按）＋主要的按鍵
+    const active = (when: 'down' | 'before') =>
+      MODIFIERS.every((m) => this.anyDown(MODIFIER_CODES[m], when) === mods.has(m)) && this.resolveKey(key, when);
+    if (query === 'down') return active('down');
+    if (query === 'pressed') return this.resolveKey(key, 'pressed') && active('down');
+    return active('before') && !active('down');
+  }
+
+  /** 單一按鍵（修飾鍵名稱、滑鼠、手把、鍵盤代碼） */
+  private resolveKey(binding: string, query: 'down' | 'pressed' | 'released' | 'before'): boolean {
+    const check = (set: ButtonSet, id: string) => this.checkKey(set, id, query);
+
+    if (binding in MODIFIER_CODES) {
+      // 左右兩邊當成同一個鍵：另一邊還按著時，放開這一邊不算放開；已經按著一邊時再按另一邊不算按下
+      const codes = MODIFIER_CODES[binding as ModifierName];
+      if (query === 'pressed') return this.anyDown(codes, 'pressed') && !this.anyDown(codes, 'before');
+      if (query === 'released') return this.anyDown(codes, 'released') && !this.anyDown(codes, 'down');
+      return this.anyDown(codes, query);
+    }
     if (binding.startsWith('Mouse:')) return check(this.mouse, binding.slice(6));
 
     const pad = /^Pad(\d*):(\w+)$/.exec(binding);
@@ -373,14 +489,17 @@ export class ActionMap {
 
   constructor(private readonly input: Input) {}
 
-  /** 定義按鍵動作 @example actions.bind('jump', ['Space', 'Pad:A']) */
+  /** 定義按鍵動作（可以用組合鍵） @example actions.bind('jump', ['Space', 'Pad:A']); actions.bind('save', ['Mod+KeyS']) */
   bind(action: string, bindings: Binding[]): this {
+    // 先解析一次：寫錯時馬上知道，組合鍵也會登記（InputPlugin 才知道要擋瀏覽器的哪些快捷鍵）
+    for (const b of bindings) this.input.parse(b);
     this.buttons.set(action, [...bindings]);
     return this;
   }
 
   /** 定義軸動作 @example actions.bindAxis('moveX', { negative: ['KeyA'], positive: ['KeyD'], padAxis: GamepadAxis.LeftX }) */
   bindAxis(action: string, definition: AxisDefinition): this {
+    for (const b of [...(definition.negative ?? []), ...(definition.positive ?? [])]) this.input.parse(b);
     this.axes.set(action, { ...definition });
     return this;
   }

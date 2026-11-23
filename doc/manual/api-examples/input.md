@@ -200,6 +200,20 @@ console.log('按 J、點滑鼠左鍵、或手把 RT 開火');
 engine.start();
 ```
 
+組合鍵：修飾鍵（`Ctrl`、`Shift`、`Alt`、`Meta`、`Mod`）＋按鍵，用 `+` 連接。`Mod` 在 Mac 是 ⌘，其他平台是 Ctrl。
+
+```ts
+const save: Binding = 'Mod+KeyS';
+input.actions.bind('save', [save]).bind('select-more', ['Shift+Mouse:Left']);
+engine.on('update', () => {
+  if (input.actions.wasPressed('save')) console.log('存檔（不會跳出瀏覽器的存檔視窗）');
+  if (input.actions.wasPressed('select-more')) console.log('Shift＋左鍵：加選');
+  if (input.wasPressed('Ctrl+Shift+KeyZ')) console.log('Ctrl+Shift+Z');
+});
+console.log(input.mac ? '按 ⌘S 存檔' : '按 Ctrl+S 存檔', '，按著 Shift 點畫面加選');
+engine.start();
+```
+
 ## GamepadButtonName
 手把按鈕名稱（A、B、X、Y、LB、RB…）。
 

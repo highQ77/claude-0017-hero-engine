@@ -17,6 +17,7 @@ import type { EffectDefinition, ShaderDefinition } from '../ShaderLibrary';
 import { type CompiledShaderGraph, type ShaderGraph, compileShaderGraph, shaderGraphKind } from './compile';
 import { NODE_DEFS } from './nodes';
 import { isObject } from '../../scene/json';
+import { readPackedFile } from '../../core/packedFiles';
 
 /** 節點圖檔 */
 export interface ShaderGraphFile {
@@ -284,9 +285,13 @@ export async function loadShaderGraphEffect(url: string, name?: string): Promise
 
 /** 下載並解析節點圖檔 */
 async function fetchGraphFile(url: string): Promise<{ file: ShaderGraphFile; fileName: string }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`載入節點圖 ${url} 失敗：${res.status}`);
-  const text = await res.text();
+  // 打包時保護過的檔案（shaders/*.json）：用到才解開；其他照常下載
+  let text = await readPackedFile(url);
+  if (text === null) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`載入節點圖 ${url} 失敗：${res.status}`);
+    text = await res.text();
+  }
   // 開發伺服器找不到 public 裡的檔案時會回傳網頁
   if (text.trimStart().startsWith('<'))
     throw new Error(`找不到節點圖 ${url}（伺服器回傳的是網頁）：檔名和路徑對嗎？要放在 public/ 底下`);

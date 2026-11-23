@@ -46,4 +46,4 @@ node hero dev
 </ul>
 
 <h2>打包時的介面檔</h2>
-<p>開發時介面檔直接從 <code>public/ui</code> 讀取；<code>node hero build</code> 打包時會把 XML 轉成 JS 模組（<code>tools/ui-xml-bundle.ts</code>），載入方式不變，遊戲程式不用修改。</p>
+<p>開發時介面檔直接從 <code>public/ui</code> 讀取；<code>node hero build</code> 打包時會把它們轉成保護過的 JS 模組（看不到明文，見<a href="#/build">打包發佈</a>），載入方式不變，遊戲程式不用修改。</p>
