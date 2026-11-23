@@ -5,7 +5,7 @@
  *   node hero create <專案名稱>   建立空專案（projects/<專案名稱>/）
  *   node hero select [專案名稱]   選擇要預覽、編譯的專案（不給名稱時列出所有專案）
  *   node hero remove <專案名稱>   刪除專案（projects/、dist/、.tauri/ 裡的這個專案；刪除前會要求輸入專案名稱確認）
- *   node hero dev                 預覽目前選擇的專案（開發伺服器；入口頁 /portal 可以切換、新增、刪除專案；/doc 是使用手冊）
+ *   node hero dev                 預覽目前選擇的專案（開發伺服器；入口頁 /portal 可以切換、新增、匯入、刪除、打包專案；/doc 是使用手冊）
  *   node hero build [--web|--mac] 檢查（格式、程式、型別、測試）後發佈目前選擇的專案：
  *                                   --web（預設）網頁版 → dist/<專案名稱>/web/
  *                                   --mac         macOS App（Tauri）→ dist/<專案名稱>/mac/<專案名稱>.app
@@ -202,7 +202,7 @@ function build(args) {
   // 網頁版：macOS App 也是用它包起來的，所以一定會先編譯
   const webDir = join(ROOT, 'dist', name, 'web');
   run('打包網頁版', VITE, ['build', '--outDir', webDir, '--emptyOutDir', ...viteArgs], { PROJECT: name });
-  const done = [`網頁版：dist/${name}/web/（index.html，放到網站的根目錄）`];
+  const done = [`網頁版：dist/${name}/web/（放到網站的任何路徑；要用網頁伺服器開，不能直接雙擊 index.html）`];
   if (targets.includes('mac'))
     done.push(`macOS App${fullscreen ? '（全螢幕）' : ''}：${relative(ROOT, buildMac(name, webDir, { fullscreen }))}`);
   console.log(`\n✓ 發佈完成\n${done.map((d) => `    ${d}`).join('\n')}`);
@@ -304,7 +304,7 @@ function help() {
   node hero create <專案名稱>   建立空專案（projects/<專案名稱>/）
   node hero select [專案名稱]   選擇要預覽、編譯的專案（不給名稱時列出所有專案）
   node hero remove <專案名稱>   刪除專案（刪除前會要求輸入專案名稱確認）
-  node hero dev                 預覽目前選擇的專案（入口頁 /portal 可以切換、新增、刪除專案；/doc 是使用手冊）
+  node hero dev                 預覽目前選擇的專案（入口頁 /portal 可以切換、新增、匯入、刪除、打包專案；/doc 是使用手冊）
   node hero build               發佈網頁版（預設，同 --web）→ dist/<專案名稱>/web/
   node hero build --mac         發佈 macOS App（Tauri，需要 Rust）→ dist/<專案名稱>/mac/
   node hero build --mac -f      同上，App 打開時就是全螢幕（-f 同 --fullscreen）

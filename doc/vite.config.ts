@@ -20,6 +20,8 @@ import type { IncomingMessage } from 'node:http';
 import { defineConfig, type Plugin } from 'vite';
 // API 參考的資料：分析引擎原始碼（和 node hero api 共用）
 import { analyzeApi } from '../tools/api-model.mjs';
+// 預先打包的套件（和遊戲專案共用的列表）
+import { ENGINE_DEPS } from '../tools/engine-deps';
 
 const DOC_ROOT = __dirname;
 const ENGINE_ROOT = resolve(DOC_ROOT, '..');
@@ -182,34 +184,8 @@ export default defineConfig({
   optimizeDeps: {
     // 範例可能用到的套件先預先打包：執行到一半才發現新套件，Vite 會重新整理頁面
     entries: ['index.html', 'manual/index.html', 'manual/runner.html'],
-    // （引擎用到的套件都列在這裡；引擎新增套件時記得加上）
-    include: [
-      'three',
-      'yoga-layout/load',
-      'lil-gui',
-      '@dimforge/rapier3d-compat',
-      ...[
-        'geometries/TextGeometry.js',
-        'loaders/FontLoader.js',
-        'loaders/GLTFLoader.js',
-        'loaders/DRACOLoader.js',
-        'loaders/RGBELoader.js',
-        'loaders/TTFLoader.js',
-        'libs/meshopt_decoder.module.js',
-        'postprocessing/BokehPass.js',
-        'postprocessing/EffectComposer.js',
-        'postprocessing/FilmPass.js',
-        'postprocessing/GTAOPass.js',
-        'postprocessing/OutputPass.js',
-        'postprocessing/Pass.js',
-        'postprocessing/RenderPass.js',
-        'postprocessing/ShaderPass.js',
-        'postprocessing/SMAAPass.js',
-        'postprocessing/UnrealBloomPass.js',
-        'shaders/FXAAShader.js',
-        'utils/SkeletonUtils.js',
-      ].map((p) => `three/examples/jsm/${p}`),
-    ],
+    // （引擎用到的套件：tools/engine-deps.ts；引擎新增套件時加在那裡）
+    include: ENGINE_DEPS,
     esbuildOptions: { target: 'es2022' },
   },
 });

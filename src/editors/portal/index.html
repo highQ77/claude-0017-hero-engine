@@ -38,7 +38,9 @@
       .dlg-head .logo { width: 40px; height: 40px; font-size: 15px; border-radius: 11px; flex: none; }
       .dlg-head h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: 0.01em; }
       .dlg-head > div { min-width: 0; flex: 1; }
-      .dlg-head .add { flex: none; align-self: flex-start; margin-top: 4px; background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.1); }
+      /* .dlg-head > div 的 flex: 1 是給標題那一格的；按鈕這一格不撐開、靠右 */
+      .dlg-head .head-actions { flex: none; min-width: auto; margin-left: auto; display: flex; justify-content: flex-end; gap: 8px; align-self: flex-start; margin-top: 4px; }
+      .dlg-head .add { flex: none; background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.1); }
       .dlg-head p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
 
       .list { list-style: none; margin: 0; padding: 4px 12px 12px; overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -89,6 +91,23 @@
       .act:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.12); }
       .del:hover:not(:disabled) { color: var(--error); background: rgba(255, 107, 107, 0.12); border-color: rgba(255, 107, 107, 0.3); }
       .list.switching .actions { visibility: hidden; }
+      .act:disabled { opacity: 0.2; cursor: default; }
+
+      /* 打包按鈕的選單（網頁版、macOS App） */
+      .menu {
+        position: fixed; z-index: 20; min-width: 240px; max-width: calc(100vw - 16px); padding: 6px;
+        border-radius: 12px; background: rgba(28, 33, 25, 0.96); border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        animation: rise 0.14s var(--ease) both;
+      }
+      .menu-title { padding: 6px 10px 4px; font-size: 11.5px; font-weight: 650; color: var(--muted); }
+      .menu-item {
+        width: 100%; height: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 10px;
+        text-align: left; color: var(--text); background: transparent; background-image: none; border: 1px solid transparent; box-shadow: none; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer;
+      }
+      .menu-item:hover, .menu-item:focus-visible { background: var(--accent-a15); border-color: var(--accent-a25); outline: none; }
+      .menu-hint { font: 400 11.5px var(--mono); color: var(--muted); }
+      .menu-note { padding: 6px 10px 4px; font-size: 11.5px; color: var(--muted); border-top: 1px solid rgba(255, 255, 255, 0.07); margin-top: 4px; }
       .item .summary.empty { font-style: italic; opacity: 0.7; }
       /* 剛建立的專案閃一下 */
       .item.fresh { animation: fresh 1.6s var(--ease); }
@@ -107,6 +126,9 @@
 
       @media (max-width: 520px) {
         .dlg-head { padding: 18px 16px 12px; flex-wrap: wrap; }
+        /* 窄螢幕：標題不要被按鈕擠成兩行，按鈕放不下時換到下一行（一樣靠右） */
+        .dlg-head > div:not(.head-actions) { min-width: 170px; }
+        .dlg-head .head-actions { margin-top: 0; }
         .list { padding: 4px 6px 10px; }
         .dlg-foot { padding: 12px 16px 16px; }
         .item { grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; }
@@ -129,7 +151,10 @@
             <h1 id="title">Hero Engine</h1>
             <p id="status" class="status" role="status"></p>
           </div>
-          <button id="addBtn" class="add" type="button" title="用範本建立空專案（同 node hero create）">＋ 新增專案</button>
+          <div class="head-actions">
+            <button id="openBtn" class="add" type="button" title="匯入別人的專案（資料夾或 .zip 檔），複製到 projects/ 並切換過去">匯入專案</button>
+            <button id="addBtn" class="add" type="button" title="用範本建立空專案（同 node hero create）">＋ 新增專案</button>
+          </div>
         </div>
         <ul id="list" class="list" aria-label="專案"></ul>
         <div class="dlg-foot">

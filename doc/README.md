@@ -125,4 +125,4 @@ engine.start();
 
 ## 引擎新增套件時
 
-`vite.config.ts` 的 `optimizeDeps.include` 列出引擎用到的第三方套件（three.js 的 examples 模組、Rapier、Yoga）。執行範例時才遇到沒列出的套件，Vite 會重新整理頁面，所以引擎新增套件時要一起加上。
+引擎用到的第三方套件（three.js 的 examples 模組、Rapier、Yoga、Tone.js…）列在 `tools/engine-deps.ts`，遊戲專案和手冊都用它設定 `optimizeDeps.include`，開發伺服器啟動時就先打包好。執行範例或打開編輯器時才遇到沒列出的套件，Vite 會重新打包並要求重新整理頁面（入口頁會停在空白畫面），所以引擎新增套件時要加在那裡；`tests/engine-deps.test.ts` 會檢查有沒有漏掉。

@@ -13,12 +13,17 @@ node hero build --mac -f              # 同上，App 打開時就是全螢幕（
 PROJECT=my-game npx vite build        # 只打包（跳過檢查和測試）
 PROJECT=my-game npx vite preview --outDir dist/my-game/web   # 在本機預覽打包結果
 </script>
+<p>開發伺服器開著時，也可以在入口頁 <code>/portal</code> 按專案右邊的方塊圖示打包：選網頁版、macOS App 或 macOS App（全螢幕），效果和 <code>node hero build</code> 一樣（同樣先檢查再打包），但不會切換目前的專案。同一時間只能打包一個專案；打包中的專案不能刪除。</p>
 <p>打包時：</p>
 <ul>
   <li>只會打包遊戲頁面，UI 編輯器等開發工具不會包含在內。</li>
   <li><code>public/ui</code> 的 XML 會轉成 JS 模組，載入時不用再抓 <code>.xml</code> 檔。</li>
   <li>物理引擎（Rapier）、字型等用動態載入：沒用到的功能不會下載。</li>
+  <li>網址用相對路徑（<code>./assets/…</code>）：<code>dist/my-game/web/</code> 可以放在網站的根目錄，也可以放在子路徑（例如 <code>https://example.com/games/my-game/</code>）。</li>
 </ul>
+<div class="warn">
+  <p>打包結果要用網頁伺服器開啟，<strong>不能直接雙擊 <code>index.html</code></strong>：瀏覽器不允許從 <code>file://</code> 載入 module 程式（主控台會出現 CORS 錯誤），遊戲執行時讀取的模型、場景檔也會被擋。在本機看打包結果用上面的 <code>npx vite preview</code>，或在 <code>dist/my-game/web/</code> 裡執行任何靜態伺服器（例如 <code>python3 -m http.server</code>）。想要雙擊就能玩，請打包成 macOS App。</p>
+</div>
 
 <h2>macOS App（Tauri）</h2>
 <p><code>node hero build --mac</code> 用 <a href="https://tauri.app/" target="_blank" rel="noopener">Tauri</a> 把網頁版包成 macOS App：一個視窗、裡面就是遊戲，不需要瀏覽器，也不用架伺服器。App 用系統內建的網頁引擎（WebKit），檔案很小（約 10 MB 左右）。</p>

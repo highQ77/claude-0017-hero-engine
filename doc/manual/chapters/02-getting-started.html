@@ -21,7 +21,7 @@ node hero build --mac       # 再包成 macOS App → dist/my-game/mac/my-game.a
 node hero api               # 產生引擎所有可用的 API 列表 → tips/api.txt
 </script>
 <div class="tip">
-  <p>開發伺服器開著時，也可以在入口頁 <code>/portal</code> 用滑鼠做同樣的事：點專案就是 <code>node hero select</code>（開發伺服器會自動換成那個專案），「＋ 新增專案」是 <code>node hero create</code>，垃圾桶是 <code>node hero remove</code>（一樣要輸入專案名稱確認；預設專案 <code>official-demo-000-start</code> 不能刪）。鉛筆可以編輯專案說明（存在專案 <code>src/main.ts</code> 開頭註解的第一行）。每個編輯器頁首的「專案」會回到入口頁。</p>
+  <p>開發伺服器開著時，也可以在入口頁 <code>/portal</code> 用滑鼠做同樣的事：點專案就是 <code>node hero select</code>（開發伺服器會自動換成那個專案），「＋ 新增專案」是 <code>node hero create</code>，「匯入專案」可以匯入別人的專案（選擇對方給你的專案資料夾或 <code>.zip</code> 檔，會複製到 <code>projects/</code> 並切換過去；外面多包一層資料夾也沒關係，<code>node_modules</code>、<code>dist</code>、<code>__MACOSX</code> 和 <code>.</code> 開頭的檔案不會複製；有密碼的 zip 不能匯入），垃圾桶是 <code>node hero remove</code>（一樣要輸入專案名稱確認；預設專案 <code>official-demo-000-start</code> 不能刪）。鉛筆可以編輯專案說明（存在專案 <code>src/main.ts</code> 開頭註解的第一行）。方塊圖示是 <code>node hero build</code>：選網頁版或 macOS App 後在背景打包那個專案（不會切換專案），標題下方會顯示目前的步驟，失敗時會列出錯誤訊息。每個編輯器頁首的「專案」會回到入口頁。</p>
 </div>
 <h2>開發網址</h2>
 <p>執行指令後，在瀏覽器打開下面的網址。<code>node hero dev</code> 開的是目前選擇的專案（<code>node hero select</code>），入口頁、四個編輯器與使用手冊只在開發時提供，不會打包到遊戲裡：</p>
@@ -29,7 +29,7 @@ node hero api               # 產生引擎所有可用的 API 列表 → tips/ap
   <thead><tr><th>指令</th><th>網址</th><th>內容</th></tr></thead>
   <tbody>
     <tr><td rowspan="7"><code>node hero dev</code><br>（<code>npm run dev</code>）</td><td><code>http://localhost:5173</code></td><td>遊戲進行畫面</td></tr>
-    <tr><td><code>http://localhost:5173/portal</code></td><td>專案選擇的入口頁：點一下切換專案（同 <code>node hero select</code>，開發伺服器會自動換成那個專案），也可以新增、刪除專案（同 <code>node hero create</code>／<code>remove</code>）與編輯專案說明</td></tr>
+    <tr><td><code>http://localhost:5173/portal</code></td><td>專案選擇的入口頁：點一下切換專案（同 <code>node hero select</code>，開發伺服器會自動換成那個專案），也可以新增、匯入別人的專案、刪除、打包專案（同 <code>node hero create</code>／<code>remove</code>／<code>build</code>）與編輯專案說明</td></tr>
     <tr><td><code>http://localhost:5173/s3d-editor</code></td><td><a href="#/scene-editor">遊戲 3D 編輯器</a>（3D 場景編輯器）：編輯場景檔與預製物件</td></tr>
     <tr><td><code>http://localhost:5173/ui-editor</code></td><td><a href="#/ui-editor">遊戲 2D 介面編輯器</a>（UI 編輯器）：編輯 2D 介面檔</td></tr>
     <tr><td><code>http://localhost:5173/shader-editor</code></td><td><a href="#/shader-editor">著色器編輯器</a>：用節點組合自訂著色器</td></tr>

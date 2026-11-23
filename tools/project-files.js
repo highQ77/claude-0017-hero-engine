@@ -1,8 +1,8 @@
 /**
- * 建立、刪除專案的檔案操作：node hero create／remove 與入口頁（tools/project.ts 的 /__projects）共用，
+ * 建立、刪除、匯入專案的檔案操作：node hero create／remove 與入口頁（tools/project.ts 的 /__projects）共用，
  * 兩邊的結果一樣。這裡只做檔案操作、失敗時丟出錯誤；訊息與確認由呼叫的一方處理。
  */
-import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEFAULT_PROJECT, PROJECTS_DIR, ROOT, SELECTION_FILE, projectDir, projectExists } from './current-project.js';
 
@@ -73,6 +73,32 @@ export function createProject(name) {
   // TypeScript 設定（沿用引擎根目錄的設定）：單獨用 VS Code 打開專案資料夾時，程式碼提示也找得到 @engine
   // （不放在範本裡：範本在 tools/templates/ 時 extends 的相對路徑不對）
   writeFileSync(join(dir, 'tsconfig.json'), PROJECT_TSCONFIG);
+}
+
+/**
+ * 匯入別人的專案時略過的檔案與資料夾：隱藏檔、套件、打包結果、macOS 壓縮時多出來的 __MACOSX
+ * @param {string} segment 路徑的一段
+ * @returns {boolean}
+ */
+export function skipImportSegment(segment) {
+  return segment.startsWith('.') || segment === 'node_modules' || segment === 'dist' || segment === '__MACOSX';
+}
+
+/**
+ * 匯入別人的專案：把放好檔案的暫存資料夾改名成 projects/<name>/。
+ * 要有 index.html（不然不是專案）；沒有 tsconfig.json 時補上（和 createProject 一樣）。
+ * @param {string} staging 暫存資料夾（在 projects/ 裡，. 開頭）
+ * @param {string} name
+ */
+export function finishImport(staging, name) {
+  const error = nameError(name);
+  if (error) throw new Error(error);
+  const dir = projectDir(name);
+  if (existsSync(dir)) throw new Error(`projects/${name}/ 已經存在`);
+  if (!existsSync(join(staging, 'index.html')))
+    throw new Error('這個資料夾不是 Hero Engine 專案（最上層沒有 index.html）');
+  if (!existsSync(join(staging, 'tsconfig.json'))) writeFileSync(join(staging, 'tsconfig.json'), PROJECT_TSCONFIG);
+  renameSync(staging, dir);
 }
 
 /**

@@ -22,6 +22,9 @@ import type { Plugin, UserConfig, ViteDevServer } from 'vite';
 import { DEFAULT_PROJECT, PROJECTS_DIR, ROOT, SELECTION_FILE } from './current-project.js';
 import { createProject, listProjects, removeError, removeProject, removeTargets } from './project-files.js';
 import { readBody, sendError, sendJson } from './dev-http';
+import { ENGINE_DEPS } from './engine-deps';
+import { type BuildTarget, currentBuild, isBuilding, startBuild } from './project-build';
+import { handleImport } from './project-import';
 import { sceneFilesPlugin } from './scene-files-plugin';
 import { shaderFilesPlugin } from './shader-files-plugin';
 import { soundFilesPlugin } from './sound-files-plugin';
@@ -43,7 +46,13 @@ export function defineProject(projectDir: string): UserConfig {
   const root = resolve(projectDir);
   return {
     root,
+    // 相對路徑：打包結果放在網站的任何路徑（例如 https://example.com/games/my-game/）都找得到 assets/；
+    // 開發伺服器把 './' 當成 '/'，不受影響
+    base: './',
     publicDir: join(root, 'public'),
+    // 預先打包套件的快取：每個專案一份。Vite 的快取和專案資料夾綁在一起，共用一份時每次切換專案都要整個重新打包，
+    // 重新打包到一半時伺服器又重新啟動（切換專案、改 tools/）會留下壞掉的快取（入口頁變成空白）
+    cacheDir: join(ENGINE_ROOT, 'node_modules', '.vite', 'projects', basename(root)),
     // '@engine' 是總入口（src/index.ts），'@engine/模組' 是各模組
     resolve: {
       alias: [
@@ -70,7 +79,8 @@ export function defineProject(projectDir: string): UserConfig {
       // 只編譯遊戲頁面；編輯器（src/editors）是開發工具，不會發佈
       rollupOptions: { input: { main: join(root, 'index.html') } },
     },
-    optimizeDeps: { esbuildOptions: { target: 'es2022' } },
+    // 引擎與編輯器用到的套件啟動時就先打包（tools/engine-deps.ts）：入口頁、編輯器打開時不會再發現新套件
+    optimizeDeps: { include: ENGINE_DEPS, esbuildOptions: { target: 'es2022' } },
   };
 }
 
@@ -119,7 +129,7 @@ async function savedProject(): Promise<string> {
 
 /**
  * 開發時在編輯器裡切換專案（只影響這次執行的開發伺服器；要改預設的專案用 node hero select）：
- *   GET  /__projects          → { current, saved, default, projects: [名稱], details: [{ name, summary }] }
+ *   GET  /__projects          → { current, saved, default, platform, projects: [名稱], details: [{ name, summary }] }
  *   POST /__projects/select   { name, save? }：開發伺服器換成這個專案並重新啟動（開著的頁面會自動重新整理）；
  *                             save: true 時也寫進 .selected-project（等同 node hero select 名稱，入口頁用）
  *   POST /__projects/create   { name }：用範本建立空專案（等同 node hero create 名稱）
@@ -127,6 +137,10 @@ async function savedProject(): Promise<string> {
  *   GET  /__projects/remove?name=  → { targets: [{ path, files }], selected, switchTo }：刪除前顯示會刪掉什麼
  *   POST /__projects/remove   { name }：刪除專案（等同 node hero remove 名稱，確認由入口頁負責）；
  *                             刪的是這次執行正在用的專案時，先換成預設專案、重新啟動後再刪（回傳 restarting: true）
+ *   POST /__projects/build    { name, target: 'web'|'mac', fullscreen? }：在背景打包這個專案（等同 PROJECT=名稱 node hero build；
+ *                             不切換專案）。同一時間只能打包一個（tools/project-build.ts）
+ *   GET  /__projects/build    → { job }：目前（或最後一次）打包的狀態：步驟、紀錄、輸出位置
+ *   /__projects/import/…      匯入別人的專案：把瀏覽器選的資料夾或 zip 的內容傳到 projects/<名稱>/（tools/project-import.ts）
  * 做法：改這個程序的環境變數 PROJECT（vite.config.ts 用它決定專案），再讓 Vite 重新讀取設定。
  */
 function projectSwitchPlugin(root: string): Plugin {
@@ -147,6 +161,7 @@ function projectSwitchPlugin(root: string): Plugin {
               current,
               saved: await savedProject(),
               default: DEFAULT_PROJECT,
+              platform: process.platform,
               projects,
               details,
             });
@@ -165,6 +180,25 @@ function projectSwitchPlugin(root: string): Plugin {
               void server.restart();
             }, 50);
             return;
+          }
+          if (await handleImport(req, res, path, server.config.logger)) return;
+          if (path === '/build') {
+            if (req.method === 'GET') return sendJson(res, 200, { job: currentBuild() });
+            if (req.method === 'POST') {
+              const { name, target, fullscreen } = JSON.parse(await readBody(req)) as {
+                name?: string;
+                target?: string;
+                fullscreen?: boolean;
+              };
+              if (typeof name !== 'string' || !listProjects().includes(name))
+                return sendJson(res, 400, { error: `找不到專案「${name}」` });
+              if (target !== 'web' && target !== 'mac')
+                return sendJson(res, 400, { error: '要打包成 web（網頁版）或 mac（macOS App）' });
+              if (target === 'mac' && process.platform !== 'darwin')
+                return sendJson(res, 400, { error: 'macOS App 只能在 macOS 上打包' });
+              const job = startBuild(name, target as BuildTarget, !!fullscreen, server.config.logger);
+              return sendJson(res, 200, { job });
+            }
           }
           if (req.method === 'POST' && path === '/create') {
             const { name } = JSON.parse(await readBody(req)) as { name?: string };
@@ -192,7 +226,7 @@ function projectSwitchPlugin(root: string): Plugin {
               req.method === 'GET'
                 ? (new URL(req.url ?? '/', 'http://x').searchParams.get('name') ?? '')
                 : String((JSON.parse(await readBody(req)) as { name?: string }).name ?? '');
-            const error = removeError(name);
+            const error = removeError(name) || (isBuilding(name) ? `正在打包 ${name}，等打包完成再刪除` : '');
             if (error) return sendJson(res, 400, { error });
             /** 刪的是正在用的專案：先換成這個專案 */
             const switchTo = name === current ? DEFAULT_PROJECT : '';
