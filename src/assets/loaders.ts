@@ -34,8 +34,9 @@ export function registerDefaultLoaders(manager: AssetManager, options: DefaultLo
   manager.registerLoader('hdr', {
     extensions: ['.hdr'],
     async load(url) {
-      const { RGBELoader } = await import('three/examples/jsm/loaders/RGBELoader.js');
-      const texture = await new RGBELoader().loadAsync(url);
+      // three.js r180 起 RGBELoader 改名為 HDRLoader
+      const { HDRLoader } = await import('three/examples/jsm/loaders/HDRLoader.js');
+      const texture = await new HDRLoader().loadAsync(url);
       texture.mapping = THREE.EquirectangularReflectionMapping;
       return texture;
     },

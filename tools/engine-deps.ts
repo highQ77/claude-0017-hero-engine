@@ -20,7 +20,7 @@ export const ENGINE_DEPS = [
     'loaders/FontLoader.js',
     'loaders/GLTFLoader.js',
     'loaders/DRACOLoader.js',
-    'loaders/RGBELoader.js',
+    'loaders/HDRLoader.js',
     'loaders/TTFLoader.js',
     'libs/meshopt_decoder.module.js',
     'postprocessing/BokehPass.js',

@@ -396,7 +396,7 @@ export class PostProcessingPlugin implements Plugin {
           chain.fxaa = add(new ShaderPass(FXAAShader));
           break;
         case 'smaa':
-          add(new SMAAPass(width * pixelRatio, height * pixelRatio));
+          add(new SMAAPass()); // 尺寸由 composer.setSize 設定（three.js r174 起建構式不接受尺寸）
           break;
         default: {
           if (name.startsWith('fx:')) {

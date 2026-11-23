@@ -372,7 +372,8 @@ export class RenderPlugin implements Plugin {
     renderer.setPixelRatio(opts.pixelRatio ?? Math.min(dpr, 2));
     if (opts.shadows) {
       renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      // three.js r186 起 PCFShadowMap 就是柔和陰影（PCFSoftShadowMap 已移除，用它會出現警告）
+      renderer.shadowMap.type = THREE.PCFShadowMap;
     }
     if (opts.background !== null) this.scene.background = new THREE.Color(opts.background ?? 0x111111);
 

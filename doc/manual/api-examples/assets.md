@@ -184,7 +184,7 @@ console.log('全部完成：', assets.progress);
 ```ts
 const tex: AssetTypeMap['texture'] = await assets.load('textures/checker.png', 'texture');
 const sound: AssetTypeMap['audio'] = await assets.load('sounds/pop.wav', 'audio');
-console.log('貼圖', tex.image.width, 'x', tex.image.height, '；音效', sound.duration.toFixed(2), '秒');
+console.log('貼圖', tex.width, 'x', tex.height, '；音效', sound.duration.toFixed(2), '秒');
 ```
 
 ## DefaultLoaderOptions

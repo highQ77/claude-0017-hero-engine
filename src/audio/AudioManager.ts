@@ -255,7 +255,7 @@ export class AudioManager {
     options: AudioManagerOptions = {},
   ) {
     if (options.context) THREE.AudioContext.setContext(options.context); // 讓 three.js 的音效載入器共用
-    this.context = options.context ?? THREE.AudioContext.getContext();
+    this.context = options.context ?? (THREE.AudioContext.getContext() as AudioContext);
     this.maxVoices = options.maxVoices ?? 64;
 
     const masterGain = this.context.createGain();

@@ -66,6 +66,7 @@ export function defineProject(projectDir: string): UserConfig {
       shaderFilesPlugin(),
       soundFilesPlugin(),
       packedFilesPlugin(),
+      skipBundledDracoPlugin(),
       engineEditorPlugin(),
       docServerPlugin(),
       projectSwitchPlugin(root),
@@ -81,6 +82,25 @@ export function defineProject(projectDir: string): UserConfig {
     },
     // 引擎與編輯器用到的套件啟動時就先打包（tools/engine-deps.ts）：入口頁、編輯器打開時不會再發現新套件
     optimizeDeps: { include: ENGINE_DEPS, esbuildOptions: { target: 'es2022' } },
+  };
+}
+
+/**
+ * three.js r17x 起，DRACOLoader 用 new URL('../libs/draco/…', import.meta.url) 指向自帶的解碼器，
+ * 打包時這些檔案（約 1.1 MB）會被複製到輸出資料夾。引擎只在設定 dracoDecoderPath 時才建立 DRACOLoader，
+ * 而且一定會呼叫 setDecoderPath（src/assets/loaders.ts），自帶的解碼器用不到：打包時把這些網址換成空字串。
+ */
+function skipBundledDracoPlugin(): Plugin {
+  const DRACO_URL = /new URL\(\s*'\.\.\/libs\/draco\/[^']+',\s*import\.meta\.url\s*\)\.toString\(\)/g;
+  return {
+    name: 'skip-bundled-draco',
+    apply: 'build',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!/three\/examples\/jsm\/loaders\/DRACOLoader\.js$/.test(id.split('?')[0])) return null;
+      const out = code.replace(DRACO_URL, "''");
+      return out === code ? null : { code: out, map: null };
+    },
   };
 }
 
