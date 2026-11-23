@@ -1,9 +1,37 @@
 import * as THREE from 'three';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import {
+  MeshBasicNodeMaterial,
+  MeshLambertNodeMaterial,
+  MeshPhongNodeMaterial,
+  MeshPhysicalNodeMaterial,
+  MeshStandardNodeMaterial,
+} from 'three/webgpu';
 import { materialConstants } from '../render/descriptors';
-import { registerBuiltinChunks } from './chunks';
+import { shaderFns } from './functions';
+import { type ShaderNode, tsl } from './tsl';
 
-/** uniform 的值；需要指定 GLSL 型別時（例如陣列）用 { value, glsl: 'vec3[4]' } */
+const {
+  Fn,
+  cameraPosition,
+  convertToTexture,
+  deltaTime,
+  float,
+  normalLocal,
+  normalWorld,
+  normalize,
+  output,
+  positionLocal,
+  positionWorld,
+  screenSize,
+  screenUV,
+  texture,
+  time,
+  uniform,
+  uv,
+  vec2,
+} = tsl;
+
+/** uniform 的值：數字、布林、向量、顏色、矩陣、貼圖（null：之後才給的貼圖） */
 export type UniformInput =
   | number
   | boolean
@@ -14,123 +42,221 @@ export type UniformInput =
   | THREE.Matrix3
   | THREE.Matrix4
   | THREE.Texture
-  | null
-  | { value: unknown; glsl: string };
+  | null;
 
 /** 自訂著色器建立在哪種材質上：unlit（完全自訂）或 standard、physical、lambert、phong、basic（保留光照，只改一部分） */
 export type ShaderBase = 'unlit' | 'standard' | 'physical' | 'lambert' | 'phong' | 'basic';
 
+/** 一個 uniform：節點（放進著色器）＋ value（隨時可以改，下一幀生效） */
+export type UniformNode = ShaderNode & { value: unknown };
+
 /**
- * 自訂材質的定義。
+ * 自訂材質的函式拿到的東西（都是 TSL 節點）。
+ * 函式在建立材質時執行一次，組出節點；之後每一幀都在 GPU 上執行
+ */
+export interface ShaderContext {
+  /** 你定義的 uniform（這個材質自己的一份；改 material.uniforms.名稱.value） */
+  uniforms: Record<string, UniformNode>;
+  /** 經過的時間（秒） */
+  time: ShaderNode;
+  /** 這一幀的時間（秒） */
+  deltaTime: ShaderNode;
+  /** 畫面大小（像素，vec2） */
+  resolution: ShaderNode;
+  /** 貼圖座標（vec2） */
+  uv: ShaderNode;
+  /** 物件座標的位置（vec3，頂點函式回傳新的位置） */
+  position: ShaderNode;
+  /** 物件座標的法線（vec3） */
+  normal: ShaderNode;
+  /** 世界座標的位置（vec3） */
+  worldPosition: ShaderNode;
+  /** 世界座標的法線（vec3） */
+  worldNormal: ShaderNode;
+  /** 攝影機位置（世界座標） */
+  cameraPosition: ShaderNode;
+  /** 從表面指向攝影機的方向（世界座標，已正規化） */
+  viewDir: ShaderNode;
+  /** 共用函式：雜訊、碎形雜訊、Voronoi、菲涅耳…（同 shaderFns） */
+  fn: typeof shaderFns;
+}
+
+/**
+ * 自訂材質的定義（TSL：每個欄位是回傳節點的函式）。
  *
- * 兩種模式：
- * - base: 'unlit'：完全自訂，在 fragment 裡設定 `color`（vec4）
- * - base: 'standard' 等：擴充 three.js 的標準材質，保留光照與陰影，
- *   在 fragment 裡修改 `diffuseColor`（vec4），在 emissive 裡修改 `totalEmissiveRadiance`（vec3）
+ * - base: 'unlit'：完全自訂，color 回傳最後的顏色（vec4）
+ * - base: 'standard' 等：保留光照與陰影，color 回傳基本色（vec4，光照前），emissive 回傳發光（vec3）
  *
- * 所有模式都可以使用：
- * - uniform：uTime（秒）、uDeltaTime、uResolution（畫面像素）、cameraPosition，以及你定義的 uniforms
- * - 頂點階段：`transformed`（vec3，可修改頂點位置）、`position`、`normal`、`uv`
- * - 片段階段：vUv、vWorldPosition、vWorldNormal
- * - #include <engine_noise>、#include <engine_utils> 等共用片段
+ * 函式裡可以用 three/tsl 的所有函式（vec3、mix、sin…）與控制流程（If、Discard 丟棄像素）。
+ * @example
+ * shaders.define({
+ *   name: 'pulse',
+ *   base: 'standard',
+ *   uniforms: { uColor: new Color('#ff6b6b') },
+ *   color: (c) => vec4(c.uniforms.uColor, 1),
+ *   emissive: (c) => c.uniforms.uColor.mul(sin(c.time.mul(3)).mul(0.5).add(0.5)),
+ * });
  */
 export interface ShaderDefinition {
   /** 著色器名稱（createMaterial 用） */
   name: string;
   /** 建立在哪種材質上 */
   base: ShaderBase;
-  /** 你的 uniform：會依數值型別自動產生 GLSL 宣告 */
+  /** 你的 uniform 與初始值 */
   uniforms?: Record<string, UniformInput>;
   /** 傳給材質的參數，例如 { color: 0xff0000, roughness: 0.3, transparent: true, side: 'double', blending: 'additive' } */
   options?: Record<string, unknown>;
-  /** 頂點著色器的函式與宣告 */
-  vertexHeader?: string;
-  /** 在 main 裡執行，可修改 `transformed` 來移動頂點 */
-  vertex?: string;
-  /** 片段著色器的函式與宣告 */
-  fragmentHeader?: string;
-  /** unlit：設定 `color`；標準材質：修改 `diffuseColor`（可 discard） */
-  fragment?: string;
-  /** 只限標準材質：修改 `totalEmissiveRadiance` 讓表面發光 */
-  emissive?: string;
-  /** 最後修改 `gl_FragColor`（色調映射之前） */
-  output?: string;
+  /** 頂點位置：回傳新的物件座標位置（vec3），例如 c.position.add(c.normal.mul(0.1)) */
+  position?: (c: ShaderContext) => ShaderNode;
+  /** 顏色（vec4）：unlit 是最後的顏色；標準材質是基本色（光照前）。可以呼叫 Discard() 丟棄像素 */
+  color?: (c: ShaderContext) => ShaderNode;
+  /** 只限有光照的材質：發光（vec3） */
+  emissive?: (c: ShaderContext) => ShaderNode;
+  /** 最後的輸出（vec4，色調映射之前）：拿到原本的輸出，回傳新的 */
+  output?: (c: ShaderContext, color: ShaderNode) => ShaderNode;
+}
+
+/** 全螢幕效果的函式拿到的東西 */
+export interface EffectContext {
+  /** 你定義的 uniform（這個效果自己的一份；改 effect.uniforms.名稱.value） */
+  uniforms: Record<string, UniformNode>;
+  /** 目前像素原本的顏色（vec4） */
+  color: ShaderNode;
+  /** 畫面座標（vec2，左下 0,0 到右上 1,1） */
+  uv: ShaderNode;
+  /** 讀取畫面任意位置的顏色：sample(uv) → vec4 */
+  sample: (uv: ShaderNode) => ShaderNode;
+  /** 經過的時間（秒） */
+  time: ShaderNode;
+  /** 這一幀的時間（秒） */
+  deltaTime: ShaderNode;
+  /** 畫面大小（像素，vec2） */
+  resolution: ShaderNode;
+  /** 共用函式（同 shaderFns） */
+  fn: typeof shaderFns;
 }
 
 /**
- * 自訂全螢幕效果的定義。
- * fragment 裡可以使用 `color`（目前像素，vec4，修改它）、`uv`、tDiffuse（整張畫面）、uResolution、uTime。
+ * 自訂全螢幕效果的定義：color 回傳這個像素的新顏色（vec4）。
+ * @example
+ * shaders.defineEffect({
+ *   name: 'invert',
+ *   uniforms: { uAmount: 1 },
+ *   color: (c) => vec4(mix(c.color.rgb, c.color.rgb.oneMinus(), c.uniforms.uAmount), c.color.a),
+ * });
  */
 export interface EffectDefinition {
   /** 全螢幕效果名稱（createEffect 用） */
   name: string;
   /** uniform 的初始值 */
   uniforms?: Record<string, UniformInput>;
-  /** 放在片段著色器最前面的程式（函式、常數） */
-  header?: string;
-  /** 片段著色器的主程式 */
-  fragment: string;
+  /** 這個像素的新顏色（vec4） */
+  color: (c: EffectContext) => ShaderNode;
 }
 
-/** 用自訂著色器建立的材質：無論哪種模式，都可以透過 uniforms 修改參數 */
+/** 用自訂著色器建立的材質：可以透過 uniforms 修改參數（uniforms.名稱.value） */
 export type CustomMaterial = THREE.Material & {
-  uniforms: Record<string, THREE.IUniform>;
+  uniforms: Record<string, UniformNode>;
   readonly shaderName: string;
 };
 
-/** 自訂效果（可交給 PostProcessingPlugin.addPass） */
-export type CustomEffect = ShaderPass & { readonly shaderName: string };
+/**
+ * 後製的一個效果（交給 postfx.addPass）：apply 拿到前一個效果的顏色（節點），回傳新的顏色。
+ * 自己寫效果時實作這個介面即可；shaders.createEffect 建立的效果也是
+ */
+export interface PostFxPass {
+  /** false：暫時不套用 */
+  enabled: boolean;
+  /** 定義改變時加一（後製看到會重建效果） */
+  readonly version?: number;
+  /** 套用效果：input 是前一個效果的顏色（vec4 節點），回傳新的顏色 */
+  apply(input: ShaderNode): ShaderNode;
+}
+
+/** 自訂效果（可交給 PostProcessingPlugin.addPass，或放進 postfx.settings.effects） */
+export interface CustomEffect extends PostFxPass {
+  /** 效果的名稱（defineEffect 的 name） */
+  readonly shaderName: string;
+  /** 這個效果的 uniform（改 .value，下一幀生效） */
+  readonly uniforms: Record<string, UniformNode>;
+  readonly version: number;
+  /** 不再使用（先 postfx.removePass）：shaders.update 不再更新它 */
+  dispose(): void;
+}
 
 const BASE_MATERIALS = {
-  standard: THREE.MeshStandardMaterial,
-  physical: THREE.MeshPhysicalMaterial,
-  lambert: THREE.MeshLambertMaterial,
-  phong: THREE.MeshPhongMaterial,
-  basic: THREE.MeshBasicMaterial,
+  unlit: MeshBasicNodeMaterial,
+  standard: MeshStandardNodeMaterial,
+  physical: MeshPhysicalNodeMaterial,
+  lambert: MeshLambertNodeMaterial,
+  phong: MeshPhongNodeMaterial,
+  basic: MeshBasicNodeMaterial,
 } as const;
 
-const BUILTIN_UNIFORMS = ['uTime', 'uDeltaTime', 'uResolution'] as const;
-
-/** 依數值推斷 GLSL 型別 */
-export function glslType(value: unknown, name = ''): string {
-  if (typeof value === 'number') return 'float';
-  if (typeof value === 'boolean') return 'bool';
-  if (value instanceof THREE.Color) return 'vec3';
-  if (value instanceof THREE.Vector2) return 'vec2';
-  if (value instanceof THREE.Vector3) return 'vec3';
-  if (value instanceof THREE.Vector4) return 'vec4';
-  if (value instanceof THREE.Matrix3) return 'mat3';
-  if (value instanceof THREE.Matrix4) return 'mat4';
-  if (value instanceof THREE.CubeTexture) return 'samplerCube';
-  if (value instanceof THREE.Texture || value === null) return 'sampler2D';
-  throw new Error(`無法推斷 uniform「${name}」的 GLSL 型別，請改用 { value, glsl: '型別' }`);
-}
-
-function declaration(name: string, input: UniformInput): string {
-  if (input !== null && typeof input === 'object' && 'glsl' in input) {
-    const m = /^(\w+)(\[\d+\])?$/.exec(input.glsl.trim());
-    if (!m) throw new Error(`uniform「${name}」的 glsl 型別格式錯誤：${input.glsl}`);
-    return `uniform ${m[1]} ${name}${m[2] ?? ''};`;
+/** 之後才給的貼圖（uniform 的初始值是 null）先用的 1×1 白色貼圖 */
+let blankTexture: THREE.DataTexture | null = null;
+function blank(): THREE.DataTexture {
+  if (!blankTexture) {
+    blankTexture = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    blankTexture.needsUpdate = true;
   }
-  return `uniform ${glslType(input, name)} ${name};`;
+  return blankTexture;
 }
 
-/** 每個材質各自一份 uniform 值（貼圖共用，向量等複製） */
-function cloneValue(input: UniformInput): unknown {
-  const v = input !== null && typeof input === 'object' && 'glsl' in input ? input.value : input;
-  if (v instanceof THREE.Texture) return v;
-  if (Array.isArray(v)) return v.map((x) => (x && typeof x.clone === 'function' ? x.clone() : x));
-  if (v && typeof (v as { clone?: unknown }).clone === 'function') return (v as { clone: () => unknown }).clone();
-  return v;
+/** 每個實例各自一份 uniform 節點（貼圖共用，向量等複製） */
+function uniformNode(input: unknown): UniformNode {
+  if (input === null || input instanceof THREE.Texture) return texture(input ?? blank());
+  if (typeof input === 'boolean') return uniform(input ? 1 : 0);
+  const v =
+    input && typeof (input as { clone?: unknown }).clone === 'function' ? (input as THREE.Vector3).clone() : input;
+  return uniform(v);
 }
 
-/** 在 three.js 的著色器原始碼中，找到標記並在其後插入程式碼 */
-function injectAfter(source: string, anchor: string, code: string, shaderName: string): string {
-  const token = `#include <${anchor}>`;
-  if (!source.includes(token)) {
-    throw new Error(`著色器「${shaderName}」無法插入程式碼：找不到 ${token}（這種基礎材質可能不支援）`);
+function makeUniforms(
+  name: string,
+  defs: Record<string, UniformInput> | undefined,
+  overrides: Record<string, unknown>,
+): Record<string, UniformNode> {
+  const own: Record<string, UniformNode> = {};
+  for (const [key, input] of Object.entries(defs ?? {})) own[key] = uniformNode(input);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (!(key in own)) throw new Error(`著色器「${name}」沒有 uniform「${key}」`);
+    own[key].value = value === null ? blank() : value;
   }
-  return source.replace(token, `${token}\n${code}\n`);
+  return own;
+}
+
+function materialContext(uniforms: Record<string, UniformNode>): ShaderContext {
+  return {
+    uniforms,
+    time,
+    deltaTime,
+    resolution: screenSize,
+    uv: uv(),
+    position: positionLocal,
+    normal: normalLocal,
+    worldPosition: positionWorld,
+    worldNormal: normalWorld,
+    cameraPosition,
+    viewDir: normalize(cameraPosition.sub(positionWorld)),
+    fn: shaderFns,
+  };
+}
+
+/** 依定義設定材質的節點（建立時、update 時） */
+function applyNodes(material: THREE.Material, def: ShaderDefinition, uniforms: Record<string, UniformNode>): void {
+  const ctx = materialContext(uniforms);
+  const m = material as THREE.Material & {
+    positionNode: ShaderNode;
+    colorNode: ShaderNode;
+    emissiveNode: ShaderNode;
+    outputNode: ShaderNode;
+  };
+  m.positionNode = def.position ? Fn(() => def.position!(ctx))() : null;
+  m.colorNode = def.color ? Fn(() => def.color!(ctx))() : null;
+  m.emissiveNode = def.emissive && def.base !== 'unlit' && def.base !== 'basic' ? Fn(() => def.emissive!(ctx))() : null;
+  m.outputNode = def.output ? Fn(() => def.output!(ctx, output))() : null;
+  material.needsUpdate = true;
 }
 
 interface Entry {
@@ -141,22 +267,12 @@ interface Entry {
 }
 
 /**
- * 著色器庫：註冊自訂材質與全螢幕效果、建立實例、執行中更新。
- * 透過 world.requireResource(ShadersKey) 取得。
+ * 著色器庫：註冊自訂材質與全螢幕效果（TSL 節點）、建立實例、執行中更新。
+ * 透過 world.requireResource(ShadersKey) 取得（ShaderPlugin 匯出成 shaders）。
  */
 export class ShaderLibrary {
-  /** 所有自訂著色器共用的內建 uniform（由 ShaderPlugin 每幀更新） */
-  readonly builtins = {
-    uTime: { value: 0 },
-    uDeltaTime: { value: 0 },
-    uResolution: { value: new THREE.Vector2(1, 1) },
-  };
   private readonly entries = new Map<string, Entry>();
   private anonymous = 0;
-
-  constructor() {
-    registerBuiltinChunks();
-  }
 
   /** 是否定義了這個著色器或效果 */
   has(name: string): boolean {
@@ -178,6 +294,11 @@ export class ShaderLibrary {
     return this.entries.delete(name);
   }
 
+  /** 定義的版本：每次 define、update 加一（後製用它判斷要不要重建效果）；沒有這個名稱時是 0 */
+  version(name: string): number {
+    return this.entries.get(name)?.version ?? 0;
+  }
+
   /** 目前還在使用中的實例數量 */
   liveCount(name: string): number {
     return this.entries.get(name)?.live.size ?? 0;
@@ -194,40 +315,27 @@ export class ShaderLibrary {
 
   /** 註冊自訂全螢幕效果 */
   defineEffect(def: EffectDefinition): this {
-    this.checkUniforms(def.name, def.uniforms);
+    if (typeof def.color !== 'function') throw new Error(`效果「${def.name}」需要 color 函式（回傳新的顏色）`);
     this.register(def.name, 'effect', def);
     return this;
   }
 
   /**
-   * 執行中更新定義：所有使用中的實例會重新編譯，既有的 uniform 數值會保留。
-   * 搭配 Vite 熱更新，修改 .glsl 檔就能立刻看到結果。
+   * 執行中更新定義：所有使用中的實例會換成新的節點，既有的 uniform 數值會保留（新增的 uniform 用初始值）。
    */
   update(name: string, changes: Partial<ShaderDefinition> | Partial<EffectDefinition>): void {
     const entry = this.entries.get(name);
     if (!entry) throw new Error(`找不到著色器「${name}」`);
     const def = { ...entry.def, ...changes, name } as ShaderDefinition & EffectDefinition;
     if (entry.kind === 'material') this.validate(def);
-    else this.checkUniforms(name, def.uniforms);
     entry.def = def;
     entry.version++;
     for (const instance of entry.live) {
-      // 補上新增的 uniform（保留既有的值）
       for (const [key, input] of Object.entries(def.uniforms ?? {})) {
-        if (!(key in instance.uniforms)) instance.uniforms[key] = { value: cloneValue(input) };
+        if (!(key in instance.uniforms)) (instance.uniforms as Record<string, UniformNode>)[key] = uniformNode(input);
       }
-      if (entry.kind === 'effect') {
-        const pass = instance as CustomEffect;
-        (pass.material as THREE.ShaderMaterial).fragmentShader = this.effectFragment(def);
-        pass.material.needsUpdate = true;
-      } else if (def.base === 'unlit') {
-        const m = instance as unknown as THREE.ShaderMaterial;
-        m.vertexShader = this.unlitVertex(def);
-        m.fragmentShader = this.unlitFragment(def);
-        m.needsUpdate = true;
-      } else {
-        (instance as CustomMaterial).needsUpdate = true; // onBeforeCompile 會讀取新定義
-      }
+      if (entry.kind === 'material') applyNodes(instance as CustomMaterial, def, instance.uniforms);
+      else (instance as { version: number }).version = entry.version; // 後製看到版本變了會重建
     }
   }
 
@@ -245,31 +353,12 @@ export class ShaderLibrary {
   ): CustomMaterial {
     const entry = this.entry(name, 'material');
     const def = entry.def as ShaderDefinition;
-    const own: Record<string, THREE.IUniform> = {};
-    for (const [key, input] of Object.entries(def.uniforms ?? {})) own[key] = { value: cloneValue(input) };
-    for (const [key, value] of Object.entries(uniforms)) {
-      if (!(key in own)) throw new Error(`著色器「${name}」沒有 uniform「${key}」`);
-      own[key].value = value;
-    }
-
-    let material: CustomMaterial;
-    if (def.base === 'unlit') {
-      const m = new THREE.ShaderMaterial({
-        ...(materialConstants({ ...def.options, ...options }) as THREE.ShaderMaterialParameters),
-        uniforms: { ...own, ...this.builtins },
-        vertexShader: this.unlitVertex(def),
-        fragmentShader: this.unlitFragment(def),
-      });
-      // ShaderMaterial 的 uniforms 同時包含內建與自訂；對外只露出同一個物件
-      material = Object.assign(m, { shaderName: name }) as unknown as CustomMaterial;
-    } else {
-      const Base = BASE_MATERIALS[def.base];
-      const m = new Base(materialConstants({ ...def.options, ...options }) as never) as THREE.Material;
-      Object.assign(m, { uniforms: own, shaderName: name });
-      m.onBeforeCompile = (shader) => this.patch(name, shader, own);
-      m.customProgramCacheKey = () => `${name}:${this.entries.get(name)?.version ?? 0}`;
-      material = m as CustomMaterial;
-    }
+    const own = makeUniforms(name, def.uniforms, uniforms);
+    const Base = BASE_MATERIALS[def.base];
+    const m = new Base(materialConstants({ ...def.options, ...options }) as never) as THREE.Material;
+    Object.assign(m, { uniforms: own, shaderName: name });
+    applyNodes(m, def, own);
+    const material = m as CustomMaterial;
     this.track(entry, material);
     return material;
   }
@@ -287,170 +376,86 @@ export class ShaderLibrary {
   ): CustomMaterial {
     const name = `${def.name}#${++this.anonymous}`;
     this.define({ ...def, name });
-    let material: CustomMaterial;
     try {
-      material = this.createMaterial(name, uniforms, options);
-    } catch (error) {
+      const material = this.createMaterial(name, uniforms, options);
+      Object.assign(material, { shaderName: def.name });
+      return material;
+    } finally {
       this.entries.delete(name);
-      throw error;
     }
-    Object.assign(material, { shaderName: def.name });
-    // unlit 的原始碼已經產生好；標準材質編譯時才讀定義，要等材質釋放後才移除
-    if (def.base === 'unlit') this.entries.delete(name);
-    else material.addEventListener('dispose', () => this.entries.delete(name));
-    return material;
   }
 
-  /** 建立全螢幕效果，交給 postfx.addPass(effect, 'display') 使用 */
+  /** 建立全螢幕效果，交給 postfx.addPass(effect, 'display') 或放進 postfx.settings.effects */
   createEffect(name: string, uniforms: Record<string, unknown> = {}): CustomEffect {
     const entry = this.entry(name, 'effect');
-    const def = entry.def as EffectDefinition;
-    const own: Record<string, THREE.IUniform> = { tDiffuse: { value: null } };
-    for (const [key, input] of Object.entries(def.uniforms ?? {})) own[key] = { value: cloneValue(input) };
-    for (const [key, value] of Object.entries(uniforms)) {
-      if (!(key in own)) throw new Error(`效果「${name}」沒有 uniform「${key}」`);
-      own[key].value = value;
-    }
-    const material = new THREE.ShaderMaterial({
-      uniforms: { ...own, ...this.builtins },
-      vertexShader: /* glsl */ `
-        varying vec2 vUv;
-        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-      `,
-      fragmentShader: this.effectFragment(def),
-    });
-    const pass = Object.assign(new ShaderPass(material), { shaderName: name }) as CustomEffect;
-    this.track(entry, pass);
-    return pass;
-  }
-
-  // ───────── 產生原始碼 ─────────
-
-  private uniformBlock(uniforms: Record<string, UniformInput> | undefined): string {
-    const lines = ['uniform float uTime;', 'uniform float uDeltaTime;', 'uniform vec2 uResolution;'];
-    for (const [key, input] of Object.entries(uniforms ?? {})) lines.push(declaration(key, input));
-    return lines.join('\n');
-  }
-
-  private unlitVertex(def: ShaderDefinition): string {
-    return /* glsl */ `
-${this.uniformBlock(def.uniforms)}
-varying vec2 vUv;
-varying vec3 vWorldPosition;
-varying vec3 vWorldNormal;
-${def.vertexHeader ?? ''}
-void main() {
-  vUv = uv;
-  vec3 transformed = position;
-  ${def.vertex ?? ''}
-  vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
-  vWorldPosition = worldPosition.xyz;
-  vWorldNormal = normalize(mat3(modelMatrix) * normal);
-  gl_Position = projectionMatrix * viewMatrix * worldPosition;
-}`;
-  }
-
-  private unlitFragment(def: ShaderDefinition): string {
-    return /* glsl */ `
-${this.uniformBlock(def.uniforms)}
-varying vec2 vUv;
-varying vec3 vWorldPosition;
-varying vec3 vWorldNormal;
-${def.fragmentHeader ?? ''}
-void main() {
-  vec4 color = vec4(1.0);
-  ${def.fragment ?? ''}
-  gl_FragColor = color;
-  ${def.output ?? ''}
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}`;
-  }
-
-  private effectFragment(def: EffectDefinition): string {
-    return /* glsl */ `
-uniform sampler2D tDiffuse;
-${this.uniformBlock(def.uniforms)}
-varying vec2 vUv;
-${def.header ?? ''}
-void main() {
-  vec2 uv = vUv;
-  vec4 color = texture2D(tDiffuse, uv);
-  ${def.fragment}
-  gl_FragColor = color;
-}`;
-  }
-
-  /** 擴充標準材質：在 three.js 的著色器裡插入程式碼 */
-  private patch(
-    name: string,
-    shader: THREE.WebGLProgramParametersWithUniforms,
-    own: Record<string, THREE.IUniform>,
-  ): void {
-    const def = this.entries.get(name)!.def as ShaderDefinition;
-    Object.assign(shader.uniforms, own, this.builtins);
-    // physical 材質開啟透射時，three.js 自己會宣告 vWorldPosition，避免重複宣告
-    const header =
-      `${this.uniformBlock(def.uniforms)}\n` +
-      '#ifndef USE_TRANSMISSION\nvarying vec3 vWorldPosition;\n#endif\n' +
-      'varying vec3 vWorldNormal;\nvarying vec2 vUv0;\n';
-
-    let vs = `${header}${def.vertexHeader ?? ''}\n${shader.vertexShader}`;
-    if (def.vertex) vs = injectAfter(vs, 'begin_vertex', def.vertex, name);
-    vs = injectAfter(
-      vs,
-      'fog_vertex',
-      'vUv0 = uv;\nvWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWorldNormal = normalize(mat3(modelMatrix) * normal);',
-      name,
-    );
-    shader.vertexShader = vs;
-
-    // 標準材質的 vUv 只在有貼圖時存在，這裡用 vUv0 提供，並以巨集讓開發者照樣寫 vUv
-    let fs = `${header}#ifndef USE_UV\n#define vUv vUv0\n#endif\n${def.fragmentHeader ?? ''}\n${shader.fragmentShader}`;
-    if (def.fragment) fs = injectAfter(fs, 'color_fragment', def.fragment, name);
-    if (def.emissive) fs = injectAfter(fs, 'emissivemap_fragment', def.emissive, name);
-    if (def.output) fs = injectAfter(fs, 'opaque_fragment', def.output, name);
-    shader.fragmentShader = fs;
+    const own = makeUniforms(name, (entry.def as EffectDefinition).uniforms, uniforms);
+    const effect: CustomEffect = {
+      shaderName: name,
+      uniforms: own,
+      enabled: true,
+      version: entry.version,
+      apply: (input: ShaderNode) => {
+        const def = entry.def as EffectDefinition;
+        // 要讀取畫面其他位置（sample）時，才把前一個效果的結果先畫成貼圖：
+        // 只用到這個像素的效果（調色、暗角…）直接接著算，不用多一次全螢幕的複製
+        let tex: ShaderNode | null = null;
+        const texture = () => (tex ??= convertToTexture(input));
+        // 畫面座標：左下 (0,0)、右上 (1,1)（y 往上）；TSL 的 screenUV 是左上 (0,0)，這裡翻過來
+        const flip = (p: ShaderNode) => vec2(p.x, float(1).sub(p.y));
+        const fsUv = flip(screenUV);
+        const ctx: EffectContext = {
+          uniforms: own,
+          color: input,
+          uv: fsUv,
+          sample: (p: ShaderNode) => texture().sample(flip(p)),
+          time,
+          deltaTime,
+          resolution: screenSize,
+          fn: shaderFns,
+        };
+        return Fn(() => def.color(ctx))();
+      },
+      dispose: () => {
+        entry.live.delete(effect);
+      },
+    };
+    this.track(entry, effect);
+    return effect;
   }
 
   // ───────── 內部 ─────────
 
   private register(name: string, kind: Entry['kind'], def: Entry['def']): void {
-    if (this.entries.has(name)) throw new Error(`著色器「${name}」已註冊（要修改請用 update）`);
-    this.entries.set(name, { kind, def, version: 0, live: new Set() });
+    if (!name) throw new Error('著色器需要名稱');
+    const prev = this.entries.get(name);
+    this.entries.set(name, { kind, def, version: (prev?.version ?? 0) + 1, live: prev?.live ?? new Set() });
   }
 
   private entry(name: string, kind: Entry['kind']): Entry {
     const entry = this.entries.get(name);
-    if (!entry) throw new Error(`找不到著色器「${name}」，已註冊的有：${this.names.join('、') || '（無）'}`);
+    if (!entry)
+      throw new Error(
+        `找不到${kind === 'effect' ? '效果' : '著色器'}「${name}」（先用 ${kind === 'effect' ? 'defineEffect' : 'define'} 註冊）`,
+      );
     if (entry.kind !== kind)
       throw new Error(
-        `「${name}」是${entry.kind === 'material' ? '材質' : '效果'}，不是${kind === 'material' ? '材質' : '效果'}`,
+        `「${name}」是${entry.kind === 'effect' ? '全螢幕效果，請用 createEffect' : '材質，請用 createMaterial'}`,
       );
     return entry;
   }
 
   private track(entry: Entry, instance: CustomMaterial | CustomEffect): void {
     entry.live.add(instance);
-    const material = 'isMaterial' in instance ? instance : (instance as CustomEffect).material;
-    material.addEventListener('dispose', () => entry.live.delete(instance));
+    if (instance instanceof THREE.Material) instance.addEventListener('dispose', () => entry.live.delete(instance));
   }
 
   private validate(def: ShaderDefinition): void {
-    if (!def.name) throw new Error('著色器需要 name');
-    if (def.base !== 'unlit' && !(def.base in BASE_MATERIALS)) throw new Error(`未知的基礎材質「${def.base}」`);
-    if (def.emissive && (def.base === 'unlit' || def.base === 'basic')) {
-      throw new Error(`著色器「${def.name}」：${def.base} 沒有自發光，請改在 fragment 或 output 裡處理`);
-    }
-    this.checkUniforms(def.name, def.uniforms);
-  }
-
-  private checkUniforms(name: string, uniforms: Record<string, UniformInput> | undefined): void {
-    for (const [key, input] of Object.entries(uniforms ?? {})) {
-      if ((BUILTIN_UNIFORMS as readonly string[]).includes(key) || key === 'tDiffuse') {
-        throw new Error(`著色器「${name}」：uniform 名稱「${key}」是內建的，請換一個名稱`);
-      }
-      declaration(key, input); // 型別無法推斷時提早報錯
-    }
+    for (const key of ['vertex', 'fragment', 'vertexHeader', 'fragmentHeader'] as const)
+      if (key in def)
+        throw new Error(
+          `著色器「${def.name}」用了舊的 GLSL 寫法（${key}）：現在的自訂著色器用 TSL 節點，請改用 position、color、emissive 函式`,
+        );
+    if (!(def.base in BASE_MATERIALS)) throw new Error(`著色器「${def.name}」的 base 不正確：${def.base}`);
+    if (def.base === 'unlit' && !def.color) throw new Error(`著色器「${def.name}」是 unlit，需要 color 函式`);
   }
 }

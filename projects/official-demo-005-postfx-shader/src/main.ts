@@ -22,9 +22,11 @@ import {
   EffectPresets,
   SHADER_GRAPH_FORMAT,
   type ShaderGraph,
+  type ShaderContext,
   ShaderPresets,
   compileShaderGraph,
   shaderGraphDefinition,
+  tsl,
 } from '@engine/shaders';
 import * as ui2d from '@engine/ui2d';
 import type { UIButton, UILabel, UISelect, UISlider, UIStackView, UIToggle } from '@engine/ui2d';
@@ -296,16 +298,23 @@ shaders
   .define(ShaderPresets.hologram())
   .define(ShaderPresets.wave({ color: '#4cc9f0', roughness: 0.3, side: 2 /* 雙面 */ }));
 
-// 自己寫的條紋材質（unlit：顏色完全由程式決定）
-const STRIPES_H =
-  'float s = step(0.5, fract(vUv.y * count + uTime * speed));\ncolor = vec4(mix(colorA, colorB, s), 1.0);';
-const STRIPES_D =
-  'float s = step(0.5, fract((vUv.x + vUv.y) * count + uTime * speed));\ncolor = vec4(mix(colorA, colorB, s), 1.0);';
+const { dot, fract, length, mix, sin, smoothstep, step, vec2, vec3, vec4 } = tsl;
+
+// 自己寫的條紋材質（unlit：顏色完全由程式決定；TSL 節點）
+/** 條紋：橫線或斜線（熱更新時換成另一個） */
+const stripes = (diagonal: boolean) => (c: ShaderContext) => {
+  const u = c.uniforms;
+  const along = diagonal ? c.uv.x.add(c.uv.y) : c.uv.y;
+  const s = step(0.5, fract(along.mul(u.count).add(c.time.mul(u.speed))));
+  return vec4(mix(u.colorA, u.colorB, s), 1);
+};
+const STRIPES_H = stripes(false);
+const STRIPES_D = stripes(true);
 shaders.define({
   name: 'stripes',
   base: 'unlit',
   uniforms: { colorA: new Color('#ff6b6b'), colorB: new Color('#ffd166'), count: 12, speed: 0.5 },
-  fragment: STRIPES_H,
+  color: STRIPES_H,
 });
 let diagonal = false;
 
@@ -388,30 +397,42 @@ function applyMaterialUniforms(): void {
 
 // ───────── ③ 全螢幕效果 ─────────
 
-/** 自己寫的效果：color 一開始是這個像素原本的顏色，tDiffuse 是整張畫面，uv 是座標 */
+/** 偽亂數：0..1 */
+const rand = (p: ReturnType<typeof vec2>) => fract(sin(dot(p, vec2(12.9898, 78.233))).mul(43758.5453));
+
+/** 自己寫的效果（TSL）：c.color 是這個像素原本的顏色，c.sample(uv) 讀整張畫面，c.uv 是座標 */
 const VHS: EffectDefinition = {
   name: 'vhs',
   uniforms: { shift: 0.006, noise: 0.08 },
-  header: 'float rand(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }',
-  fragment: `
-    float wobble = sin(uv.y * 40.0 + uTime * 3.0) * 0.0015;
-    color.r = texture2D(tDiffuse, uv + vec2(shift + wobble, 0.0)).r;
-    color.b = texture2D(tDiffuse, uv - vec2(shift - wobble, 0.0)).b;
-    color.rgb += (rand(uv + fract(uTime)) - 0.5) * noise;
-    color.rgb *= 0.92 + 0.08 * sin(uv.y * uResolution.y * 1.5);
-  `,
+  color: (c) => {
+    const { uv, uniforms: u } = c;
+    const wobble = sin(uv.y.mul(40).add(c.time.mul(3))).mul(0.0015);
+    const r = c.sample(uv.add(vec2(u.shift.add(wobble), 0))).r;
+    const b = c.sample(uv.sub(vec2(u.shift.sub(wobble), 0))).b;
+    let rgb = vec3(r, c.color.g, b).add(
+      rand(uv.add(fract(c.time)))
+        .sub(0.5)
+        .mul(u.noise),
+    );
+    rgb = rgb.mul(sin(uv.y.mul(c.resolution.y).mul(1.5)).mul(0.08).add(0.92));
+    return vec4(rgb, c.color.a);
+  },
 };
 const NIGHT_VISION: EffectDefinition = {
   name: 'nightVision',
   uniforms: { gain: 2.2 },
-  header: 'float rand(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }',
-  fragment: `
-    float lum = dot(color.rgb, vec3(0.299, 0.587, 0.114)) * gain;
-    lum += (rand(uv * uResolution + uTime) - 0.5) * 0.15;
-    lum *= 0.85 + 0.15 * sin(uv.y * uResolution.y * 0.8 + uTime * 10.0);
-    float ring = smoothstep(0.75, 0.35, length((uv - 0.5) * vec2(uResolution.x / uResolution.y, 1.0)));
-    color = vec4(vec3(0.15, 1.0, 0.3) * lum * ring, 1.0);
-  `,
+  color: (c) => {
+    const { uv, resolution: res } = c;
+    let lum = dot(c.color.rgb, vec3(0.299, 0.587, 0.114)).mul(c.uniforms.gain);
+    lum = lum.add(rand(uv.mul(res).add(c.time)).sub(0.5).mul(0.15));
+    lum = lum.mul(
+      sin(uv.y.mul(res.y).mul(0.8).add(c.time.mul(10)))
+        .mul(0.15)
+        .add(0.85),
+    );
+    const ring = smoothstep(0.75, 0.35, length(uv.sub(0.5).mul(vec2(res.x.div(res.y), 1))));
+    return vec4(vec3(0.15, 1, 0.3).mul(lum).mul(ring), 1);
+  },
 };
 shaders
   .defineEffect(EffectPresets.pixelate())
@@ -634,12 +655,17 @@ const graphPage: Scene = {
         }),
       ];
       ui.require<UILabel>('graphNodes').setText(`${g.title}：\n${g.chain}`);
-      // 編譯出來的 GLSL（只列出主要的部分）
-      const code = compileShaderGraph(g.graph)
-        .fragment.split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean);
-      ui.require<UILabel>('graphCode').setText(code.slice(0, 18).join('\n') + (code.length > 18 ? '\n…' : ''));
+      // 編譯的結果：節點圖變成 TSL 節點（three.js 再產生 WGSL；著色器編輯器的「程式碼」分頁看得到完整的程式）
+      const c = compileShaderGraph(g.graph);
+      ui.require<UILabel>('graphCode').setText(
+        [
+          `種類：${c.kind === 'effect' ? '全螢幕效果' : '材質'}`,
+          `節點：${g.graph.nodes.length} 個、連線 ${g.graph.links.length} 條`,
+          `頂點位移：${c.position ? '有' : '沒有'}`,
+          `半透明：${c.transparent ? '是' : '否'}、畫${c.side === 'double' ? '兩面' : c.side === 'back' ? '背面' : '正面'}`,
+          `貼圖：${c.textures.length} 張`,
+        ].join('\n'),
+      );
     };
     showGraph('rainbow');
     pageUpdate = (dt) => shown.forEach((e) => math.rotate(w.require(e, Transform), [0, dt * 0.4, 0]));
@@ -674,7 +700,7 @@ ui.setHandlers({
   hotSwap: () => {
     diagonal = !diagonal;
     // 執行中修改著色器程式：所有用到 stripes 的材質重新編譯，uniform 的值保留
-    shaders.update('stripes', { fragment: diagonal ? STRIPES_D : STRIPES_H });
+    shaders.update('stripes', { color: diagonal ? STRIPES_D : STRIPES_H });
     ui.require<UIButton>('hotSwap').setText(
       diagonal ? '熱更新：改回橫線（shaders.update）' : '熱更新：改成斜線（shaders.update）',
     );
@@ -700,3 +726,16 @@ await new PluginManager(engine, { api: { ui2d } }).install(perfMonitor, {
 
 showPage('postfx');
 engine.start();
+
+// 預先編譯風格預設用到的效果組合：第一次切換風格時就不會頓一下（每幀一個，在看不見的小緩衝區畫一次）
+void postfx.prewarm(
+  Object.values(LOOKS).map((l) => ({
+    toneMapping: l.toneMapping as 'aces',
+    bloom: { enabled: l.bloom },
+    dof: { enabled: l.dof },
+    vignette: { enabled: l.vignette },
+    film: { enabled: l.film || l.grayscale, grayscale: l.grayscale },
+    ao: { enabled: l.ao },
+    color: { enabled: l.saturation !== 1 || l.contrast !== 1 || l.tint !== '#ffffff' },
+  })),
+);

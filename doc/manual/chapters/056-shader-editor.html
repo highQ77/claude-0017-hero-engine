@@ -1,6 +1,6 @@
 <!-- group: 核心 -->
 <h1>著色器編輯器</h1>
-<p class="lead">著色器編輯器是開發時使用的網頁工具，用<b>節點</b>拼出自訂著色器（不用寫 GLSL）：貼在 3D 物件上的<b>材質</b>，或套用在整個畫面上的<b>全螢幕效果</b>（後製），存在專案 <code>public/shaders</code> 裡的節點圖檔（<code>名稱.shader.json</code>）。預覽用和遊戲一樣的引擎著色器庫繪製，看到的就是遊戲裡的樣子。它只在 <code>node hero dev</code> 時提供，不會被打包到遊戲裡（節點圖檔本身在 <code>public/</code>，會照常發佈）。編輯器移植自 Shader Composer。</p>
+<p class="lead">著色器編輯器是開發時使用的網頁工具，用<b>節點</b>拼出自訂著色器（不用寫程式）：貼在 3D 物件上的<b>材質</b>，或套用在整個畫面上的<b>全螢幕效果</b>（後製），存在專案 <code>public/shaders</code> 裡的節點圖檔（<code>名稱.shader.json</code>）。預覽用和遊戲一樣的引擎著色器庫繪製，看到的就是遊戲裡的樣子。它只在 <code>node hero dev</code> 時提供，不會被打包到遊戲裡（節點圖檔本身在 <code>public/</code>，會照常發佈）。編輯器移植自 Shader Composer。</p>
 
 <h2>開啟</h2>
 <p>執行 <code>node hero dev</code> 後打開 <code>/shader-editor.html</code>，或按任何一個編輯器頁首切換列的「著色器」（UI／3D 場景／著色器，會在另一個分頁打開）。網址加上 <code>?file=名稱</code> 會直接開啟那個節點圖檔。</p>
@@ -10,7 +10,7 @@
   <li><b>工具列</b>：第一排是檔案（開啟、新增、刪除、儲存 ⌘/Ctrl+S），檔名旁的圓點代表還沒儲存；第二排是範例、復原／重做、置中、匯入／匯出 JSON、清空。</li>
   <li><b>左邊</b>：節點庫（可以搜尋，拖到節點圖或雙擊加入）與預覽（球體、立方體、圓環、平面 3D、平面 2D；拖曳旋轉、滾輪縮放，可以截圖、全螢幕）。</li>
   <li><b>中間</b>：節點圖。每個節點都有即時縮圖，顯示那個節點輸出的結果。</li>
-  <li><b>右邊</b>：「屬性」編輯選取節點的參數與輸入；沒有選取時顯示在遊戲裡使用的程式。「GLSL」分頁是產生的著色器程式。</li>
+  <li><b>右邊</b>：「屬性」編輯選取節點的參數與輸入；沒有選取時顯示在遊戲裡使用的程式。「程式碼」分頁是 three.js 從節點圖產生的著色器程式（WGSL；瀏覽器用 WebGL2 備援時是 GLSL）。</li>
 </ul>
 
 <h2>操作</h2>
@@ -37,7 +37,7 @@
   <li><b>Screen Color</b>：畫面上這個位置原本的顏色。UV 可以偏移、切格子，做出扭曲、像素化、色差。只能用在全螢幕效果的圖。</li>
   <li><b>Screen Size</b>：畫面大小（像素），一個像素在 UV 上是 1 ÷ Screen Size。</li>
   <li>顏色是畫面上看到的值：效果加在色調映射之後（<code>display</code> 階段），2D 介面不受影響。</li>
-  <li>預覽固定是「平面 2D」，效果套用在一張示範畫面上；GLSL 分頁顯示遊戲裡實際用的效果程式。</li>
+  <li>預覽固定是「平面 2D」，效果套用在一張示範畫面上；「程式碼」分頁顯示遊戲裡實際用的效果程式。</li>
   <li>3D 才有的節點（法線、世界座標、光照）在全螢幕效果裡是固定值，沒有意義。</li>
   <li>範例：暗角、復古（懷舊色調）、波動扭曲、像素化、CRT 掃描線。</li>
 </ul>
@@ -89,7 +89,7 @@ spawn.mesh(world, { geometry: { sphere: [1, 96, 64] }, material });
 material.uniforms.uLightDir.value.set(0.3, 1, 0.2).normalize();
 </script>
 <ul>
-  <li>已經讀進來的內容用 <code>shaderGraphDefinition(parseShaderGraphFile(文字), '名稱')</code>；只想要 GLSL 片段用 <code>compileShaderGraph(graph)</code>。</li>
+  <li>已經讀進來的內容用 <code>shaderGraphDefinition(parseShaderGraphFile(文字), '名稱')</code>；只想要 TSL 節點用 <code>compileShaderGraph(graph)</code>。</li>
   <li>也讀得懂 Shader Composer 匯出的 JSON：用「匯入 JSON」打開後儲存。</li>
-  <li>自己的節點：<code>defineShaderNode({ type, title, category, inputs, outputs, glsl })</code>（見 <code>src/shaders/graph/nodes.ts</code> 開頭的說明），編輯器和遊戲都要先執行這段程式。</li>
+  <li>自己的節點：<code>defineShaderNode({ type, title, category, inputs, outputs, tsl })</code>（<code>tsl</code> 函式拿到各輸入的節點、回傳各輸出的節點）（見 <code>src/shaders/graph/nodes.ts</code> 開頭的說明），編輯器和遊戲都要先執行這段程式。</li>
 </ul>

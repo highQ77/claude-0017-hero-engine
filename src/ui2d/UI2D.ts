@@ -154,7 +154,7 @@ export interface UI2DOptions {
   measure?: MeasureTextWidth;
   /** 自訂圖片載入（預設用瀏覽器的 Image） */
   loadImage?: ImageLoader;
-  /** 自訂顯示層（UIPlugin 用來把介面疊在 WebGL 畫面上）；預設有容器時用獨立畫布 */
+  /** 自訂顯示層（UIPlugin 用來把介面疊在 3D 畫面上）；預設有容器時用獨立畫布 */
   renderer?: UIRenderer | null;
   /** 裝置像素比（預設跟隨瀏覽器，最高 2） */
   pixelRatio?: number;
@@ -358,7 +358,7 @@ export class UI2D {
       viewport: () => this.size,
       editorHints: options.editorHints ?? false,
       imageSource: (url) => loadedImages.get(url),
-      canvasHost: () => this.renderer?.canvasHost ?? null,
+      canvasLayers: () => this.renderer?.canvasLayers ?? null,
     };
 
     if (this.container) this.observeContainer(this.container);

@@ -48,7 +48,7 @@ export { UIPainter } from './UIPainter';
 export type { PaintState, Context2D, ImageSourceLookup } from './UIPainter';
 export { CanvasUIRenderer } from './CanvasRenderer';
 export type { UIRenderer, ScreenFader } from './CanvasRenderer';
-export { UITextureRenderer } from './UITexture';
+export { UITextureRenderer, type UITextureCopier } from './UITexture';
 export type { UICanvasMode, UIRenderStats } from './UITexture';
 export { UIPlugin, UIKey, UI_OVERLAY_ORDER } from './UIPlugin';
 export type { UIPluginOptions } from './UIPlugin';

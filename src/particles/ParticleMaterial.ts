@@ -1,51 +1,21 @@
 import * as THREE from 'three';
-
-/** 面向攝影機的粒子面片，可依速度拉長 */
-const vertexShader = /* glsl */ `
-  attribute vec3 offset;
-  attribute vec3 velocity;
-  attribute vec4 color;
-  attribute vec2 sizeRotation; // x：大小，y：旋轉
-  uniform float stretch;
-  varying vec2 vUv;
-  varying vec4 vColor;
-
-  void main() {
-    vUv = uv;
-    vColor = color;
-    vec4 mvPosition = modelViewMatrix * vec4(offset, 1.0);
-    float size = sizeRotation.x;
-    vec2 corner;
-    vec2 viewVelocity = (modelViewMatrix * vec4(velocity, 0.0)).xy;
-    float speed = length(viewVelocity);
-    if (stretch > 0.0 && speed > 1e-4) {
-      // 沿螢幕上的移動方向拉長
-      vec2 dir = viewVelocity / speed;
-      vec2 perp = vec2(-dir.y, dir.x);
-      corner = dir * position.y * size * (1.0 + speed * stretch * 10.0) + perp * position.x * size;
-    } else {
-      float c = cos(sizeRotation.y);
-      float s = sin(sizeRotation.y);
-      corner = mat2(c, s, -s, c) * position.xy * size;
-    }
-    mvPosition.xy += corner;
-    gl_Position = projectionMatrix * mvPosition;
-  }
-`;
-
-const fragmentShader = /* glsl */ `
-  uniform sampler2D map;
-  varying vec2 vUv;
-  varying vec4 vColor;
-
-  void main() {
-    vec4 color = texture2D(map, vUv) * vColor;
-    if (color.a < 0.003) discard;
-    gl_FragColor = color;
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
-  }
-`;
+import { MeshBasicNodeMaterial } from 'three/webgpu';
+import {
+  Fn,
+  If,
+  attribute,
+  cameraProjectionMatrix,
+  cos,
+  length,
+  modelViewMatrix,
+  positionGeometry,
+  sin,
+  texture,
+  uniform,
+  uv,
+  vec2,
+  vec4,
+} from 'three/tsl';
 
 let defaultTexture: THREE.DataTexture | null = null;
 
@@ -72,18 +42,62 @@ export function defaultParticleTexture(): THREE.DataTexture {
   return defaultTexture;
 }
 
-export function createParticleMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      map: { value: defaultParticleTexture() },
-      stretch: { value: 0 },
-    },
-    vertexShader,
-    fragmentShader,
+/**
+ * 粒子材質（節點材質）：面向攝影機的面片，可依速度拉長、加法混合。
+ * uniforms.map（貼圖）、uniforms.stretch（依速度拉長的程度）可以改。
+ */
+export type ParticleMaterial = THREE.Material & {
+  uniforms: { map: { value: THREE.Texture }; stretch: { value: number } };
+};
+
+/** 建立粒子材質 */
+export function createParticleMaterial(): ParticleMaterial {
+  return createParticleNodeMaterial();
+}
+
+/** 面向攝影機、可依速度拉長；色調映射與顏色轉換由節點材質自動處理 */
+function createParticleNodeMaterial(): ParticleMaterial {
+  const map = texture(defaultParticleTexture());
+  const stretch = uniform(0);
+  const material = new MeshBasicNodeMaterial({
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
+  material.vertexNode = Fn(() => {
+    const offset = attribute('offset', 'vec3');
+    const velocity = attribute('velocity', 'vec3');
+    const sizeRotation = attribute('sizeRotation', 'vec2');
+    const size = sizeRotation.x;
+    const mv = modelViewMatrix.mul(vec4(offset, 1)).toVar();
+    const viewVelocity = modelViewMatrix.mul(vec4(velocity, 0)).xy;
+    const speed = length(viewVelocity);
+    const corner = vec2(0, 0).toVar();
+    If(stretch.greaterThan(0).and(speed.greaterThan(1e-4)), () => {
+      // 沿螢幕上的移動方向拉長
+      const dir = viewVelocity.div(speed);
+      const perp = vec2(dir.y.negate(), dir.x);
+      corner.assign(
+        dir
+          .mul(positionGeometry.y)
+          .mul(size)
+          .mul(speed.mul(stretch).mul(10).add(1))
+          .add(perp.mul(positionGeometry.x).mul(size)),
+      );
+    }).Else(() => {
+      const c = cos(sizeRotation.y);
+      const s = sin(sizeRotation.y);
+      // 和 GLSL 的 mat2(c, s, -s, c) * p 一樣
+      const p = positionGeometry.xy;
+      corner.assign(vec2(c.mul(p.x).sub(s.mul(p.y)), s.mul(p.x).add(c.mul(p.y))).mul(size));
+    });
+    return cameraProjectionMatrix.mul(vec4(mv.xy.add(corner), mv.z, mv.w));
+  })();
+  material.colorNode = map.sample(uv()).mul(attribute('color', 'vec4'));
+  material.alphaTest = 0.003;
+  // 和 ShaderMaterial 一樣的介面：uniforms.map.value、uniforms.stretch.value
+  (material as unknown as ParticleMaterial).uniforms = { map, stretch } as unknown as ParticleMaterial['uniforms'];
+  return material as unknown as ParticleMaterial;
 }
 
 /** 建立實例化的面片幾何與每個粒子的屬性 */

@@ -3,15 +3,12 @@ export {
   NODE_DEFS,
   CATEGORIES,
   PALETTES,
-  HELPERS,
   TYPE_COLOR,
   TYPE_DIM,
-  CENTERED_UV,
   defineShaderNode,
   convertType,
   widerType,
-  glslFloat,
-  hexToVec3,
+  hexColor,
 } from './nodes';
 export type {
   GraphType,
@@ -22,6 +19,7 @@ export type {
   NodeOutput,
   NodeParam,
   NodeContext,
+  NodeBuiltin,
   CategoryId,
 } from './nodes';
 export { compileShaderGraph, analyzeShaderGraphTypes, upstreamHas, shaderGraphKind, GRAPH_UNIFORMS } from './compile';
@@ -32,6 +30,7 @@ export type {
   CompiledShaderGraph,
   CompileOptions,
   ShaderGraphKind,
+  GraphEnv,
 } from './compile';
 export {
   SHADER_GRAPH_FORMAT,

@@ -29,7 +29,7 @@ function fakeRenderer() {
     },
   };
   return {
-    renderer: renderer as unknown as THREE.WebGLRenderer,
+    renderer: renderer as unknown as import('three/webgpu').WebGPURenderer,
     calls,
     get clears() {
       return clears;
@@ -218,24 +218,27 @@ describe('點選（射線檢測）', () => {
 });
 
 describe('動態解析度只降低 3D 場景（畫布與介面維持清晰）', () => {
-  test('變慢時：3D 的像素比降低，畫布的像素比不變；場景畫在較小的範圍再放大', () => {
+  test('變慢時：3D 的像素比降低，畫布的像素比不變；場景畫在較小的繪製目標再放大', () => {
     const clock = fakeScheduler();
     const ops: string[] = [];
     const pixelRatios: number[] = [];
+    let target: THREE.RenderTarget | null = null;
     const renderer = {
       domElement: { parentElement: null, remove() {} },
       shadowMap: { enabled: false, type: 0 },
       getPixelRatio: () => 2,
       setPixelRatio: (v: number) => pixelRatios.push(v),
       setSize() {},
-      setViewport: (_x: number, _y: number, w: number, h: number) =>
-        ops.push(`viewport ${Math.round(w)}×${Math.round(h)}`),
-      copyFramebufferToTexture: (t: THREE.FramebufferTexture) => ops.push(`copy ${t.image.width}×${t.image.height}`),
+      getRenderTarget: () => target,
+      setRenderTarget: (t: THREE.RenderTarget | null) => {
+        target = t;
+        ops.push(t ? `target ${t.width}×${t.height}` : 'target 畫面');
+      },
       render: (scene: THREE.Scene) =>
         ops.push(scene.children.length === 1 && (scene.children[0] as THREE.Mesh).isMesh ? 'upscale' : 'scene'),
       clear() {},
       dispose() {},
-    } as unknown as THREE.WebGLRenderer;
+    } as unknown as import('three/webgpu').WebGPURenderer;
     const ecs = new EcsPlugin();
     const render = new RenderPlugin({
       renderer,
@@ -256,6 +259,6 @@ describe('動態解析度只降低 3D 場景（畫布與介面維持清晰）', 
     expect(resized.at(-1)).toBeCloseTo(1.7); // 通知後製重新配置緩衝區
     ops.length = 0;
     clock.frame(16);
-    expect(ops).toEqual(['viewport 170×85', 'scene', 'copy 340×170', 'viewport 200×100', 'upscale']);
+    expect(ops).toEqual(['target 340×170', 'scene', 'target 畫面', 'upscale']);
   });
 });

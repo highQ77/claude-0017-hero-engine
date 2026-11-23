@@ -94,10 +94,10 @@ engine.timers.after(0.5, () => {
 ```
 
 ## UI3DControllerOptions
-自己建立 UI3DController 時的設定：共用事件函式、WebGL 繪製器、畫好時的通知。
+自己建立 UI3DController 時的設定：共用事件函式、畫好時的通知。
 
 ```ts
-const options: UI3DControllerOptions = { handlers: { hi: () => console.log('hi') }, gl: () => render.renderer, onPanelRendered: () => {} };
+const options: UI3DControllerOptions = { handlers: { hi: () => console.log('hi') }, onPanelRendered: () => {} };
 console.log('設定的鍵：', Object.keys(options));
 ```
 

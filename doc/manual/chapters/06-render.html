@@ -15,6 +15,15 @@ export const render = use(new RenderPlugin({
 }));
 </script>
 
+<h2>WebGPU</h2>
+<p>引擎用 <strong>WebGPU</strong> 繪製（three.js 的 <code>WebGPURenderer</code>）；瀏覽器不支援 WebGPU 時，它會自動改用 WebGL2 畫，遊戲不用另外處理，所有功能（後製特效、自訂著色器、節點圖、粒子、介面）兩種情況都能用。</p>
+<ul>
+  <li><code>render.gpuApi</code> 是實際用的圖形介面：<code>'webgpu'</code>，或 <code>'webgl2'</code>（不支援 WebGPU 時的備援）。</li>
+  <li>WebGPU 要先非同步初始化（取得 GPU），完成前不繪製；要等它的話寫 <code>await render.ready</code>。</li>
+  <li>材質是 three.js 的<b>節點材質</b>：一般的材質（<code>MeshStandardMaterial</code>…）會自動轉換；自訂著色器用 <b>TSL</b>（three.js 的著色器節點語言，用 JavaScript 函式組出著色器，見<a href="#/more">更多功能</a>的自訂著色器）。自己寫 GLSL 的 three.js 材質（<code>ShaderMaterial</code>、<code>onBeforeCompile</code>）與 <code>EffectComposer</code> 不能用。</li>
+  <li>遊戲裡 <code>import … from 'three'</code> 拿到的是 <code>three/webgpu</code>（打包設定已經對應好），WebGL 的繪製器不會被打包進來。</li>
+</ul>
+
 <h2>元件</h2>
 <table>
   <thead><tr><th>元件</th><th>常用欄位</th></tr></thead>

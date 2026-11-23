@@ -231,7 +231,7 @@ export type MaterialDesc =
 
 /** 描述對應的材質類別（create.material({ standard: … }) 回傳 MeshStandardMaterial） */
 export type MaterialOf<D> = D extends { readonly shaderGraph: unknown }
-  ? THREE.ShaderMaterial
+  ? THREE.Material
   : D extends { readonly physical: unknown }
     ? THREE.MeshPhysicalMaterial
     : D extends { readonly basic: unknown }

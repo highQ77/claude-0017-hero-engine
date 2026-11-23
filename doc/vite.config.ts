@@ -171,6 +171,8 @@ export default defineConfig({
   // '@engine' 是總入口（src/index.ts），'@engine/模組' 是各模組
   resolve: {
     alias: [
+      // 只用 WebGPU：'three' 指向 three/webgpu（和遊戲專案一樣，見 tools/project.ts）
+      { find: /^three$/, replacement: 'three/webgpu' },
       { find: /^@engine$/, replacement: join(ENGINE_ROOT, 'src', 'index.ts') },
       { find: '@engine', replacement: join(ENGINE_ROOT, 'src') },
     ],

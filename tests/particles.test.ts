@@ -18,7 +18,7 @@ function setup() {
     render() {},
     clear() {},
     dispose() {},
-  } as unknown as THREE.WebGLRenderer;
+  } as unknown as import('three/webgpu').WebGPURenderer;
   const render = new RenderPlugin({ renderer: fakeRenderer, size: { width: 10, height: 10 } });
   const particles = new ParticlePlugin();
   const engine = new Engine({ scheduler: clock.scheduler, fixedDelta: 0.1, maxDelta: 0.1, pauseOnHidden: false });

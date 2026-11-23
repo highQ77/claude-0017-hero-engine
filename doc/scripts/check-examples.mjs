@@ -6,6 +6,8 @@
  *   node doc/scripts/check-examples.mjs --run    另外用 Chrome（無畫面模式）實際執行每個範例，
  *                                                收集錯誤訊息（需要安裝 Google Chrome）
  *   --url=http://localhost:5173/doc              --run 時改用已經開著的伺服器（npm run dev 的 /doc），不另開文件伺服器
+ *   --gpu                                        --run 時用電腦真正的顯示卡（有 WebGPU）；預設用軟體繪製（SwiftShader：
+ *                                                結果穩定、可以逐像素比較，但沒有 WebGPU，WebGPURenderer 會自動改用 WebGL2）
  *
  * 只檢查完整的範例；data-run="false" 的程式片段不檢查。
  *
@@ -16,9 +18,9 @@
  *   --run-api    另外用 Chrome 實際執行 API 參考的每個範例（很多，要幾十分鐘）
  *   --api-only   只檢查 API 參考（略過章節的範例）
  *   --api-module=core,scene   只執行這些模組的 API 範例（搭配 --run-api）
+ *   --api-name=UI2D,UIPanel   只執行這些 API 的範例（搭配 --run-api）
  *
  * UICanvas 繪圖範例（data-lang="canvas"）在 --run 時打開章節頁面，依序執行並收集錯誤輸出；
- * 另外打開 manual/canvas-shared-check.html，確認共用模式（借用 three.js 的 WebGL）和獨立模式逐像素相同。
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -201,8 +203,9 @@ async function runInBrowser(list) {
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${profile}`,
       '--no-first-run',
-      '--use-angle=swiftshader',
-      '--enable-unsafe-swiftshader',
+      ...(process.argv.includes('--gpu')
+        ? ['--enable-unsafe-webgpu']
+        : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']),
       '--autoplay-policy=no-user-gesture-required',
       'about:blank',
     ],
@@ -341,27 +344,6 @@ async function runInBrowser(list) {
       await page.close();
     }
 
-    // UICanvas 共用模式（借用 three.js 的 WebGL）：每個繪圖範例和獨立模式逐像素比較
-    if (!process.argv.includes('--api-only')) {
-      const page = await openPage(`${base}/manual/canvas-shared-check.html`);
-      let result = null;
-      for (let t = 0; t < 120 && !result; t++) {
-        await sleep(500);
-        result = await page.evaluate('window.__sharedCheck ? JSON.stringify(window.__sharedCheck) : null');
-      }
-      const items = result ? JSON.parse(result).filter((x) => !x.skipped) : [];
-      const bad = items.filter((x) => x.error || !(x.mean < 0.5));
-      if (!result || bad.length || page.errors.length) {
-        failed += bad.length + page.errors.length + (result ? 0 : 1);
-        console.log(`✗ UICanvas 共用模式：${items.length} 個範例${result ? '' : '（逾時）'}`);
-        for (const b of bad) console.log(`    [${b.title}] ${b.error ?? `平均差異 ${b.mean.toFixed(3)}`}`);
-        for (const err of page.errors) console.log(`    ${err}`);
-      } else {
-        console.log(`✓ UICanvas 共用模式：${items.length} 個範例和獨立模式逐像素相同`);
-      }
-      await page.close();
-    }
-
     // UICanvas 繪圖範例（data-lang="canvas"）：在章節頁面裡依序執行，收集錯誤輸出
     const canvasChapters = process.argv.includes('--api-only')
       ? []
@@ -426,6 +408,12 @@ function apiGuides() {
   const pick = only
     ? list.filter((g) => only.some((m) => g.label.startsWith(`@engine/${m} `) || g.label.startsWith(`${m} `)))
     : list;
+  // --api-name=UITextureRenderer,UITextureCopier：只看這些 API（搭配 --run-api）
+  const names = process.argv
+    .find((a) => a.startsWith('--api-name='))
+    ?.split('=')[1]
+    .split(',');
+  if (names) return { list: pick.filter((g) => names.includes(g.label.split(' ').pop())), missing, total: seen.size };
   return { list: pick, missing, total: seen.size };
 }
 

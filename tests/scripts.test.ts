@@ -283,7 +283,7 @@ describe('點擊與滑鼠移入移出', () => {
       render(scene: THREE.Scene) {
         scene.updateMatrixWorld();
       },
-    } as unknown as THREE.WebGLRenderer;
+    } as unknown as import('three/webgpu').WebGPURenderer;
     engine.use(new RenderPlugin({ renderer: fakeRenderer, size: { width: 100, height: 100 } }));
     const input = new InputPlugin({ getGamepads: () => [] });
     engine.use(input);

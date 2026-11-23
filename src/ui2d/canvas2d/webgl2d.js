@@ -1308,7 +1308,12 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
 
     /* ---------------- 共用模式：自己的畫面 framebuffer、交還 GL 狀態 ---------------- */
     /** 共用模式的結果（WebGLTexture，預乘 alpha、sRGB 值、第 0 列是畫面底部）；一般模式是 null */
-    get outputTexture() { return this._tgt ? this._tgt.tex : null; }
+    get outputTexture() {
+      if (!this._tgt) return null;
+      // 多重取樣的解析延到要讀取時才做：解析完才是最新的內容
+      if (this._resolvePending) { this._begin(); this._resolveIfPending(); this._end(false); }
+      return this._tgt.tex;
+    }
     /** 依 canvas.width / height 配置畫面 framebuffer（尺寸沒變就不動；改變後內容清空） */
     _allocTarget() {
       const gl = this.gl, w = Math.max(1, this.canvas.width | 0), h = Math.max(1, this.canvas.height | 0);
@@ -1367,9 +1372,16 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       if (t && t.msaa) { this._resolve(); this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, t.resolveFB); }
       else this._bindScreen();
     }
+    /** 有還沒解析的繪圖時解析（共用模式：每次繪圖後不馬上解析，延到要讀取輸出貼圖時，一幀最多一次） */
+    _resolveIfPending() {
+      if (!this._resolvePending) return;
+      this._resolvePending = false;
+      this._resolve();
+    }
     /** 多重取樣畫面 → 輸出貼圖 */
     _resolve() {
       const gl = this.gl, t = this._tgt;
+      this._resolvePending = false;
       if (!t || !t.msaa) return;
       const scissor = gl.isEnabled(gl.SCISSOR_TEST);
       if (scissor) gl.disable(gl.SCISSOR_TEST);
@@ -1406,6 +1418,7 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
       this._begin();
       const gl = this.gl, t = this._tgt;
       try {
+        this._resolveIfPending();
         if (e.w !== t.w || e.h !== t.h) {
           gl.bindTexture(gl.TEXTURE_2D, e.tex);
           // 3D 物件上常常縮小顯示：要有 mipmap，細線才不會在縮小時消失
@@ -1475,7 +1488,8 @@ vec2 fromCSS(vec2 p) { return vec2(p.x / u_size.x, 1.0 - p.y / u_size.y); }
     _end(drew = true) {
       if (--this._depth) return;
       const gl = this.gl;
-      if (drew) { this._resolve(); this._exportDirty = true; }
+      // 多重取樣的解析延後（每次繪圖都解析：圖表一幀有幾十次繪圖，就多幾十次全畫布的複製，Safari 很慢）
+      if (drew) { this._resolvePending = true; this._exportDirty = true; }
       gl.bindVertexArray(null);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       if (this._ext.onEnd) this._ext.onEnd();

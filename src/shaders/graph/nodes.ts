@@ -3,19 +3,46 @@
  *
  * - 型別：float、vec2、vec3、vec4，以及泛型 'T'（解析成「已連接的 T 輸入裡維度最大的」，沒有連接時是 float）
  * - 型別不同時自動轉換：float 擴展成向量，向量截取前幾個分量
- * - 節點產生的 GLSL 可以用的變數：vUv、sgNormal（世界空間法線）、sgWorldPos（世界座標）、
- *   sgObjPos（物件座標，只在片段著色器；頂點著色器用 position）、cameraPosition、
- *   uTime，以及節點圖的 uniform uMouse、uAspect、uLightDir（見 compile.ts）
+ * - 每個節點的 tsl 函式拿到輸入的 TSL 節點，回傳每個輸出的節點（three.js 的 TSL：.add、.mul、sin、mix…）
+ * - 內建的值（UV、法線、時間、滑鼠、光源方向…）用 ctx.builtin(名稱)，見 NodeBuiltin
  *
  * 新增節點：
  *
  *   defineShaderNode({
  *     type: 'myNode', title: 'My Node', category: 'math', desc: '說明',
- *     inputs: [{ name: 'x', type: 'T', default: 0 }],   // 或 { expr: 'vUv', exprType: 'vec2' }：沒有連接時的值
+ *     inputs: [{ name: 'x', type: 'T', default: 0 }],   // 或 { expr: 'uv', exprType: 'vec2' }：沒有連接時的內建值
  *     outputs: [{ name: 'out', type: 'T' }],
- *     glsl: (i) => ({ out: `sin(${i.x})` }),
+ *     tsl: (i) => ({ out: sin(i.x) }),
  *   });
  */
+import { hsv2rgb, rotate2, sdBox } from '../functions';
+import { type ShaderNode, tsl } from '../tsl';
+
+const {
+  abs,
+  atan,
+  clamp,
+  cos,
+  distance,
+  dot,
+  float,
+  floor,
+  fract,
+  length,
+  max,
+  min,
+  mix,
+  mod,
+  normalize,
+  pow,
+  sin,
+  smoothstep,
+  sqrt,
+  step,
+  vec2,
+  vec3,
+  vec4,
+} = tsl;
 
 /** 節點連接埠的資料型別 */
 export type GraphType = 'float' | 'vec2' | 'vec3' | 'vec4';
@@ -32,12 +59,25 @@ export const TYPE_COLOR: Record<GraphType, string> = {
   vec4: '#f06292',
 };
 
-/** 置中、保持長寬比的 UV（範圍約 -1..1） */
-export const CENTERED_UV = '((vUv - 0.5) * vec2(uAspect, 1.0) * 2.0)';
-/** 世界空間法線 */
-const N_EXPR = 'sgNormal';
-/** 指向攝影機的方向 */
-const V_EXPR = 'normalize(cameraPosition - sgWorldPos)';
+/**
+ * 節點可以用的內建值（ctx.builtin）：
+ * uv（貼圖座標）、centeredUV（置中、保持長寬比的 UV，約 -1..1）、normal（世界空間法線）、
+ * worldPos（世界座標）、objectPos（物件座標）、view（指向攝影機的方向）、light（光源方向，uniform uLightDir）、
+ * time（秒）、resolution（畫面大小，像素）、mouse（滑鼠位置 0..1，uniform uMouse）、
+ * screen（全螢幕效果：畫面原本的顏色 rgb）
+ */
+export type NodeBuiltin =
+  | 'uv'
+  | 'centeredUV'
+  | 'normal'
+  | 'worldPos'
+  | 'objectPos'
+  | 'view'
+  | 'light'
+  | 'time'
+  | 'resolution'
+  | 'mouse'
+  | 'screen';
 
 /** 節點的一個輸入 */
 export interface NodeInput {
@@ -45,8 +85,8 @@ export interface NodeInput {
   type: PortType;
   /** 沒有連接時的數值（節點上可以修改） */
   default?: number;
-  /** 沒有連接時改用這段 GLSL（例如 vUv），不能在節點上修改 */
-  expr?: string;
+  /** 沒有連接時改用這個內建值（例如 uv），不能在節點上修改 */
+  expr?: NodeBuiltin;
   /** expr 的型別 */
   exprType?: GraphType;
   /** expr 在編輯器裡顯示的名稱 */
@@ -71,18 +111,18 @@ export interface NodeParam {
   options?: [string, string][];
 }
 
-/** 產生 GLSL 時節點可以用的東西 */
+/** 節點的 tsl 函式可以用的東西 */
 export interface NodeContext {
-  /** 'vertex'：在頂點著色器求值（接到 Vertex Output 的節點）；'fragment'：片段著色器 */
+  /** 'vertex'：在頂點階段求值（接到 Vertex Output 的節點）；'fragment'：片段階段 */
   stage: 'vertex' | 'fragment';
-  /** 這個節點某個輸出的變數名稱（用在同一個節點的其他輸出，例如 rgb 取自 rgba） */
-  v(name: string): string;
-  /** 這個節點的貼圖 uniform 名稱（呼叫後會宣告 sampler2D） */
-  texture(): string;
   /** 'material'：材質（Fragment Output）；'effect'：全螢幕效果（Effect Output） */
   mode: 'material' | 'effect';
-  /** 畫面原本的顏色（sampler2D 的名稱）；只有全螢幕效果有，材質裡呼叫會丟出錯誤 */
-  screen(): string;
+  /** 內建的值（見 NodeBuiltin） */
+  builtin(name: NodeBuiltin): ShaderNode;
+  /** 這個節點的貼圖在 uv 的顏色（vec4） */
+  texture(uv: ShaderNode): ShaderNode;
+  /** 畫面原本的顏色（vec4）；只有全螢幕效果有，材質裡呼叫會丟出錯誤 */
+  screen(uv: ShaderNode): ShaderNode;
 }
 
 /** 一種節點 */
@@ -98,100 +138,102 @@ export interface NodeDef {
   inputs: NodeInput[];
   outputs: NodeOutput[];
   params: NodeParam[];
-  /** 用到的 GLSL 輔助函式（HELPERS 的鍵） */
-  helpers: string[];
-  /** 產生每個輸出的 GLSL 運算式 */
-  glsl?: (
-    inputs: Record<string, string>,
+  /** 產生每個輸出的 TSL 節點 */
+  tsl?: (
+    inputs: Record<string, ShaderNode>,
     params: Record<string, string | number>,
     T: GraphType,
     ctx: NodeContext,
-  ) => Record<string, string>;
+  ) => Record<string, ShaderNode>;
 }
 
-/** defineShaderNode 的參數（inputs、outputs、params、helpers 可以省略） */
-export type NodeDefInput = Omit<NodeDef, 'inputs' | 'outputs' | 'params' | 'helpers'> &
-  Partial<Pick<NodeDef, 'inputs' | 'outputs' | 'params' | 'helpers'>>;
+/** defineShaderNode 的參數（inputs、outputs、params 可以省略） */
+export type NodeDefInput = Omit<NodeDef, 'inputs' | 'outputs' | 'params'> &
+  Partial<Pick<NodeDef, 'inputs' | 'outputs' | 'params'>>;
 
 /** 較寬的型別 */
 export function widerType(a: GraphType, b: GraphType): GraphType {
   return TYPE_DIM[b] > TYPE_DIM[a] ? b : a;
 }
 
-/** 把 GLSL 運算式從一種型別轉成另一種 */
-export function convertType(expr: string, from: GraphType, to: GraphType): string {
-  if (from === to) return expr;
-  if (from === 'float') return `${to}(${expr})`;
-  if (to === 'float') return `(${expr}).x`;
+/** 把節點從一種型別轉成另一種（float 擴展成向量，向量截取前幾個分量） */
+export function convertType(node: ShaderNode, from: GraphType, to: GraphType): ShaderNode {
+  if (from === to) return node;
+  const make = { float, vec2, vec3, vec4 }[to];
+  if (from === 'float') return make(node);
+  if (to === 'float') return node.x;
   const f = TYPE_DIM[from];
   const t = TYPE_DIM[to];
-  if (t < f) return `(${expr}).${'xyzw'.slice(0, t)}`;
-  if (from === 'vec2' && to === 'vec3') return `vec3(${expr}, 0.0)`;
-  if (from === 'vec2' && to === 'vec4') return `vec4(${expr}, 0.0, 1.0)`;
-  if (from === 'vec3' && to === 'vec4') return `vec4(${expr}, 1.0)`;
-  return expr;
+  if (t < f) return node['xyzw'.slice(0, t)];
+  if (from === 'vec2' && to === 'vec3') return vec3(node, 0);
+  if (from === 'vec2' && to === 'vec4') return vec4(node, 0, 1);
+  if (from === 'vec3' && to === 'vec4') return vec4(node, 1);
+  return node;
 }
 
-/** 數字寫成 GLSL 的浮點數（一定有小數點） */
-export function glslFloat(v: unknown): string {
-  let n = Number(v);
-  if (!Number.isFinite(n)) n = 0;
-  let s = n.toFixed(5).replace(/0+$/, '');
-  if (s.endsWith('.')) s += '0';
-  if (s === '-0.0') s = '0.0';
-  return s;
+/** 參數的數值（不是數字時是 0） */
+function num(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
-/** '#rrggbb' 轉成 GLSL 的 vec3（0..1，不做色彩空間轉換） */
-export function hexToVec3(hex: string): string {
+/** '#rrggbb' 轉成 vec3（0..1，不做色彩空間轉換：節點圖的顏色是畫面上的顏色） */
+export function hexColor(hex: string): ShaderNode {
   const n = Number.parseInt(String(hex).slice(1), 16) || 0;
-  return `vec3(${glslFloat(((n >> 16) & 255) / 255)}, ${glslFloat(((n >> 8) & 255) / 255)}, ${glslFloat((n & 255) / 255)})`;
+  return vec3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 }
 
-/** GLSL 輔助函式（依宣告順序輸出，被依賴的要排在前面） */
-export const HELPERS: Record<string, string> = {
-  hash: `float sgHash21(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}`,
-  noise: `float sgNoise(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(sgHash21(i), sgHash21(i + vec2(1.0, 0.0)), u.x),
-             mix(sgHash21(i + vec2(0.0, 1.0)), sgHash21(i + vec2(1.0, 1.0)), u.x), u.y);
-}`,
-  fbm: `float sgFbm(vec2 p) {
-  float v = 0.0, a = 0.5;
-  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
-  for (int i = 0; i < 5; i++) { v += a * sgNoise(p); p = m * p; a *= 0.5; }
+// ───────── 節點圖自己的雜訊（和以前的 GLSL 一樣的算法：既有的節點圖畫出來一樣） ─────────
+
+function sgHash21(p: ShaderNode): ShaderNode {
+  let q = fract(p.mul(vec2(123.34, 456.21)));
+  q = q.add(dot(q, q.add(45.32)));
+  return fract(q.x.mul(q.y));
+}
+
+function sgNoise(p: ShaderNode): ShaderNode {
+  const i = floor(p);
+  const f = fract(p);
+  const u = f.mul(f).mul(f.mul(-2).add(3));
+  return mix(
+    mix(sgHash21(i), sgHash21(i.add(vec2(1, 0))), u.x),
+    mix(sgHash21(i.add(vec2(0, 1))), sgHash21(i.add(vec2(1, 1))), u.x),
+    u.y,
+  );
+}
+
+function sgFbm(p: ShaderNode): ShaderNode {
+  let v: ShaderNode = float(0);
+  let a = 0.5;
+  let q = p;
+  for (let i = 0; i < 5; i++) {
+    v = v.add(sgNoise(q).mul(a));
+    // mat2(1.6, 1.2, -1.2, 1.6) * q
+    q = vec2(q.x.mul(1.6).sub(q.y.mul(1.2)), q.x.mul(1.2).add(q.y.mul(1.6)));
+    a *= 0.5;
+  }
   return v;
-}`,
-  voronoi: `float sgVoronoi(vec2 p, float t) {
-  vec2 i = floor(p), f = fract(p);
-  float d = 8.0;
-  for (int y = -1; y <= 1; y++)
-  for (int x = -1; x <= 1; x++) {
-    vec2 g = vec2(float(x), float(y));
-    vec2 o = vec2(sgHash21(i + g), sgHash21(i + g + 17.0));
-    o = 0.5 + 0.5 * sin(t + 6.2831 * o);
-    d = min(d, length(g + o - f));
+}
+
+function sgVoronoi(p: ShaderNode, t: ShaderNode): ShaderNode {
+  const i = floor(p);
+  const f = fract(p);
+  let d: ShaderNode = float(8);
+  for (let y = -1; y <= 1; y++) {
+    for (let x = -1; x <= 1; x++) {
+      const g = vec2(x, y);
+      const o = sin(
+        vec2(sgHash21(i.add(g)), sgHash21(i.add(g).add(17)))
+          .mul(6.2831)
+          .add(t),
+      )
+        .mul(0.5)
+        .add(0.5);
+      d = min(d, length(g.add(o).sub(f)));
+    }
   }
   return d;
-}`,
-  rotate: `vec2 sgRot2(vec2 p, float a) {
-  float c = cos(a), s = sin(a);
-  return mat2(c, s, -s, c) * p;
-}`,
-  box: `float sgBox(vec2 p, vec2 b) {
-  vec2 d = abs(p) - b;
-  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-}`,
-  hsv: `vec3 sgHsv2rgb(vec3 c) {
-  vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
-  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
-}`,
-};
+}
 
 /** 節點分類 */
 export type CategoryId = 'input' | 'math' | 'vector' | 'pattern' | 'light' | 'color' | 'output';
@@ -221,23 +263,23 @@ export const NODE_DEFS: Record<string, NodeDef> = {};
 
 /** 新增一種節點（已經有同名的會取代） */
 export function defineShaderNode(d: NodeDefInput): NodeDef {
-  const def: NodeDef = { inputs: [], outputs: [], params: [], helpers: [], ...d };
+  const def: NodeDef = { inputs: [], outputs: [], params: [], ...d };
   NODE_DEFS[def.type] = def;
   return def;
 }
 
 const N = defineShaderNode;
-const uvIn = (name = 'p'): NodeInput => ({ name, type: 'vec2', expr: 'vUv', exprType: 'vec2', exprLabel: 'UV' });
+const uvIn = (name = 'p'): NodeInput => ({ name, type: 'vec2', expr: 'uv', exprType: 'vec2', exprLabel: 'UV' });
 const centeredIn = (name = 'p'): NodeInput => ({
   name,
   type: 'vec2',
-  expr: CENTERED_UV,
+  expr: 'centeredUV',
   exprType: 'vec2',
   exprLabel: '置中 UV',
 });
-const normalIn: NodeInput = { name: 'normal', type: 'vec3', expr: N_EXPR, exprType: 'vec3', exprLabel: 'Normal' };
-const lightIn: NodeInput = { name: 'light', type: 'vec3', expr: 'uLightDir', exprType: 'vec3', exprLabel: 'Light' };
-const viewIn: NodeInput = { name: 'view', type: 'vec3', expr: V_EXPR, exprType: 'vec3', exprLabel: 'View' };
+const normalIn: NodeInput = { name: 'normal', type: 'vec3', expr: 'normal', exprType: 'vec3', exprLabel: 'Normal' };
+const lightIn: NodeInput = { name: 'light', type: 'vec3', expr: 'light', exprType: 'vec3', exprLabel: 'Light' };
+const viewIn: NodeInput = { name: 'view', type: 'vec3', expr: 'view', exprType: 'vec3', exprLabel: 'View' };
 
 // ───────── 輸入 ─────────
 N({
@@ -246,7 +288,7 @@ N({
   category: 'input',
   desc: '網格的貼圖座標 (0..1)',
   outputs: [{ name: 'uv', type: 'vec2' }],
-  glsl: () => ({ uv: 'vUv' }),
+  tsl: (_i, _p, _T, ctx) => ({ uv: ctx.builtin('uv') }),
 });
 N({
   type: 'centeredUV',
@@ -254,7 +296,7 @@ N({
   category: 'input',
   desc: '置中且保持長寬比的 UV (-1..1)',
   outputs: [{ name: 'uv', type: 'vec2' }],
-  glsl: () => ({ uv: CENTERED_UV }),
+  tsl: (_i, _p, _T, ctx) => ({ uv: ctx.builtin('centeredUV') }),
 });
 N({
   type: 'time',
@@ -263,7 +305,7 @@ N({
   desc: '經過秒數（遊戲裡是引擎的 uTime）',
   keywords: '時間',
   outputs: [{ name: 'time', type: 'float' }],
-  glsl: () => ({ time: 'uTime' }),
+  tsl: (_i, _p, _T, ctx) => ({ time: ctx.builtin('time') }),
 });
 N({
   type: 'screenColor',
@@ -277,11 +319,10 @@ N({
     { name: 'rgb', type: 'vec3' },
     { name: 'a', type: 'float' },
   ],
-  glsl: (i, _p, _T, ctx) => ({
-    rgba: `texture(${ctx.screen()}, ${i.uv})`,
-    rgb: `${ctx.v('rgba')}.rgb`,
-    a: `${ctx.v('rgba')}.a`,
-  }),
+  tsl: (i, _p, _T, ctx) => {
+    const rgba = ctx.screen(i.uv);
+    return { rgba, rgb: rgba.rgb, a: rgba.a };
+  },
 });
 N({
   type: 'screenSize',
@@ -290,7 +331,7 @@ N({
   desc: '畫面大小（像素）。一個像素在 UV 上是 1 / Screen Size，像素化、描邊等效果會用到',
   keywords: '解析度 畫面 寬高 resolution 像素',
   outputs: [{ name: 'size', type: 'vec2' }],
-  glsl: () => ({ size: 'uResolution' }),
+  tsl: (_i, _p, _T, ctx) => ({ size: ctx.builtin('resolution') }),
 });
 N({
   type: 'mouse',
@@ -299,7 +340,7 @@ N({
   desc: '滑鼠位置 (0..1)：預覽時是預覽畫面裡的位置；遊戲裡設定材質的 uniform uMouse',
   keywords: '滑鼠',
   outputs: [{ name: 'pos', type: 'vec2' }],
-  glsl: () => ({ pos: 'uMouse' }),
+  tsl: (_i, _p, _T, ctx) => ({ pos: ctx.builtin('mouse') }),
 });
 N({
   type: 'float',
@@ -309,7 +350,7 @@ N({
   keywords: '數值 常數 number',
   params: [{ name: 'value', label: '值', kind: 'number', default: 1, step: 0.1 }],
   outputs: [{ name: 'value', type: 'float' }],
-  glsl: (_i, p) => ({ value: glslFloat(p.value) }),
+  tsl: (_i, p) => ({ value: float(num(p.value)) }),
 });
 N({
   type: 'color',
@@ -319,7 +360,7 @@ N({
   keywords: '顏色 rgb',
   params: [{ name: 'color', label: '顏色', kind: 'color', default: '#ff7a45' }],
   outputs: [{ name: 'rgb', type: 'vec3' }],
-  glsl: (_i, p) => ({ rgb: hexToVec3(String(p.color)) }),
+  tsl: (_i, p) => ({ rgb: hexColor(String(p.color)) }),
 });
 N({
   type: 'texture',
@@ -347,11 +388,9 @@ N({
     { name: 'rgb', type: 'vec3' },
     { name: 'a', type: 'float' },
   ],
-  glsl: (i, _p, _T, ctx) => {
-    const s = ctx.texture();
-    // 頂點著色器沒有自動的 mipmap 層級，要用 textureLod
-    const sample = ctx.stage === 'vertex' ? `textureLod(${s}, ${i.uv}, 0.0)` : `texture(${s}, ${i.uv})`;
-    return { rgba: sample, rgb: `${ctx.v('rgba')}.rgb`, a: `${ctx.v('rgba')}.a` };
+  tsl: (i, _p, _T, ctx) => {
+    const rgba = ctx.texture(i.uv);
+    return { rgba, rgb: rgba.rgb, a: rgba.a };
   },
 });
 N({
@@ -361,7 +400,7 @@ N({
   desc: '世界空間法線',
   keywords: '法線',
   outputs: [{ name: 'n', type: 'vec3' }],
-  glsl: () => ({ n: N_EXPR }),
+  tsl: (_i, _p, _T, ctx) => ({ n: ctx.builtin('normal') }),
 });
 N({
   type: 'worldPos',
@@ -370,7 +409,7 @@ N({
   desc: '世界空間座標',
   keywords: '位置 position',
   outputs: [{ name: 'pos', type: 'vec3' }],
-  glsl: () => ({ pos: 'sgWorldPos' }),
+  tsl: (_i, _p, _T, ctx) => ({ pos: ctx.builtin('worldPos') }),
 });
 N({
   type: 'objectPos',
@@ -379,7 +418,7 @@ N({
   desc: '物件座標（不隨物件移動、旋轉、縮放；花紋會固定在物件上）',
   keywords: '位置 local 物件 position',
   outputs: [{ name: 'pos', type: 'vec3' }],
-  glsl: (_i, _p, _T, ctx) => ({ pos: ctx.stage === 'vertex' ? 'position' : 'sgObjPos' }),
+  tsl: (_i, _p, _T, ctx) => ({ pos: ctx.builtin('objectPos') }),
 });
 N({
   type: 'viewDir',
@@ -388,7 +427,7 @@ N({
   desc: '指向攝影機的方向',
   keywords: '視線 camera',
   outputs: [{ name: 'dir', type: 'vec3' }],
-  glsl: () => ({ dir: V_EXPR }),
+  tsl: (_i, _p, _T, ctx) => ({ dir: ctx.builtin('view') }),
 });
 N({
   type: 'lightDir',
@@ -397,15 +436,15 @@ N({
   desc: '方向光的方向（遊戲裡設定材質的 uniform uLightDir）',
   keywords: '光源',
   outputs: [{ name: 'dir', type: 'vec3' }],
-  glsl: () => ({ dir: 'uLightDir' }),
+  tsl: (_i, _p, _T, ctx) => ({ dir: ctx.builtin('light') }),
 });
 
 // ───────── 數學 ─────────
 for (const [type, title, desc, op, b] of [
-  ['add', 'Add', '相加', '+', 0],
-  ['subtract', 'Subtract', '相減', '-', 0],
-  ['multiply', 'Multiply', '相乘', '*', 1],
-  ['divide', 'Divide', '相除', '/', 1],
+  ['add', 'Add', '相加', (a: ShaderNode, x: ShaderNode) => a.add(x), 0],
+  ['subtract', 'Subtract', '相減', (a: ShaderNode, x: ShaderNode) => a.sub(x), 0],
+  ['multiply', 'Multiply', '相乘', (a: ShaderNode, x: ShaderNode) => a.mul(x), 1],
+  ['divide', 'Divide', '相除', (a: ShaderNode, x: ShaderNode) => a.div(x), 1],
 ] as const)
   N({
     type,
@@ -417,14 +456,14 @@ for (const [type, title, desc, op, b] of [
       { name: 'b', type: 'T', default: b },
     ],
     outputs: [{ name: 'out', type: 'T' }],
-    glsl: (i) => ({ out: `(${i.a} ${op} ${i.b})` }),
+    tsl: (i) => ({ out: op(i.a, i.b) }),
   });
 
 for (const [type, title, desc, fn, b] of [
-  ['power', 'Power', '次方 pow(a, b)', 'pow', 2],
-  ['minimum', 'Min', '取最小值', 'min', 0],
-  ['maximum', 'Max', '取最大值', 'max', 0],
-  ['modulo', 'Mod', '取餘數', 'mod', 1],
+  ['power', 'Power', '次方 pow(a, b)', pow, 2],
+  ['minimum', 'Min', '取最小值', min, 0],
+  ['maximum', 'Max', '取最大值', max, 0],
+  ['modulo', 'Mod', '取餘數', mod, 1],
 ] as const)
   N({
     type,
@@ -436,20 +475,20 @@ for (const [type, title, desc, fn, b] of [
       { name: 'b', type: 'T', default: b },
     ],
     outputs: [{ name: 'out', type: 'T' }],
-    glsl: (i) => ({ out: `${fn}(${i.a}, ${i.b})` }),
+    tsl: (i) => ({ out: fn(i.a, i.b) }),
   });
 
 for (const [type, title, desc, f] of [
-  ['sin', 'Sin', '正弦', (x: string) => `sin(${x})`],
-  ['cos', 'Cos', '餘弦', (x: string) => `cos(${x})`],
-  ['abs', 'Abs', '絕對值', (x: string) => `abs(${x})`],
-  ['fract', 'Fract', '小數部分', (x: string) => `fract(${x})`],
-  ['floor', 'Floor', '無條件捨去', (x: string) => `floor(${x})`],
-  ['sqrt', 'Sqrt', '平方根', (x: string) => `sqrt(${x})`],
-  ['negate', 'Negate', '取負號', (x: string) => `(-${x})`],
-  ['oneMinus', 'One Minus', '1 - x（反相）', (x: string) => `(1.0 - ${x})`],
-  ['saturate', 'Saturate', '限制在 0..1', (x: string) => `clamp(${x}, 0.0, 1.0)`],
-  ['normalize', 'Normalize', '正規化向量', (x: string) => `normalize(${x})`],
+  ['sin', 'Sin', '正弦', (x: ShaderNode) => sin(x)],
+  ['cos', 'Cos', '餘弦', (x: ShaderNode) => cos(x)],
+  ['abs', 'Abs', '絕對值', (x: ShaderNode) => abs(x)],
+  ['fract', 'Fract', '小數部分', (x: ShaderNode) => fract(x)],
+  ['floor', 'Floor', '無條件捨去', (x: ShaderNode) => floor(x)],
+  ['sqrt', 'Sqrt', '平方根', (x: ShaderNode) => sqrt(x)],
+  ['negate', 'Negate', '取負號', (x: ShaderNode) => x.negate()],
+  ['oneMinus', 'One Minus', '1 - x（反相）', (x: ShaderNode) => x.oneMinus()],
+  ['saturate', 'Saturate', '限制在 0..1', (x: ShaderNode) => clamp(x, 0, 1)],
+  ['normalize', 'Normalize', '正規化向量', (x: ShaderNode) => normalize(x)],
 ] as const)
   N({
     type,
@@ -458,7 +497,7 @@ for (const [type, title, desc, f] of [
     category: 'math',
     inputs: [{ name: 'x', type: 'T', default: 0 }],
     outputs: [{ name: 'out', type: 'T' }],
-    glsl: (i) => ({ out: f(i.x) }),
+    tsl: (i) => ({ out: f(i.x) }),
   });
 
 N({
@@ -468,7 +507,7 @@ N({
   desc: '向量長度',
   inputs: [{ name: 'v', type: 'T', default: 0 }],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `length(${i.v})` }),
+  tsl: (i) => ({ out: length(i.v) }),
 });
 N({
   type: 'distance',
@@ -480,7 +519,7 @@ N({
     { name: 'b', type: 'T', default: 0 },
   ],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `distance(${i.a}, ${i.b})` }),
+  tsl: (i) => ({ out: distance(i.a, i.b) }),
 });
 N({
   type: 'dot',
@@ -492,7 +531,7 @@ N({
     { name: 'b', type: 'T', default: 0 },
   ],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `dot(${i.a}, ${i.b})` }),
+  tsl: (i) => ({ out: dot(i.a, i.b) }),
 });
 N({
   type: 'mix',
@@ -506,7 +545,7 @@ N({
     { name: 't', type: 'float', default: 0.5 },
   ],
   outputs: [{ name: 'out', type: 'T' }],
-  glsl: (i) => ({ out: `mix(${i.a}, ${i.b}, ${i.t})` }),
+  tsl: (i) => ({ out: mix(i.a, i.b, i.t) }),
 });
 N({
   type: 'clamp',
@@ -519,7 +558,7 @@ N({
     { name: 'max', type: 'float', default: 1 },
   ],
   outputs: [{ name: 'out', type: 'T' }],
-  glsl: (i) => ({ out: `clamp(${i.x}, ${i.min}, ${i.max})` }),
+  tsl: (i) => ({ out: clamp(i.x, i.min, i.max) }),
 });
 N({
   type: 'smoothstep',
@@ -532,7 +571,7 @@ N({
     { name: 'x', type: 'T', default: 0 },
   ],
   outputs: [{ name: 'out', type: 'T' }],
-  glsl: (i) => ({ out: `smoothstep(${i.edge0}, ${i.edge1}, ${i.x})` }),
+  tsl: (i) => ({ out: smoothstep(i.edge0, i.edge1, i.x) }),
 });
 N({
   type: 'step',
@@ -544,7 +583,7 @@ N({
     { name: 'x', type: 'T', default: 0 },
   ],
   outputs: [{ name: 'out', type: 'T' }],
-  glsl: (i) => ({ out: `step(${i.edge}, ${i.x})` }),
+  tsl: (i) => ({ out: step(i.edge, i.x) }),
 });
 N({
   type: 'remap',
@@ -560,9 +599,7 @@ N({
     { name: 'outMax', type: 'float', default: 1 },
   ],
   outputs: [{ name: 'out', type: 'T' }],
-  glsl: (i) => ({
-    out: `(${i.outMin} + (${i.x} - ${i.inMin}) / (${i.inMax} - ${i.inMin}) * (${i.outMax} - ${i.outMin}))`,
-  }),
+  tsl: (i) => ({ out: i.outMin.add(i.x.sub(i.inMin).div(i.inMax.sub(i.inMin)).mul(i.outMax.sub(i.outMin))) }),
 });
 
 // ───────── 向量 / UV ─────────
@@ -574,7 +611,7 @@ N({
   keywords: '拆分 分量',
   inputs: [{ name: 'v', type: 'vec4', default: 0 }],
   outputs: ['x', 'y', 'z', 'w'].map((n) => ({ name: n, type: 'float' as const })),
-  glsl: (i) => ({ x: `${i.v}.x`, y: `${i.v}.y`, z: `${i.v}.z`, w: `${i.v}.w` }),
+  tsl: (i) => ({ x: i.v.x, y: i.v.y, z: i.v.z, w: i.v.w }),
 });
 N({
   type: 'combine',
@@ -593,11 +630,7 @@ N({
     { name: 'xyz', type: 'vec3' },
     { name: 'xyzw', type: 'vec4' },
   ],
-  glsl: (i) => ({
-    xy: `vec2(${i.x}, ${i.y})`,
-    xyz: `vec3(${i.x}, ${i.y}, ${i.z})`,
-    xyzw: `vec4(${i.x}, ${i.y}, ${i.z}, ${i.w})`,
-  }),
+  tsl: (i) => ({ xy: vec2(i.x, i.y), xyz: vec3(i.x, i.y, i.z), xyzw: vec4(i.x, i.y, i.z, i.w) }),
 });
 N({
   type: 'rotate',
@@ -605,10 +638,9 @@ N({
   category: 'vector',
   desc: '旋轉 2D 座標（弧度）',
   keywords: '旋轉',
-  helpers: ['rotate'],
   inputs: [centeredIn(), { name: 'angle', type: 'float', default: 0 }],
   outputs: [{ name: 'out', type: 'vec2' }],
-  glsl: (i) => ({ out: `sgRot2(${i.p}, ${i.angle})` }),
+  tsl: (i) => ({ out: rotate2(i.p, i.angle) }),
 });
 N({
   type: 'polar',
@@ -618,7 +650,7 @@ N({
   keywords: '極座標',
   inputs: [centeredIn()],
   outputs: [{ name: 'out', type: 'vec2' }],
-  glsl: (i) => ({ out: `vec2(atan(${i.p}.y, ${i.p}.x) / 6.28318 + 0.5, length(${i.p}))` }),
+  tsl: (i) => ({ out: vec2(atan(i.p.y, i.p.x).div(6.28318).add(0.5), length(i.p)) }),
 });
 N({
   type: 'tile',
@@ -628,7 +660,7 @@ N({
   keywords: '平鋪 repeat',
   inputs: [uvIn(), { name: 'count', type: 'float', default: 4 }],
   outputs: [{ name: 'out', type: 'vec2' }],
-  glsl: (i) => ({ out: `fract(${i.p} * ${i.count})` }),
+  tsl: (i) => ({ out: fract(i.p.mul(i.count)) }),
 });
 
 // ───────── 形狀與雜訊 ─────────
@@ -640,7 +672,7 @@ N({
   keywords: '圓',
   inputs: [centeredIn(), { name: 'radius', type: 'float', default: 0.5 }],
   outputs: [{ name: 'd', type: 'float' }],
-  glsl: (i) => ({ d: `(length(${i.p}) - ${i.radius})` }),
+  tsl: (i) => ({ d: length(i.p).sub(i.radius) }),
 });
 N({
   type: 'box',
@@ -648,14 +680,13 @@ N({
   category: 'pattern',
   desc: '矩形距離場',
   keywords: '方形 矩形',
-  helpers: ['box'],
   inputs: [
     centeredIn(),
     { name: 'width', type: 'float', default: 0.5 },
     { name: 'height', type: 'float', default: 0.5 },
   ],
   outputs: [{ name: 'd', type: 'float' }],
-  glsl: (i) => ({ d: `sgBox(${i.p}, vec2(${i.width}, ${i.height}))` }),
+  tsl: (i) => ({ d: sdBox(i.p, vec2(i.width, i.height)) }),
 });
 N({
   type: 'checker',
@@ -665,7 +696,7 @@ N({
   keywords: '棋盤',
   inputs: [uvIn(), { name: 'count', type: 'float', default: 8 }],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `mod(floor(${i.p}.x * ${i.count}) + floor(${i.p}.y * ${i.count}), 2.0)` }),
+  tsl: (i) => ({ out: mod(floor(i.p.x.mul(i.count)).add(floor(i.p.y.mul(i.count))), 2) }),
 });
 N({
   type: 'noise',
@@ -673,10 +704,9 @@ N({
   category: 'pattern',
   desc: '平滑數值雜訊',
   keywords: '雜訊',
-  helpers: ['hash', 'noise'],
   inputs: [uvIn(), { name: 'scale', type: 'float', default: 8 }],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `sgNoise(${i.p} * ${i.scale})` }),
+  tsl: (i) => ({ out: sgNoise(i.p.mul(i.scale)) }),
 });
 N({
   type: 'fbm',
@@ -684,10 +714,9 @@ N({
   category: 'pattern',
   desc: '分形布朗運動（多層雜訊）',
   keywords: '雜訊 雲',
-  helpers: ['hash', 'noise', 'fbm'],
   inputs: [uvIn(), { name: 'scale', type: 'float', default: 4 }],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `sgFbm(${i.p} * ${i.scale})` }),
+  tsl: (i) => ({ out: sgFbm(i.p.mul(i.scale)) }),
 });
 N({
   type: 'voronoi',
@@ -695,10 +724,9 @@ N({
   category: 'pattern',
   desc: '細胞雜訊（到最近點的距離）',
   keywords: '細胞 cell',
-  helpers: ['hash', 'voronoi'],
   inputs: [uvIn(), { name: 'scale', type: 'float', default: 6 }, { name: 'time', type: 'float', default: 0 }],
   outputs: [{ name: 'd', type: 'float' }],
-  glsl: (i) => ({ d: `sgVoronoi(${i.p} * ${i.scale}, ${i.time})` }),
+  tsl: (i) => ({ d: sgVoronoi(i.p.mul(i.scale), i.time) }),
 });
 
 // ───────── 光照 ─────────
@@ -710,7 +738,7 @@ N({
   keywords: '漫反射 diffuse',
   inputs: [normalIn, lightIn],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `max(dot(${i.normal}, ${i.light}), 0.0)` }),
+  tsl: (i) => ({ out: max(dot(i.normal, i.light), 0) }),
 });
 N({
   type: 'specular',
@@ -720,7 +748,7 @@ N({
   keywords: '高光 phong',
   inputs: [normalIn, lightIn, viewIn, { name: 'shininess', type: 'float', default: 32 }],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `pow(max(dot(${i.normal}, normalize(${i.light} + ${i.view})), 0.0), ${i.shininess})` }),
+  tsl: (i) => ({ out: pow(max(dot(i.normal, normalize(i.light.add(i.view))), 0), i.shininess) }),
 });
 N({
   type: 'fresnel',
@@ -730,7 +758,7 @@ N({
   keywords: '邊緣 rim',
   inputs: [normalIn, viewIn, { name: 'power', type: 'float', default: 3 }],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `pow(1.0 - clamp(dot(${i.normal}, ${i.view}), 0.0, 1.0), ${i.power})` }),
+  tsl: (i) => ({ out: pow(float(1).sub(clamp(dot(i.normal, i.view), 0, 1)), i.power) }),
 });
 
 // ───────── 顏色 ─────────
@@ -751,10 +779,10 @@ N({
   ],
   inputs: [{ name: 't', type: 'float', default: 0 }],
   outputs: [{ name: 'rgb', type: 'vec3' }],
-  glsl: (i, p) => {
+  tsl: (i, p) => {
     const P = PALETTES[String(p.preset)] ?? PALETTES.rainbow;
-    const v = (a: number[]) => `vec3(${a.map(glslFloat).join(', ')})`;
-    return { rgb: `(${v(P.a)} + ${v(P.b)} * cos(6.28318 * (${v(P.c)} * ${i.t} + ${v(P.d)})))` };
+    const v = (a: number[]) => vec3(a[0], a[1], a[2]);
+    return { rgb: v(P.a).add(v(P.b).mul(cos(v(P.c).mul(i.t).add(v(P.d)).mul(6.28318)))) };
   },
 });
 N({
@@ -763,14 +791,13 @@ N({
   category: 'color',
   desc: '色相 / 飽和度 / 明度轉 RGB',
   keywords: '色相 hue',
-  helpers: ['hsv'],
   inputs: [
     { name: 'h', type: 'float', default: 0 },
     { name: 's', type: 'float', default: 1 },
     { name: 'v', type: 'float', default: 1 },
   ],
   outputs: [{ name: 'rgb', type: 'vec3' }],
-  glsl: (i) => ({ rgb: `sgHsv2rgb(vec3(${i.h}, ${i.s}, ${i.v}))` }),
+  tsl: (i) => ({ rgb: hsv2rgb(vec3(i.h, i.s, i.v)) }),
 });
 N({
   type: 'grayscale',
@@ -780,7 +807,7 @@ N({
   keywords: '灰階 亮度',
   inputs: [{ name: 'rgb', type: 'vec3', default: 0 }],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `dot(${i.rgb}, vec3(0.299, 0.587, 0.114))` }),
+  tsl: (i) => ({ out: dot(i.rgb, vec3(0.299, 0.587, 0.114)) }),
 });
 
 // ───────── 輸出 ─────────
@@ -817,7 +844,7 @@ N({
   desc: '全螢幕效果（後製）的輸出：畫面每個像素的新顏色。有這個節點時，這張圖是全螢幕效果而不是材質，用 Screen Color 讀取畫面原本的顏色。沒有連接時是畫面原本的顏色',
   keywords: '後製 效果 post effect 全螢幕 畫面',
   inputs: [
-    { name: 'color', type: 'vec3', expr: 'texture(tDiffuse, vUv).rgb', exprType: 'vec3', exprLabel: '畫面' },
+    { name: 'color', type: 'vec3', expr: 'screen', exprType: 'vec3', exprLabel: '畫面' },
     { name: 'alpha', type: 'float', default: 1 },
   ],
 });

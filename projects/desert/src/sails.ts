@@ -1,16 +1,20 @@
 /**
- * 船帆被風吹動：在頂點著色器裡把船帆往船頭方向鼓起來，再加上一陣一陣的飄動。
+ * 船帆被風吹動：在頂點著色器裡把船帆往船頭方向鼓起來，再加上一陣一陣的飄動（TSL 節點）。
  *
  * - 船帆的網格（Ship_Sails）裡有好幾片帆，每片各自是相連的一塊；載入時把它們分開，
  *   算出每個頂點在「自己那片帆」上的位置：上緣綁在帆桁上不動，越往下、越靠中間動得越多
  * - 光影是烘焙好的貼圖，不會跟著動（幅度不大，看不出來）
  * - 幽靈影子用的地表射線是載入時的形狀，也不受影響
  *
- * 在套用烘焙材質之後呼叫 animateSails(船帆網格)。sailSettings 可以在執行中調整。
+ * 在套用烘焙材質之後呼叫 animateSails(船帆網格)：換成同樣的基本材質，再加上頂點的擺動。
+ * sailSettings 可以在執行中調整。
  */
 import { Box3, Vector3 } from '@engine/math';
-import { create, type BufferGeometry, type Material, type Mesh } from '@engine/render';
+import { create, type BufferGeometry, type Mesh, type MeshBasicMaterial } from '@engine/render';
+import { type CustomMaterial, ShaderLibrary, tsl } from '@engine/shaders';
 import { ecs } from './engine';
+
+const { attribute, sin, vec3 } = tsl;
 
 /** 船帆的動態設定（修改後下一幀生效） */
 export const sailSettings = {
@@ -25,11 +29,31 @@ export const sailSettings = {
 /** 鼓起的方向（船帆網格自己的座標）：船頭是 +X，風從船尾吹向船頭 */
 const WIND_AXIS = 'x';
 
-const uniforms = {
-  uTime: { value: 0 },
-  uBillow: { value: sailSettings.billow },
-  uFlutter: { value: sailSettings.flutter },
-};
+/** 船帆的著色器：基本材質（烘焙的光影貼圖照常），頂點依 aFlutter 往船頭方向擺動 */
+const library = new ShaderLibrary().define({
+  name: 'sails',
+  base: 'basic',
+  uniforms: { uTime: 0, uBillow: sailSettings.billow, uFlutter: sailSettings.flutter },
+  position: (c) => {
+    const u = c.uniforms;
+    const p = c.position;
+    const f = attribute('aFlutter', 'vec2'); // x = 擺動的權重（0 = 不動），y = 相位
+    const w = f.x;
+    const ph = f.y;
+    // 陣風：慢慢地一陣強、一陣弱
+    const gust = sin(u.uTime.mul(0.45).add(ph.mul(0.3)))
+      .mul(0.25)
+      .add(0.75);
+    // 兩層波：大的起伏沿著帆面慢慢傳過去，小的抖動比較快
+    const wave = sin(u.uTime.mul(2.1).add(p.z.mul(0.55)).add(p.y.mul(0.8)).add(ph))
+      .mul(0.7)
+      .add(sin(u.uTime.mul(4.7).sub(p.z.mul(1.4)).add(p.y.mul(1.9)).add(ph.mul(1.7))).mul(0.3));
+    const push = w.mul(gust).mul(u.uBillow.add(u.uFlutter.mul(wave)));
+    return WIND_AXIS === 'x' ? vec3(p.x.add(push), p.y, p.z) : vec3(p.x, p.y, p.z.add(push));
+  },
+});
+/** 船帆的材質（場景裡的船是模型的複本，材質是同一份） */
+let sailMaterial: CustomMaterial | null = null;
 
 /** 把網格的頂點分成相連的幾塊（位置相同的頂點也算相連），回傳每個頂點屬於哪一塊 */
 function pieces(geometry: BufferGeometry): Int32Array {
@@ -98,47 +122,36 @@ export function animateSails(mesh: Mesh): void {
   }
   geometry.setAttribute('aFlutter', create.attribute(flutter, 2));
 
-  const material = mesh.material as Material;
-  material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        /* glsl */ `#include <common>
-        attribute vec2 aFlutter;
-        uniform float uTime;
-        uniform float uBillow;
-        uniform float uFlutter;`,
-      )
-      .replace(
-        '#include <begin_vertex>',
-        /* glsl */ `#include <begin_vertex>
-        {
-          float w = aFlutter.x;
-          float ph = aFlutter.y;
-          // 陣風：慢慢地一陣強、一陣弱
-          float gust = 0.75 + 0.25 * sin(uTime * 0.45 + ph * 0.3);
-          // 兩層波：大的起伏沿著帆面慢慢傳過去，小的抖動比較快
-          float wave = sin(uTime * 2.1 + position.z * 0.55 + position.y * 0.8 + ph) * 0.7
-                     + sin(uTime * 4.7 - position.z * 1.4 + position.y * 1.9 + ph * 1.7) * 0.3;
-          transformed.${WIND_AXIS} += w * gust * (uBillow + uFlutter * wave);
-        }`,
-      );
-  };
-  material.customProgramCacheKey = () => 'desert-sails';
-  material.needsUpdate = true;
+  // 換成同樣設定的船帆材質（烘焙的底色、光照貼圖、AO）
+  const old = mesh.material as MeshBasicMaterial;
+  sailMaterial = library.createMaterial(
+    'sails',
+    {},
+    {
+      name: old.name,
+      map: old.map,
+      lightMap: old.lightMap,
+      lightMapIntensity: old.lightMapIntensity,
+      aoMap: old.aoMap,
+      aoMapIntensity: old.aoMapIntensity,
+      side: old.side,
+    },
+  );
+  mesh.material = sailMaterial;
+  old.dispose();
   // 船帆動起來後會超出原本的範圍：放寬一點，避免在畫面邊緣被提早裁掉
   geometry.computeBoundingSphere();
   if (geometry.boundingSphere) geometry.boundingSphere.radius += sailSettings.billow + sailSettings.flutter + 1;
 }
 
-// 每幀更新時間與設定（寫在材質共用的數值上；場景裡的船是模型的複本，材質是同一份）
-// 時間用累加的：改速度時不會突然跳一下
+// 每幀更新時間與設定（時間用累加的：改速度時不會突然跳一下）
 ecs.addSystem({
   name: 'sails',
   run: (_world, time) => {
-    uniforms.uTime.value += time.delta * sailSettings.speed;
-    uniforms.uBillow.value = sailSettings.billow;
-    uniforms.uFlutter.value = sailSettings.flutter;
+    if (!sailMaterial) return;
+    const u = sailMaterial.uniforms;
+    (u.uTime.value as number) += time.delta * sailSettings.speed;
+    u.uBillow.value = sailSettings.billow;
+    u.uFlutter.value = sailSettings.flutter;
   },
 });

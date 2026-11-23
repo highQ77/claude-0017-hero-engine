@@ -1,5 +1,5 @@
 /**
- * 著色器編輯器的預覽：用 three.js 和引擎的 ShaderLibrary（和遊戲同一套），
+ * 著色器編輯器的預覽：用 three.js 的 WebGPURenderer 和引擎的 ShaderLibrary（和遊戲同一套，TSL 節點），
  * 節點圖轉成 shaderGraphDefinition 後建立材質，所以預覽看到的就是遊戲裡的樣子。
  *
  * - 主預覽：球體、立方體、圓環、平面 3D、平面 2D（滿版），拖曳旋轉、滾輪縮放
@@ -7,6 +7,8 @@
  * - 全螢幕效果的圖（Effect Output）：在平面 2D 上預覽效果套用在一張示範畫面（screenSample）上的樣子
  */
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu';
+import { uniform } from 'three/tsl';
 import { ShaderLibrary, type CustomMaterial, type EffectDefinition, type ShaderDefinition } from '../../shaders';
 import {
   type ShaderGraphFile,
@@ -40,19 +42,6 @@ function geometry(mesh: PreviewMesh): THREE.BufferGeometry {
     default:
       return new THREE.SphereGeometry(1, 96, 64);
   }
-}
-
-/** 編譯錯誤：three.js 編譯失敗時 renderer.debug.onShaderError 收到的訊息 */
-function shaderErrors(gl: WebGLRenderingContext, program: WebGLProgram): string {
-  const parts: string[] = [];
-  for (const s of gl.getAttachedShaders(program) ?? []) {
-    const log = gl.getShaderInfoLog(s)?.trim();
-    if (log)
-      parts.push(`${gl.getShaderParameter(s, gl.SHADER_TYPE) === gl.VERTEX_SHADER ? '頂點' : '片段'}著色器：${log}`);
-  }
-  const link = gl.getProgramInfoLog(program)?.trim();
-  if (link && !parts.length) parts.push(`連結：${link}`);
-  return parts.join('\n');
 }
 
 /** 共用的著色器庫與貼圖（主預覽、縮圖都用） */
@@ -123,15 +112,19 @@ export function screenSample(): THREE.Texture {
   return screen;
 }
 
-/** 節點圖 → 自訂著色器的定義（用預覽共用的貼圖；編輯器的 GLSL 分頁也用這份，只編譯一次） */
+/** 預覽的時間（節點圖的 Time）：編輯器控制，暫停時停住 */
+const previewTime = uniform(0);
+
+/** 節點圖 → 自訂著色器的定義（用預覽共用的貼圖、時間） */
 export const graphDefinition = (file: ShaderGraphFile, target?: { nodeId: number; port: string }) =>
   shaderGraphDefinition(file, target ? `thumb${target.nodeId}` : 'preview', {
     target,
     textures,
     screen: screenSample(),
+    time: previewTime,
   });
 
-/** 全螢幕效果的圖 → 遊戲裡用的效果定義（GLSL 分頁顯示這份） */
+/** 全螢幕效果的圖 → 遊戲裡用的效果定義（「程式碼」分頁顯示這份） */
 export const graphEffectDefinition = (file: ShaderGraphFile, name = 'effect'): EffectDefinition =>
   shaderGraphEffectDefinition(file, name, { textures });
 
@@ -143,23 +136,25 @@ export interface PreviewState {
 
 /** 主預覽 */
 export class MainPreview {
-  readonly renderer: THREE.WebGLRenderer;
+  readonly renderer: WebGPURenderer;
+  /** WebGPURenderer 初始化完成（之前不繪製） */
+  private ready = false;
+  private readonly init: Promise<void>;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(43, 1, 0.1, 50);
   private readonly ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
   private readonly mesh: THREE.Mesh;
   private material: CustomMaterial | null = null;
-  private lastError = '';
   /** 攝影機：繞原點旋轉 */
   readonly cam = { yaw: 0.7, pitch: 0.35, dist: 3.4, auto: true };
   meshKind: PreviewMesh = 'sphere';
 
   constructor(readonly canvas: HTMLCanvasElement) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    this.renderer = new WebGPURenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setClearColor(0x000000, 0);
-    this.renderer.debug.onShaderError = (gl, program) => {
-      this.lastError = shaderErrors(gl, program) || '著色器編譯失敗';
-    };
+    this.init = this.renderer.init().then(() => {
+      this.ready = true;
+    });
     this.mesh = new THREE.Mesh(geometry('sphere'));
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
@@ -182,19 +177,18 @@ export class MainPreview {
     } catch (error) {
       return (error as Error).message;
     }
-    // 先編譯一次，看看 GPU 接不接受
-    this.lastError = '';
-    const old = this.mesh.material;
     this.mesh.material = next;
-    this.renderer.compile(this.scene, this.meshKind === 'quad' ? this.ortho : this.camera);
-    if (this.lastError) {
-      this.mesh.material = old;
-      next.dispose();
-      return this.lastError;
-    }
     this.material?.dispose();
     this.material = next;
     return '';
+  }
+
+  /** 目前材質實際的著色器程式（three.js 產生的 WGSL；不支援 WebGPU 的瀏覽器是 GLSL） */
+  async shaderCode(): Promise<{ vertexShader: string | null; fragmentShader: string | null } | null> {
+    await this.init;
+    if (!this.material) return null;
+    const camera = this.meshKind === 'quad' ? this.ortho : this.camera;
+    return this.renderer.debug.getShaderAsync(this.scene, camera, this.mesh);
   }
 
   /** 畫一幀 */
@@ -204,8 +198,8 @@ export class MainPreview {
     const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
     const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
     if (canvas.width !== w || canvas.height !== h) this.renderer.setSize(w, h, false);
-    library.builtins.uTime.value = state.time;
-    library.builtins.uResolution.value.set(w, h);
+    previewTime.value = state.time;
+    if (!this.ready) return;
     if (!this.material) {
       this.renderer.clear();
       return;
@@ -238,21 +232,22 @@ export const THUMB_PX = 160;
 
 /** 節點縮圖：一個離屏繪製器畫所有節點 */
 export class ThumbnailRenderer {
-  private readonly renderer: THREE.WebGLRenderer;
+  private readonly renderer: WebGPURenderer;
+  /** WebGPURenderer 初始化完成（之前不繪製） */
+  private ready = false;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
   private readonly quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
   private readonly materials = new Map<number, CustomMaterial>();
-  private failed = false;
 
   constructor() {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = THUMB_PX;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, preserveDrawingBuffer: true });
+    this.renderer = new WebGPURenderer({ canvas, antialias: false, alpha: true });
     this.renderer.setClearColor(0x000000, 1);
-    this.renderer.debug.onShaderError = () => {
-      this.failed = true;
-    };
+    void this.renderer.init().then(() => {
+      this.ready = true;
+    });
     this.quad.frustumCulled = false;
     this.scene.add(this.quad);
     this.camera.position.z = 1;
@@ -263,11 +258,7 @@ export class ThumbnailRenderer {
     this.remove(nodeId);
     try {
       const m = library.createFromDefinition(graphDefinition(file, { nodeId, port }));
-      this.failed = false;
-      this.quad.material = m;
-      this.renderer.compile(this.scene, this.camera);
-      if (this.failed) m.dispose();
-      else this.materials.set(nodeId, m);
+      this.materials.set(nodeId, m);
     } catch {
       /* 這個節點目前無法預覽（例如上游有循環） */
     }
@@ -287,7 +278,7 @@ export class ThumbnailRenderer {
   /** 畫一個節點的縮圖到 2D 畫布 */
   draw(nodeId: number, ctx: CanvasRenderingContext2D, state: PreviewState): void {
     const m = this.materials.get(nodeId);
-    if (!m) {
+    if (!m || !this.ready) {
       ctx.clearRect(0, 0, THUMB_PX, THUMB_PX);
       return;
     }

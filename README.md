@@ -2,7 +2,7 @@
 
 HERO 遊戲引擎 = Threejs 繪圖引擎 x Claude 引擎實作 x William77 組織與規劃
 
-以 TypeScript 撰寫、建立在 [three.js](https://threejs.org/) 之上的網頁 3D 遊戲引擎。採用 ECS（實體、元件、系統）架構，功能以外掛形式組合，內建場景、介面、著色器與音效編輯器，遊戲可以發佈成網頁版或 macOS App。
+以 TypeScript 撰寫、建立在 [three.js](https://threejs.org/) 之上的網頁 3D 遊戲引擎，用 WebGPU 繪製（瀏覽器不支援時自動改用 WebGL2），自訂著色器與後製特效用 TSL 節點。採用 ECS（實體、元件、系統）架構，功能以外掛形式組合，內建場景、介面、著色器與音效編輯器，遊戲可以發佈成網頁版或 macOS App。
 
 **免費開源**：採用 [MIT 授權](LICENSE)，可以自由使用、修改、散布，也可以用來製作商業遊戲。
 
@@ -20,7 +20,7 @@ HERO 遊戲引擎 = Threejs 繪圖引擎 x Claude 引擎實作 x William77 組�
 | `core`               | 引擎主體、外掛系統、遊戲迴圈                                                            |
 | `ecs`                | 實體、元件、系統、資源                                                                  |
 | `scene`              | 父子關係、Transform、場景檔（XML）與預製物件                                            |
-| `render`             | 繪製、陰影、動態解析度、繪製圖層                                                        |
+| `render`             | 繪製（WebGPU／WebGL）、陰影、動態解析度、繪製圖層                                       |
 | `postfx` / `shaders` | 後製效果、自訂著色器與節點圖材質                                                        |
 | `animation`          | 補間、時間軸、動畫狀態機                                                                |
 | `physics`            | 物理（[Rapier](https://rapier.rs/)）                                                    |

@@ -54,7 +54,7 @@ const RULES: Record<string, { deps: string[]; keys?: string[]; files?: string[] 
   ai: { deps: ['core', 'ecs', 'scene', 'physics'] },
   scripts: { deps: ['core', 'ecs', 'scene'], keys: ['render', 'input', 'audio', 'physics', 'animation', 'assets'] },
   // 最上層：套件管理只需要資源鍵與註冊用的小檔案（完整的引擎 API 在 api.ts，由遊戲決定要不要用）
-  plugins: { deps: ['core', 'ecs'], keys: ['assets', 'shaders'], files: ['ui2d/registry', 'shaders/chunks'] },
+  plugins: { deps: ['core', 'ecs'], keys: ['assets', 'shaders'], files: ['ui2d/registry'] },
 };
 /** 例外：給第三方套件的完整 API，本來就要引用所有模組 */
 const ANY_IMPORT_FILES = ['plugins/api.ts'];

@@ -22,6 +22,9 @@ import { spawnGhosts } from './ghosts';
 import { animateSails } from './sails';
 import { createSurface } from './ground';
 import { syncFxPanel } from './postfx-panel';
+import { PluginManager } from '@engine/plugins';
+import perfMonitor from '@engine/packages/perf-monitor';
+import * as ui2d from '@engine/ui2d';
 
 // ───────── 幽靈船：套用 Blender 烘焙好的光照貼圖（Lightmap）與環境遮蔽（AO） ─────────
 // 最終顏色 = 底色 × 光照貼圖 × AO（和 Blender 的 build_baked_materials 相同），光影都已經烘焙好，不受場景燈光影響
@@ -147,6 +150,13 @@ scenes.register(
 );
 // 3D 場景編輯器的「預覽」會指定正在編輯的場景；平常進入 main
 scenes.load(previewScene() ?? 'main');
+
+// 效能監視器（FPS 面板）：預設關閉，按 ` 鍵開關；放在左下角，不蓋住右上角的「後製調整」
+await new PluginManager(engine, { api: { ui2d } }).install(perfMonitor, {
+  toggleKey: 'Backquote',
+  visible: false,
+  position: { bottom: 16, left: 16 },
+});
 
 // 場景建好後才開始跑：第一幀就是完整的畫面
 engine.start();

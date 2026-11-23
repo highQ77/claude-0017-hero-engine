@@ -1,6 +1,13 @@
 /** 進階介面元件：畫布（用 Canvas 2D 的寫法自己畫，底層以 WebGL 繪製） */
-import { CanvasTexture, SRGBColorSpace, type Texture } from 'three';
-import { UIElement, type Attrs, type PointerCapture, type UICanvasHost } from '../elements';
+import {
+  CanvasTexture,
+  ExternalTexture,
+  LinearSRGBColorSpace,
+  NoColorSpace,
+  SRGBColorSpace,
+  type Texture,
+} from 'three';
+import { UIElement, type Attrs, type PointerCapture } from '../elements';
 import { num, roundRectPath, uiFont } from '../draw';
 import WebGL2D, {
   type WebGL2DHiDPIOptions,
@@ -38,9 +45,9 @@ const MAX_PIXEL_RATIO = 4;
  * - width／height 是繪圖座標的大小（CSS 像素）；實際解析度會乘上螢幕的像素比，畫面清晰
  * - background 是畫布後面的底色（預設 #333333FF）；ctx.clearRect 清掉的地方會露出底色
  * - 用 ui.require<UICanvas>('id').getContext() 取得繪圖 context（取代 canvas.getContext('2d')）
- * - 引擎內（UIPlugin）直接畫在顯示層的 WebGL 上（共用模式）：畫圖不用重畫介面、不用複製畫面；
- *   網頁版介面、UI 編輯器沒有顯示層，改用自己的 WebGL，畫好再複製到介面
- * - uicanvas.texture 可以直接貼到 3D 物件上（共用模式不用上傳）
+ * - 引擎內（UIPlugin）分層顯示：畫布的內容用自己的貼圖疊在介面上，畫圖時介面不用重畫、不用複製
+ *   （有東西蓋在畫布上面時自動改回複製進介面）；網頁版介面、UI 編輯器、3D 面板畫好再複製到介面
+ * - uicanvas.texture 可以直接貼到 3D 物件上（和分層顯示用的是同一張貼圖，畫圖後只上傳一次）
  * - 尺寸改變時畫布內容會清空，並觸發 resize 事件（onResize），在那裡重畫
  * - 滑鼠／觸控：按下、拖曳、放開觸發 pointerdown、pointermove、pointerup 事件
  *   （onPointerdown 等），event.value 是繪圖座標 { x, y }（已換算縮放，可以直接拿來畫）
@@ -82,13 +89,16 @@ export class UICanvas extends UIElement {
 
   private el: HTMLCanvasElement | null = null;
   private gl2d: WebGL2DRenderingContext | null = null;
-  /** 共用模式：顯示層的宿主、畫面大小（實體像素）、取消登記 */
-  private host: UICanvasHost | null = null;
-  private target: { width: number; height: number } | null = null;
-  private removeLayer: (() => void) | null = null;
-  /** 共用模式：讀回來的畫面（canvas、toDataURL 用） */
-  private snapshotEl: HTMLCanvasElement | null = null;
   private threeTexture: Texture | null = null;
+  /**
+   * 共用模式（3D 畫面是 WebGL 2 時）：借用它的 WebGL 畫進自己的 framebuffer，這裡記實體像素的大小。
+   * 沒有自己的 &lt;canvas&gt;
+   */
+  private target: { width: number; height: number } | null = null;
+  /** 共用模式：直接包裝 WebGL2D 的輸出貼圖（分層顯示用，不用另外複製） */
+  private outputTex: ExternalTexture | null = null;
+  /** 共用模式：讀回來的畫面（canvas、toDataURL、沒有分層時複製進介面用） */
+  private snapshotEl: HTMLCanvasElement | null = null;
   private logicalW = 0;
   private logicalH = 0;
   private ratio = 1;
@@ -120,7 +130,7 @@ export class UICanvas extends UIElement {
 
   /**
    * 底層的 &lt;canvas&gt;（不在網頁上顯示，畫好的內容由介面繪製；可以當成 drawImage 的來源）。
-   * 共用模式沒有自己的 canvas：每次取用都從 GPU 讀回目前的畫面（比較慢，不要每幀用；3D 請用 texture）
+   * 共用模式（3D 畫面是 WebGL 2）沒有自己的 canvas：每次取用都從 GPU 讀回目前的畫面（比較慢，不要每幀用；3D 請用 texture）
    */
   get canvas(): HTMLCanvasElement {
     if (this.target && this.gl2d) return this.snapshot();
@@ -137,26 +147,59 @@ export class UICanvas extends UIElement {
     return this.gl2d !== null;
   }
 
-  /** 是否直接畫在顯示層的 WebGL 上（共用模式；引擎內顯示時） */
+  /**
+   * 是否分層顯示：引擎內的介面把畫布內容用它的貼圖直接疊上去（畫圖時介面不用重畫）。
+   * 有東西蓋在畫布上面、在捲動區裡、有圓角時是 false（複製進介面）
+   */
+  get layered(): boolean {
+    return this.ctx.canvasLayers?.()?.isLayered(this) ?? false;
+  }
+
+  /** 是否借用 3D 畫面的 WebGL 直接畫（共用模式；3D 畫面是 WebGL 2 時） */
   get shared(): boolean {
     return this.target !== null;
   }
 
   /**
+   * 分層顯示用的貼圖（顯示層用；遊戲一般用 texture）。
+   * 共用模式直接用 WebGL2D 的輸出貼圖，不另外轉成給 3D 用的格式（省下每幀一次複製與 mipmap）：
+   * encoded 為 true，表示顏色是預乘 alpha 的 sRGB 值，要在著色器裡還原
+   */
+  get layerTexture(): { texture: Texture; encoded: boolean } {
+    const ctx = this.getContext();
+    if (this.target && ctx.outputTexture) {
+      if (!this.outputTex) {
+        const t = new ExternalTexture(ctx.outputTexture);
+        t.colorSpace = NoColorSpace;
+        (t as unknown as { image: unknown }).image = { width: this.target.width, height: this.target.height };
+        this.outputTex = t;
+      }
+      return { texture: this.outputTex, encoded: true };
+    }
+    return { texture: this.texture, encoded: false };
+  }
+
+  /**
    * 給 3D 物件用的貼圖（three.js；和一般圖片貼圖一樣，有透明的地方材質設 transparent: true）。
-   * 共用模式直接用畫布的 GPU 貼圖，不用上傳，同一幀就看得到；其他情況用畫布建立 CanvasTexture，畫圖後自動更新
+   * 一般是用畫布建立的 CanvasTexture，畫圖後自動上傳；共用模式直接用畫布的 GPU 貼圖，不用上傳。
+   * 分層顯示也是用這一張
    */
   get texture(): Texture {
     if (this.threeTexture) return this.threeTexture;
     const ctx = this.getContext();
-    if (this.host && ctx.exportTexture) {
-      this.threeTexture = this.host.wrapTexture(ctx.exportTexture, 'srgb');
-    } else {
-      const t = new CanvasTexture(this.canvas);
-      t.colorSpace = SRGBColorSpace;
+    if (this.target && ctx.exportTexture) {
+      // 共用模式：WebGL2D 的輸出貼圖（SRGB8_ALPHA8，GPU 讀取時自動轉成線性，所以這裡標成線性；第 0 列是底部）
+      ctx.syncExport();
+      const t = new ExternalTexture(ctx.exportTexture);
+      t.colorSpace = LinearSRGBColorSpace;
+      (t as unknown as { image: unknown }).image = { width: this.target.width, height: this.target.height };
       this.threeTexture = t;
+      return t;
     }
-    return this.threeTexture;
+    const t = new CanvasTexture(this.canvas);
+    t.colorSpace = SRGBColorSpace;
+    this.threeTexture = t;
+    return t;
   }
 
   /**
@@ -166,9 +209,9 @@ export class UICanvas extends UIElement {
    */
   getContext(options: Omit<WebGL2DOptions, 'pixelRatio' | 'external'> = {}): WebGL2DRenderingContext {
     if (this.gl2d) return this.gl2d;
-    const host = this.ctx.canvasHost?.() ?? null;
-    const ctx = host
-      ? this.createShared(host, options)
+    const shared = this.ctx.canvasLayers?.()?.sharedGL?.() ?? null;
+    const ctx = shared
+      ? this.createShared(shared, options)
       : WebGL2D.getContext(this.canvas, { ...options, pixelRatio: this.ratio });
     for (const name of DRAW_METHODS) {
       const original = ctx[name] as (...args: unknown[]) => unknown;
@@ -220,7 +263,6 @@ export class UICanvas extends UIElement {
 
   /** 把畫布內容輸出成圖片網址（例如截圖、存檔） */
   toDataURL(type?: string, quality?: number): string {
-    // 共用模式：canvas 是讀回來的畫面
     return this.canvas.toDataURL(type, quality);
   }
 
@@ -256,11 +298,13 @@ export class UICanvas extends UIElement {
       roundRectPath(ctx, x, y, w, h, radius);
       ctx.clip();
     }
-    // 共用模式：畫布由顯示層疊上去，介面這裡只畫背景與邊框
-    if (this.target) return;
-    if (this.gl2d && this.el && this.el.width > 0 && this.el.height > 0) {
+    // 分層顯示：畫布內容由顯示層疊上去，介面這裡只畫背景與邊框
+    if (this.layered) return;
+    // 共用模式沒有分層（有東西蓋在上面）：讀回畫面再複製進介面（比較慢，只在這種時候）
+    const source = this.target && this.gl2d ? this.snapshot() : this.el;
+    if (this.gl2d && source && source.width > 0 && source.height > 0) {
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(this.el, x, y, w, h);
+      ctx.drawImage(source, x, y, w, h);
     } else if (this.ctx.editorHints && !this.drawn) {
       // 編輯器：還沒有程式畫東西，顯示名稱與大小
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
@@ -273,10 +317,10 @@ export class UICanvas extends UIElement {
   }
 
   override destroy(): void {
-    this.removeLayer?.();
-    this.removeLayer = null;
     this.threeTexture?.dispose();
     this.threeTexture = null;
+    this.outputTex?.dispose();
+    this.outputTex = null;
     // 共用模式只釋放自己的 GPU 資源；一般模式連 WebGL context 一起釋放
     this.gl2d?.dispose();
     this.gl2d = null;
@@ -325,42 +369,44 @@ export class UICanvas extends UIElement {
    */
   private markDirty(): void {
     this.drawn = true;
-    // 共用模式：顯示層每幀直接讀畫布的 GPU 貼圖，介面不用重畫
-    if (this.target) return;
     if (this.dirtyQueued) return;
     this.dirtyQueued = true;
     const flush = () => {
       this.dirtyQueued = false;
       if (this.isDestroyed) return;
+      const layers = this.ctx.canvasLayers?.() ?? null;
+      // 共用模式：解析多重取樣（輸出貼圖才是最新的，分層顯示直接用它）；
+      // 有 3D 物件用 texture 時，才另外更新給 3D 用的貼圖（GPU 上複製一次、產生 mipmap）
+      if (this.target && this.gl2d) {
+        void this.gl2d.outputTexture;
+        if (this.threeTexture) this.gl2d.syncExport();
+      }
+      if (layers?.isLayered(this)) {
+        // 分層顯示：只更新畫布自己的貼圖，介面不用重畫（共用模式的貼圖本來就在 GPU 上）
+        if (!this.target) this.texture.needsUpdate = true;
+        layers.contentChanged(this);
+        return;
+      }
       this.invalidate();
-      if (this.threeTexture) this.threeTexture.needsUpdate = true;
+      if (this.threeTexture && !this.target) this.threeTexture.needsUpdate = true;
     };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(flush);
     else queueMicrotask(flush);
   }
 
-  /** 共用模式：借用顯示層的 WebGL，畫進自己的 framebuffer，登記成顯示層的一塊 */
+  /** 共用模式：借用 3D 畫面的 WebGL 2，畫進自己的 framebuffer */
   private createShared(
-    host: UICanvasHost,
+    shared: { gl: WebGL2RenderingContext; resetState(): void },
     options: Omit<WebGL2DOptions, 'pixelRatio' | 'external'>,
   ): WebGL2DRenderingContext {
     this.target = { width: 1, height: 1 };
     this.resizeBacking();
-    const ctx = new WebGL2D.WebGL2DRenderingContext(this.target as unknown as HTMLCanvasElement, {
+    return new WebGL2D.WebGL2DRenderingContext(this.target as unknown as HTMLCanvasElement, {
       ...options,
       pixelRatio: this.ratio,
-      external: { gl: host.gl, onEnd: () => host.resetState() },
+      // 畫完讓 three.js 重新設定它的 GL 狀態
+      external: { gl: shared.gl, onEnd: () => shared.resetState() },
     });
-    this.host = host;
-    this.removeLayer = host.add({
-      element: this,
-      texture: () => ctx.outputTexture,
-      // 有人用 texture（3D）時，畫面有變就更新 3D 用的貼圖
-      beforeDraw: () => {
-        if (this.threeTexture) ctx.syncExport();
-      },
-    });
-    return ctx;
   }
 
   /** 共用模式：從 GPU 讀回目前的畫面 */

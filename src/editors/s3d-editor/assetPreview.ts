@@ -10,6 +10,7 @@
  * 下面的按鈕做原本雙擊的事（放進場景、套用到選取的物件）。
  */
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { highlightXml } from '../ui-editor/highlight';
@@ -342,8 +343,13 @@ export class AssetPreview {
     wrap.append(canvas);
     this.body.replaceChildren(wrap);
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    const renderer = new WebGPURenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    await renderer.init();
+    if (!alive()) {
+      renderer.dispose();
+      return;
+    }
     const scene = new THREE.Scene();
     scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 2));
     const sun = new THREE.DirectionalLight(0xffffff, 2.5);
@@ -395,10 +401,12 @@ export class AssetPreview {
       wrap.append(select);
     }
 
-    const clock = new THREE.Clock();
+    // THREE.Timer：three.js r183 起取代 THREE.Clock（每幀先 update 再讀 getDelta）
+    const timer = new THREE.Timer();
     let raf = 0;
-    const frame = () => {
+    const frame = (now?: number) => {
       raf = requestAnimationFrame(frame);
+      timer.update(now);
       const w = canvas.clientWidth;
       const ht = canvas.clientHeight;
       if (w && ht && (canvas.width !== Math.round(w * renderer.getPixelRatio()) || camera.aspect !== w / ht)) {
@@ -406,7 +414,7 @@ export class AssetPreview {
         camera.aspect = w / ht;
         camera.updateProjectionMatrix();
       }
-      mixer.update(clock.getDelta());
+      mixer.update(timer.getDelta());
       controls.update();
       renderer.render(scene, camera);
     };
@@ -425,7 +433,6 @@ export class AssetPreview {
         }
       });
       renderer.dispose();
-      renderer.forceContextLoss();
     };
   }
 

@@ -56,6 +56,9 @@ export function defineProject(projectDir: string): UserConfig {
     // '@engine' 是總入口（src/index.ts），'@engine/模組' 是各模組
     resolve: {
       alias: [
+        // 只用 WebGPU（three.js 的 WebGPURenderer）：'three' 指向 three/webgpu，WebGL 的繪製器不會被打包進來
+        // （兩者共用 three.core；three/webgpu 少的只有 WebGLRenderer、ShaderChunk 這些 WebGL 專用的東西）
+        { find: /^three$/, replacement: 'three/webgpu' },
         { find: /^@engine$/, replacement: join(ENGINE_SRC, 'index.ts') },
         { find: '@engine', replacement: ENGINE_SRC },
       ],

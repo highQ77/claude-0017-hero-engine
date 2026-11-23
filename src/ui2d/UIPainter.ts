@@ -140,9 +140,12 @@ export class UIPainter {
     }
 
     const radius = num(a.radius, 0);
+    // 局部重畫：自己畫的東西（含陰影、超出框的文字）完全在重畫範圍外時不畫（裁切範圍外的繪圖也有成本，
+    // 尤其是文字與陰影）；子元件可能超出自己的框，照樣往下走
+    const r = this.region;
+    const touches = !r || intersectsInk(el, x, y, w, h, r);
     // 蓋帽模式：還沒走過指定的元件時只走訪子元件、不畫自己
-    if (!this.skipping) {
-      const r = this.region;
+    if (!this.skipping && touches) {
       if (!r || (x < r.x + r.width && x + w > r.x && y < r.y + r.height && y + h > r.y)) this.paintedCount++;
       // 按鈕、下拉選單、勾選框的狀態（背景顏色與背景圖片一起決定）
       let background = a.background;
@@ -236,6 +239,11 @@ export class UIPainter {
     }
 
     if (el instanceof UIScrollView) {
+      // 列表：內容裁切在框裡。整個框都在重畫範圍外時，裡面的東西都不用走（蓋帽模式要走訪才能找到指定的元件，不略過）
+      if (r && !state.paintAfter && !(x < r.x + r.width && x + w > r.x && y < r.y + r.height && y + h > r.y)) {
+        ctx.restore();
+        return;
+      }
       // 列表：裁切範圍外的內容，並套用捲動位置
       ctx.save();
       roundRectPath(ctx, x, y, w, h, radius);
@@ -701,6 +709,26 @@ export class UIPainter {
 const reportedPaintErrors = new Set<string>();
 
 /** 圖片原始尺寸（HTMLImageElement、ImageBitmap、畫布都適用） */
+/** 陰影往外延伸多少（CSS 像素） */
+function shadowReach(v: string | undefined): number {
+  const sh = parseShadow(v);
+  return sh ? sh.blur * 2 + Math.max(Math.abs(sh.x), Math.abs(sh.y)) : 0;
+}
+
+/**
+ * 元件自己畫的東西（背景、框線、陰影、文字、內容）會不會碰到範圍 r。
+ * 往外多留一點：陰影、框線、按下時的縮放、滑桿的把手、超出框的文字
+ */
+function intersectsInk(el: UIElement, x: number, y: number, w: number, h: number, r: Rect): boolean {
+  const a = el.attrs;
+  let m = 8 + Math.max(shadowReach(a.shadow), shadowReach(a.textShadow));
+  if (a.border) m += num(a.border.split(/\s+/)[0], 1);
+  let mx = m;
+  // 文字比框寬（不換行、置中時兩邊都會超出）
+  if (el instanceof UILabel) mx += Math.max(0, el.metrics.width - w);
+  return x - mx < r.x + r.width && x + w + mx > r.x && y - m < r.y + r.height && y + h + m > r.y;
+}
+
 function imageSize(img: CanvasImageSource): { width: number; height: number } {
   const i = img as {
     naturalWidth?: number;

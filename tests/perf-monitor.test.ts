@@ -38,7 +38,7 @@ function fakeRenderer() {
       info.render.triangles += 100;
     },
   };
-  return renderer as unknown as THREE.WebGLRenderer & { info: typeof info };
+  return renderer as unknown as import('three/webgpu').WebGPURenderer & { info: typeof info };
 }
 
 // 元件註冊表是全域的：每個測試結束都移除套件，避免影響下一個測試

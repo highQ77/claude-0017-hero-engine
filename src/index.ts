@@ -31,7 +31,6 @@ import { load as ui2d_load } from './ui2d';
 import { load as text3d_load } from './text3d';
 import { create as text3d_create } from './text3d/create';
 import { create as postfx_create } from './postfx';
-import { register as shaders_register } from './shaders';
 import { define as plugins_define } from './plugins';
 export * from './core';
 export * from './math';
@@ -65,7 +64,7 @@ export type { Binding as InputBinding } from './input';
 //   spawn（建立實體）  define（定義元件、資源、套件）  create（建立物件）  math（數學）
 //   tick（立刻更新）   play（播放）  load（載入）  register（註冊）  collision（碰撞）
 //   steer（轉向）  sense（感知）  uiXml（介面檔）  parse（解析）  draw（2D 繪圖）
-//   measure（文字量測）  env（環境）  glsl（著色器）  object3d（three.js 物件）
+//   measure（文字量測）  env（環境）  object3d（three.js 物件）
 //   entityId（實體編號）  semver（版本號）  integrity（完整性驗證）  sceneFile（場景檔）
 
 /** 定義：元件、標籤、資源、套件 */
@@ -90,5 +89,5 @@ export const play = /* @__PURE__ */ (() => ({ ...animation_play, ...particles_pl
 /** 載入：場景檔、物理引擎、排版引擎、內建字型（外掛建立時會自動載入） */
 export const load = /* @__PURE__ */ (() =>
   ({ ...scene_load, ...physics_load, ...ui2d_load, ...text3d_load }) as const)();
-/** 註冊：內建載入器、著色器片段 */
-export const register = /* @__PURE__ */ (() => ({ ...assets_register, ...shaders_register }) as const)();
+/** 註冊：內建載入器 */
+export const register = /* @__PURE__ */ (() => ({ ...assets_register }) as const)();

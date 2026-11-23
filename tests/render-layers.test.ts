@@ -44,7 +44,7 @@ function fakeRenderer() {
     getClearColor: (c: THREE.Color) => c,
     getClearAlpha: () => 1,
   };
-  return { renderer: renderer as unknown as THREE.WebGLRenderer, draws };
+  return { renderer: renderer as unknown as import('three/webgpu').WebGPURenderer, draws };
 }
 
 function setup() {

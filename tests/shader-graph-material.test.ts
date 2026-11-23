@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { Engine } from '../src/core';
 import { EcsPlugin } from '../src/ecs';
 import { parseSceneFile, stringifySceneXml } from '../src/scene';
@@ -30,16 +30,21 @@ describe('材質描述 { shaderGraph }', () => {
     const plugin = new ShaderPlugin();
     const engine = new Engine({ scheduler: fakeScheduler().scheduler, pauseOnHidden: false });
     engine.use(ecs).use(plugin);
-    const m = createMaterial({ shaderGraph: 'shaders/lava.shader.json' }) as THREE.ShaderMaterial;
-    expect(m).toBeInstanceOf(THREE.ShaderMaterial);
+    const m = createMaterial({ shaderGraph: 'shaders/lava.shader.json' }) as THREE.Material & {
+      isNodeMaterial?: boolean;
+      colorNode: unknown;
+      positionNode: unknown;
+      uniforms?: Record<string, { value: unknown }>;
+    };
+    expect(m.isNodeMaterial).toBe(true); // 節點材質（TSL）
     expect(m.visible).toBe(false);
     await flush();
     await flush();
     expect(fetched).toEqual(['shaders/lava.shader.json']);
     expect(m.visible).toBe(true);
-    expect(m.fragmentShader).toContain('sgObjPos'); // 熔岩用物件座標
-    expect(m.vertexShader).toContain('transformed += normal');
-    expect(m.uniforms.uTime).toBe(plugin.library.builtins.uTime); // 和引擎共用時間
+    expect(m.colorNode).toBeTruthy(); // 顏色由節點圖決定
+    expect(m.positionNode).toBeTruthy(); // 熔岩有頂點位移（Vertex Output）
+    expect(Object.keys(m.uniforms ?? {})).toEqual(expect.arrayContaining(['uMouse', 'uLightDir', 'uAspect']));
     engine.removePlugin('shaders');
     expect(() => createMaterial({ shaderGraph: 'shaders/lava.shader.json' })).toThrow(/ShaderPlugin/);
   });

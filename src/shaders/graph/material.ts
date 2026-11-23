@@ -6,7 +6,8 @@
  * - 同一個網址的描述共用同一個材質（繪製模組依描述共用）
  * - 開發時在著色器編輯器存檔：開著的遊戲、3D 場景編輯器裡用到那個檔案的材質會自動更新
  */
-import * as THREE from 'three';
+import type * as THREE from 'three';
+import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { createLogger } from '../../core/Logger';
 import type { ShaderLibrary } from '../ShaderLibrary';
 import { loadShaderGraph } from './file';
@@ -22,24 +23,29 @@ interface GraphMaterialState {
   version: number;
 }
 
-const states = new WeakMap<THREE.ShaderMaterial, GraphMaterialState>();
+/** 節點圖材質（節點材質；載入完成前不顯示） */
+type GraphMaterial = MeshBasicNodeMaterial & { uniforms?: Record<string, unknown> };
+
+const states = new WeakMap<GraphMaterial, GraphMaterialState>();
 /** 網址 → 用到它的材質（存檔後重新載入） */
-const byUrl = new Map<string, Set<THREE.ShaderMaterial>>();
+const byUrl = new Map<string, Set<GraphMaterial>>();
 
 /** 網址整理成相對於 public 的寫法（shaders/lava.shader.json） */
 const normalize = (url: string) => url.replace(/^\.?\//, '');
 
-async function fill(material: THREE.ShaderMaterial): Promise<void> {
+async function fill(material: GraphMaterial): Promise<void> {
   const st = states.get(material);
   if (!st) return;
   const version = ++st.version;
   try {
     const def = await loadShaderGraph(st.url);
     if (version !== st.version || !states.has(material)) return; // 已經有更新的載入，或材質已釋放
-    const inner = st.library.createFromDefinition(def) as unknown as THREE.ShaderMaterial;
-    material.vertexShader = inner.vertexShader;
-    material.fragmentShader = inner.fragmentShader;
-    material.uniforms = inner.uniforms; // 包含引擎的 uTime 等（同一個物件，每幀更新）
+    const inner = st.library.createFromDefinition(def) as unknown as GraphMaterial;
+    // 換成節點圖的節點（uniform 節點是同一份：改 material.uniforms 一樣有效）
+    material.positionNode = inner.positionNode;
+    material.colorNode = inner.colorNode;
+    material.outputNode = inner.outputNode;
+    material.uniforms = inner.uniforms;
     material.transparent = inner.transparent;
     material.depthWrite = inner.depthWrite;
     material.side = inner.side;
@@ -57,9 +63,9 @@ async function fill(material: THREE.ShaderMaterial): Promise<void> {
  * 用節點圖檔建立材質（材質描述 { shaderGraph: 網址 } 用這個；一般程式用 loadShaderGraph + shaders.createMaterial）。
  * 回傳的材質立刻可以用，節點圖載入完成前不顯示。
  */
-export function shaderGraphMaterial(library: ShaderLibrary, url: string): THREE.ShaderMaterial {
+export function shaderGraphMaterial(library: ShaderLibrary, url: string): THREE.Material {
   const path = normalize(url);
-  const material = new THREE.ShaderMaterial({ visible: false });
+  const material: GraphMaterial = new MeshBasicNodeMaterial({ visible: false });
   Object.assign(material, { shaderName: path });
   states.set(material, { library, url: path, inner: null, version: 0 });
   let set = byUrl.get(path);

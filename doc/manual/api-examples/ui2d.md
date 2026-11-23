@@ -616,13 +616,13 @@ engine.start();
 ```
 
 ## UITextureRenderer
-把介面畫成 three.js 貼圖：可以貼在 3D 物件上（遊戲裡的螢幕、看板）。
+把介面畫成 three.js 貼圖：可以貼在 3D 物件上（遊戲裡的螢幕、看板）。介面有變化時只重畫變動的範圍；第二個參數給了繪製器時也只上傳那一塊（見 `UITextureCopier`）。
 
 ```ts
 spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
 spawn.defaultLights(world);
 const panel = await UI2D.create({ container: null, width: 256, height: 160 });
-const tr = new UITextureRenderer(() => render.renderer);
+const tr = new UITextureRenderer();
 panel.setRenderer(tr);
 panel.loadString(`<UI padding="14" gap="8" background="#20304a"><UILabel color="#fff" fontSize="22" fontWeight="bold">遊戲內螢幕</UILabel><UIProgressBar id="p" value="0"/></UI>`);
 const e = spawn.mesh(world, { geometry: { box: [1.6, 1, 0.05] }, material: { basic: { map: tr.texture } } });
@@ -631,6 +631,27 @@ engine.on('update', (t) => {
   panel.tick(t.delta);
   math.setRotation(world.require(e, Transform), [0, Math.sin(t.elapsed) * 0.5, 0]);
 });
+engine.start();
+```
+
+## UITextureCopier
+介面貼圖局部更新要用的繪製器功能（`copyTextureToTexture`）：引擎的繪製器（WebGPURenderer）就有。自己用 `UITextureRenderer` 時傳進去，介面只有一小塊變動時只上傳那一塊。
+
+```ts
+spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
+spawn.defaultLights(world);
+await render.ready;
+const copier: UITextureCopier = render.renderer;
+const panel = await UI2D.create({ container: null, width: 256, height: 160 });
+const tr = new UITextureRenderer(undefined, () => copier);
+panel.setRenderer(tr);
+panel.loadString(`<UI padding="14" gap="8" background="#20304a"><UILabel color="#fff" fontSize="22">局部更新</UILabel><UIProgressBar id="p" value="0"/></UI>`);
+spawn.mesh(world, { geometry: { box: [1.6, 1, 0.05] }, material: { basic: { map: tr.texture } } });
+engine.on('update', (t) => {
+  panel.require<UIProgressBar>('p').value = (t.elapsed * 25) % 100;
+  panel.tick(t.delta);
+});
+engine.timers.after(2, () => console.log('局部更新次數：', tr.uploadStats.partial, '，整張上傳：', tr.uploadStats.full));
 engine.start();
 ```
 

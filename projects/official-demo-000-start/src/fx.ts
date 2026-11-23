@@ -6,7 +6,7 @@ import { Color, type Vector3 } from '@engine/math';
 import { ParticleEmitter, type ParticleEmitterData, ParticlePresets } from '@engine/particles';
 import { spawn } from '@engine/render';
 import { Transform } from '@engine/scene';
-import { EffectPresets, ShaderPresets } from '@engine/shaders';
+import { EffectPresets, ShaderPresets, tsl } from '@engine/shaders';
 import { Text3D } from '@engine/text3d';
 import { shaders, tweens } from './engine';
 
@@ -20,19 +20,22 @@ shaders
   .defineEffect(EffectPresets.rainOnWindow())
   .defineEffect(EffectPresets.pixelate());
 
-/** 自己寫的例子：在地上往外擴散的脈衝光環（半透明疊加） */
+const { fract, length, smoothstep, vec4 } = tsl;
+
+/** 自己寫的例子：在地上往外擴散的脈衝光環（半透明疊加；TSL 節點） */
 shaders.define({
   name: 'pulseRing',
   base: 'unlit',
   options: { transparent: true, depthWrite: false, blending: 'additive' },
   uniforms: { ringColor: new Color(1.0, 0.55, 0.15), speed: 0.8, rings: 3 },
-  fragment: /* glsl */ `
-    float r = length(vUv - 0.5) * 2.0;                     // 0 = 中心，1 = 外緣
-    float wave = fract(r * rings - uTime * speed);         // 往外擴散的條紋
-    float band = smoothstep(0.0, 0.15, wave) * (1.0 - smoothstep(0.15, 0.5, wave));
-    float fade = 1.0 - smoothstep(0.6, 1.0, r);            // 外緣淡出
-    color = vec4(ringColor * 3.0, band * fade);
-  `,
+  color: (c) => {
+    const u = c.uniforms;
+    const r = length(c.uv.sub(0.5)).mul(2); // 0 = 中心，1 = 外緣
+    const wave = fract(r.mul(u.rings).sub(c.time.mul(u.speed))); // 往外擴散的條紋
+    const band = smoothstep(0, 0.15, wave).mul(smoothstep(0.15, 0.5, wave).oneMinus());
+    const fade = smoothstep(0.6, 1, r).oneMinus(); // 外緣淡出
+    return vec4(u.ringColor.mul(3), band.mul(fade));
+  },
 });
 
 export { shaders };

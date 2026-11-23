@@ -88,9 +88,9 @@
       <!-- ② 自訂材質 -->
       <UIScrollView id="materials" gap="10">
         <UILabel style="title">自訂材質（ShaderDefinition）</UILabel>
-        <UILabel style="text">用 GLSL 寫材質。base: 'standard' 保留光照與陰影、只改一部分（溶解、波浪）；base: 'unlit' 自己決定顏色（全像投影、條紋）。</UILabel>
+        <UILabel style="text">用 TSL（three.js 的節點）寫材質。base: 'standard' 保留光照與陰影、只改一部分（溶解、波浪）；base: 'unlit' 自己決定顏色（全像投影、條紋）。</UILabel>
         <UILayout style="codeBox">
-          <UILabel style="codeLine">shaders.define({ name, base, uniforms, fragment })</UILabel>
+          <UILabel style="codeLine">shaders.define({ name, base, uniforms, color })</UILabel>
           <UILabel style="codeLine">mat.uniforms.progress.value = 0.5</UILabel>
         </UILayout>
         <UILabel style="section">溶解（左）</UILabel>
@@ -109,9 +109,9 @@
       <!-- ③ 全螢幕效果 -->
       <UIScrollView id="effects" gap="10">
         <UILabel style="title">全螢幕效果（EffectDefinition）</UILabel>
-        <UILabel style="text">自己寫的後製效果：拿到整張畫面（tDiffuse）與座標（uv），算出每個像素的顏色。內建三種，也可以自己寫。</UILabel>
+        <UILabel style="text">自己寫的後製效果：拿到這個像素原本的顏色（color）、座標（uv），也能讀整張畫面（sample），算出新的顏色。內建三種，也可以自己寫。</UILabel>
         <UILayout style="codeBox">
-          <UILabel style="codeLine">shaders.defineEffect({ name, uniforms, fragment })</UILabel>
+          <UILabel style="codeLine">shaders.defineEffect({ name, uniforms, color })</UILabel>
           <UILabel style="codeLine">postfx.addPass(shaders.createEffect('vhs'), 'display')</UILabel>
         </UILayout>
         <UILabel style="field">效果</UILabel>
@@ -131,7 +131,7 @@
       <!-- ④ 節點圖 -->
       <UIScrollView id="graph" gap="10">
         <UILabel style="title">節點圖（Shader Graph）</UILabel>
-        <UILabel style="text">不寫 GLSL，用節點連起來：著色器編輯器（/shader-editor.html）存的 .shader.json 就是這種圖。這裡用程式組三張圖，編譯成著色器。</UILabel>
+        <UILabel style="text">不寫程式，用節點連起來：著色器編輯器（/shader-editor.html）存的 .shader.json 就是這種圖。這裡用程式組三張圖，編譯成 TSL 節點。</UILabel>
         <UILayout style="codeBox">
           <UILabel style="codeLine">compileShaderGraph(graph)</UILabel>
           <UILabel style="codeLine">shaders.createFromDefinition(shaderGraphDefinition(file))</UILabel>
@@ -142,7 +142,7 @@
           <UIButton text="邊緣光" style="preset" onClick="graphRim"/>
         </UILayout>
         <UILabel id="graphNodes" style="field" lineHeight="1.6"> </UILabel>
-        <UILabel style="hint">編譯出來的片段著色器：</UILabel>
+        <UILabel style="hint">編譯的結果：</UILabel>
         <UILayout style="codeBox">
           <UILabel id="graphCode" fontSize="11" color="#9fe0ff" fontFamily="monospace" lineHeight="1.45"> </UILabel>
         </UILayout>

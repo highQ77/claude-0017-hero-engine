@@ -180,7 +180,7 @@ function setupEngine() {
     render() {},
     clear() {},
     dispose() {},
-  } as unknown as THREE.WebGLRenderer;
+  } as unknown as import('three/webgpu').WebGPURenderer;
   const anim = new AnimationPlugin();
   const engine = new Engine({ scheduler: clock.scheduler, fixedDelta: 0.1, maxDelta: 1, pauseOnHidden: false });
   engine

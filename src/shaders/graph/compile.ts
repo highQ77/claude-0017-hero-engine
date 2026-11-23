@@ -1,17 +1,37 @@
 /**
  * 節點圖 → 引擎的自訂著色器（ShaderDefinition，base: 'unlit'），或全螢幕效果（EffectDefinition，後製）。
+ * 產生的是 TSL 節點（three.js 的節點著色器）：編譯結果是「拿到 uniform 與環境，組出節點」的函式，每個材質各自呼叫。
  *
- * - 圖裡有 Effect Output：全螢幕效果。Screen Color 讀取畫面原本的顏色（tDiffuse），顏色都是畫面上看到的值（sRGB），
- *   不做轉換（效果加在色調映射之後，postfx.addPass(effect, 'display')）；3D 才有的值（世界座標、法線）是固定的預設值
- *
- * - Fragment Output 決定像素顏色；Vertex Output（可以沒有）決定頂點位移，接到它的節點在頂點著色器求值
- * - 產生的程式放進 ShaderLibrary 的 unlit 著色器：片段階段設定 color，頂點階段修改 transformed
- * - 節點圖的顏色是畫面上看到的顏色（sRGB）：輸出前轉成線性，經過引擎的色彩轉換後和預覽、設計時一樣
- * - 節點圖自己的 uniform：uMouse（vec2）、uAspect（float）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>
- *
- * 這個檔案只產生 GLSL 文字，不用 three.js（測試、開發伺服器都可以用）。
+ * - 圖裡有 Effect Output：全螢幕效果。Screen Color 讀取畫面原本的顏色，顏色都是畫面上看到的值（sRGB），
+ *   不做轉換（效果加在色調映射之後）；3D 才有的值（世界座標、法線）是固定的預設值
+ * - Fragment Output 決定像素顏色；Vertex Output（可以沒有）決定頂點位移
+ * - 節點圖的顏色是畫面上看到的顏色（sRGB）：材質輸出前轉成線性，經過引擎的色彩轉換後和預覽、設計時一樣
+ * - 節點圖自己的 uniform：uMouse（vec2）、uAspect（float，材質）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>
  */
-import { type GraphType, HELPERS, NODE_DEFS, type NodeDef, convertType, glslFloat, widerType } from './nodes';
+import { type GraphType, NODE_DEFS, type NodeBuiltin, type NodeDef, convertType, widerType } from './nodes';
+import { type ShaderNode, tsl } from '../tsl';
+
+const {
+  cameraPosition,
+  cross,
+  dFdx,
+  dFdy,
+  float,
+  max,
+  normalLocal,
+  normalWorld,
+  normalize,
+  positionLocal,
+  positionWorld,
+  sRGBTransferEOTF,
+  screenSize,
+  time,
+  uniform,
+  uv,
+  vec2,
+  vec3,
+  vec4,
+} = tsl;
 
 /** 節點圖裡的一個節點 */
 export interface ShaderGraphNode {
@@ -61,24 +81,35 @@ export function shaderGraphKind(graph: ShaderGraph): ShaderGraphKind {
   return graph.nodes.some((n) => n.type === 'effectOutput') ? 'effect' : 'material';
 }
 
-/** 編譯結果（可以直接放進 ShaderDefinition；全螢幕效果的 fragmentHeader、fragment 放進 EffectDefinition） */
+/** 組節點時的環境：uniform 節點、全螢幕效果的畫面 */
+export interface GraphEnv {
+  /** 節點圖的 uniform 節點：uMouse、uLightDir、uAspect（材質）、uTex<編號> */
+  uniforms: Record<string, ShaderNode>;
+  /** 全螢幕效果：畫面座標（vec2，左下 0,0） */
+  uv?: ShaderNode;
+  /** 全螢幕效果：畫面在 uv 的顏色（vec4）；材質預覽效果的圖時是一張當成畫面的貼圖 */
+  screen?: (uv: ShaderNode) => ShaderNode;
+  /** Time 節點的值（省略時是 three.js 的 time：經過的秒數）；著色器編輯器用它暫停預覽 */
+  time?: ShaderNode;
+}
+
+/** 編譯結果（shaderGraphDefinition、shaderGraphEffectDefinition 用它組出定義） */
 export interface CompiledShaderGraph {
   /** 材質或全螢幕效果 */
   kind: ShaderGraphKind;
-  /** 頂點著色器的函式與宣告 */
-  vertexHeader: string;
-  /** 頂點著色器 main 裡的程式（修改 transformed；沒有 Vertex Output 時是空的） */
-  vertex: string;
-  /** 片段著色器的函式與宣告 */
-  fragmentHeader: string;
-  /** 片段著色器 main 裡的程式（設定 color） */
-  fragment: string;
   /** 用到貼圖的節點編號（每個都有 uniform uTex<編號>） */
   textures: number[];
   /** 是否半透明（alpha 有連接或小於 1） */
   transparent: boolean;
   /** 畫哪一面 */
   side: 'front' | 'back' | 'double';
+  /**
+   * 組出顏色（vec4）：材質是線性的顏色（已從 sRGB 轉換）；全螢幕效果是畫面上的顏色。
+   * 只預覽一個節點（target）時是那個輸出的顏色（sRGB，還沒轉換）
+   */
+  color(env: GraphEnv): ShaderNode;
+  /** 組出頂點位置（物件座標，vec3）；沒有 Vertex Output 時是 null */
+  position: ((env: GraphEnv) => ShaderNode) | null;
 }
 
 /** compileShaderGraph 的選項 */
@@ -87,28 +118,79 @@ export interface CompileOptions {
   target?: { nodeId: number; port: string };
 }
 
-/** 節點圖自己的 uniform 名稱與型別（ShaderLibrary 依初始值產生宣告） */
+/** 節點圖自己的 uniform 名稱（貼圖另外是 uTex<編號>） */
 export const GRAPH_UNIFORMS = ['uMouse', 'uAspect', 'uLightDir'] as const;
 
 interface Value {
-  expr: string;
+  node: ShaderNode;
   type: GraphType;
 }
 
-function makeCompiler(graph: ShaderGraph, stage: 'vertex' | 'fragment', mode: ShaderGraphKind = 'material') {
+/** 試組節點用的 uniform（檢查圖有沒有錯、分析型別） */
+function stubEnv(graph: ShaderGraph, mode: ShaderGraphKind): GraphEnv {
+  const uniforms: Record<string, ShaderNode> = {
+    uMouse: uniform(vec2(0.5, 0.5)),
+    uAspect: uniform(1),
+    uLightDir: uniform(vec3(0, 1, 0)),
+  };
+  for (const n of graph.nodes) if (n.type === 'texture') uniforms[`uTex${n.id}`] = tsl.texture(null);
+  return mode === 'effect' ? { uniforms, uv: uv(), screen: () => vec4(0) } : { uniforms };
+}
+
+function makeCompiler(
+  graph: ShaderGraph,
+  stage: 'vertex' | 'fragment',
+  mode: ShaderGraphKind,
+  env: GraphEnv,
+  flatNormals = false,
+) {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const incoming = new Map<string, ShaderGraphLink>();
   for (const l of graph.links) incoming.set(`${l.to}:${l.toPort}`, l);
 
-  const lines: string[] = [];
-  const helpers = new Set<string>();
   const textures = new Set<number>();
   const done = new Map<number, Record<string, Value>>();
   const visiting = new Set<number>();
   const types: Record<string, GraphType> = {};
-  const inputExprs = new Map<number, Record<string, string>>();
+  const inputNodes = new Map<number, Record<string, ShaderNode>>();
   /** 有連接的輸入（判斷 alpha 是否半透明） */
   const linked = new Set<string>();
+
+  const effect = mode === 'effect';
+  const fsUv = effect ? env.uv! : uv();
+  const aspect = effect ? screenSize.x.div(screenSize.y) : env.uniforms.uAspect;
+  const effectPos = () => vec3(fsUv.sub(0.5), 0);
+  const builtin = (name: NodeBuiltin): ShaderNode => {
+    switch (name) {
+      case 'uv':
+        return fsUv;
+      case 'centeredUV':
+        return fsUv.sub(0.5).mul(vec2(aspect, 1)).mul(2);
+      case 'normal':
+        if (effect) return vec3(0, 0, 1);
+        // 依位移重算法線：用螢幕空間導數（只有片段階段）
+        if (flatNormals && stage === 'fragment') return normalize(cross(dFdx(positionWorld), dFdy(positionWorld)));
+        return normalWorld;
+      case 'worldPos':
+        return effect ? effectPos() : positionWorld;
+      case 'objectPos':
+        return effect ? effectPos() : positionLocal;
+      case 'view':
+        return effect ? vec3(0, 0, 1) : normalize(cameraPosition.sub(positionWorld));
+      case 'light':
+        return env.uniforms.uLightDir;
+      case 'time':
+        return env.time ?? time;
+      case 'resolution':
+        return screenSize;
+      case 'mouse':
+        return env.uniforms.uMouse;
+      case 'screen':
+        if (!env.screen)
+          throw new Error('Screen Color 只能用在全螢幕效果（圖裡要有 Effect Output，不是 Fragment Output）');
+        return env.screen(fsUv).rgb;
+    }
+  };
 
   function visit(node: ShaderGraphNode): Record<string, Value> {
     const cached = done.get(node.id);
@@ -137,169 +219,116 @@ function makeCompiler(graph: ShaderGraph, stage: 'vertex' | 'fragment', mode: Sh
     let T: GraphType = 'float';
     for (const inp of def.inputs) if (inp.type === 'T' && src[inp.name]) T = widerType(T, src[inp.name].type);
 
-    // 3. 每個輸入的運算式（型別轉換、預設值）
-    const ins: Record<string, string> = {};
+    // 3. 每個輸入的節點（型別轉換、預設值）
+    const ins: Record<string, ShaderNode> = {};
     for (const inp of def.inputs) {
       const want = inp.type === 'T' ? T : inp.type;
       const s = src[inp.name];
-      let e: string;
-      if (s) e = convertType(s.expr, s.type, want);
-      else if (inp.expr) e = convertType(inp.expr, inp.exprType ?? want, want);
-      else e = convertType(glslFloat(node.values?.[inp.name] ?? inp.default ?? 0), 'float', want);
-      ins[inp.name] = e;
+      let n: ShaderNode;
+      if (s) n = convertType(s.node, s.type, want);
+      else if (inp.expr) n = convertType(builtin(inp.expr), inp.exprType ?? want, want);
+      else n = convertType(float(Number(node.values?.[inp.name] ?? inp.default ?? 0) || 0), 'float', want);
+      ins[inp.name] = n;
       types[`${node.id}:in:${inp.name}`] = want;
     }
 
-    for (const h of def.helpers) helpers.add(h);
     const ctx = {
       stage,
       mode,
-      v: (name: string) => `n${node.id}_${name}`,
-      texture: () => {
+      builtin,
+      texture: (at: ShaderNode) => {
         textures.add(node.id);
-        return `uTex${node.id}`;
+        const sample = env.uniforms[`uTex${node.id}`].sample(at);
+        // 頂點階段沒有自動的 mipmap 層級：用第 0 層
+        return stage === 'vertex' ? sample.level(0) : sample;
       },
-      screen: () => {
-        if (mode !== 'effect')
+      screen: (at: ShaderNode) => {
+        if (!env.screen)
           throw new Error(`${def.title} 只能用在全螢幕效果（圖裡要有 Effect Output，不是 Fragment Output）`);
-        return 'tDiffuse';
+        return env.screen(at);
       },
     };
-    const res = def.glsl ? def.glsl(ins, node.params ?? {}, T, ctx) : {};
+    const res = def.tsl ? def.tsl(ins, node.params ?? {}, T, ctx) : {};
 
-    // 4. 每個輸出宣告成一個區域變數
+    // 4. 每個輸出（toVar：同一個值給好幾個節點用時只算一次）
     const outs: Record<string, Value> = {};
     for (const o of def.outputs) {
       const t = o.type === 'T' ? T : o.type;
-      const v = `n${node.id}_${o.name}`;
-      lines.push(`  ${t} ${v} = ${res[o.name]};  // ${def.title}`);
-      outs[o.name] = { expr: v, type: t };
+      outs[o.name] = { node: res[o.name], type: t };
       types[`${node.id}:out:${o.name}`] = t;
     }
 
-    inputExprs.set(node.id, ins);
+    inputNodes.set(node.id, ins);
     visiting.delete(node.id);
     done.set(node.id, outs);
     return outs;
   }
 
-  return { visit, lines, helpers, textures, types, inputExprs, byId, visiting, linked };
+  return { visit, textures, types, inputNodes, byId, visiting, linked };
 }
-
-type Compiler = ReturnType<typeof makeCompiler>;
-
-function helperSource(c: Compiler): string {
-  return Object.keys(HELPERS)
-    .filter((k) => c.helpers.has(k))
-    .map((k) => HELPERS[k])
-    .join('\n\n');
-}
-
-/** 片段、頂點階段共用的變數：sgWorldPos（世界座標）、sgNormal（世界空間法線） */
-const FRAGMENT_PRELUDE = '  vec3 sgWorldPos = vWorldPosition;\n  vec3 sgNormal = normalize(vWorldNormal);\n';
-/** 依位移重算法線：用螢幕空間導數（頂點位移後光照才正確） */
-const FLAT_PRELUDE =
-  '  vec3 sgWorldPos = vWorldPosition;\n  vec3 sgNormal = normalize(cross(dFdx(vWorldPosition), dFdy(vWorldPosition)));\n';
-const VERTEX_PRELUDE =
-  '  vec3 sgWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;\n  vec3 sgNormal = normalize(mat3(modelMatrix) * normal);\n';
-
-/** 全螢幕效果沒有 3D 的位置與法線：給固定的值，用到它們的節點照樣能編譯 */
-const EFFECT_PRELUDE =
-  '  vec3 sgObjPos = vec3(vUv - 0.5, 0.0);\n  vec3 sgWorldPos = sgObjPos;\n  vec3 sgNormal = vec3(0.0, 0.0, 1.0);\n';
-
-/** 物件座標（還沒移動、旋轉、縮放的頂點位置）：頂點著色器傳給片段著色器 */
-const OBJ_VARYING = 'varying vec3 sgObjPos;\n';
-const OBJ_ASSIGN = '  sgObjPos = position;\n';
 
 /** sRGB（畫面上的顏色）→ 線性：引擎最後會把線性轉回 sRGB */
-const toLinear = (rgb: string) => `sRGBTransferEOTF(vec4(max(${rgb}, vec3(0.0)), 1.0)).rgb`;
+const toLinear = (rgb: ShaderNode) => sRGBTransferEOTF(max(rgb, vec3(0)));
 
 /**
- * 節點圖編譯成引擎自訂著色器的程式片段。
- * 圖有錯誤（循環連線、沒有 Fragment Output、未知節點）時丟出錯誤。
+ * 節點圖編譯成組節點的函式。圖有錯誤（循環連線、沒有 Fragment Output、未知節點）時丟出錯誤。
  * @example
- * // 一般用 shaderGraphDefinition（file.ts）：會補上 uniform、貼圖、材質參數；這裡只拿 GLSL 片段
+ * // 一般用 shaderGraphDefinition（file.ts）：會補上 uniform、貼圖、材質參數
  * const c = compileShaderGraph(parseShaderGraphFile(json).graph);
- * console.log(c.vertex, c.fragment);
+ * console.log(c.kind, c.textures, c.transparent);
  */
 export function compileShaderGraph(graph: ShaderGraph, options: CompileOptions = {}): CompiledShaderGraph {
   const kind = shaderGraphKind(graph);
   if (kind === 'effect' && graph.nodes.some((n) => n.type === 'output' || n.type === 'vertexOutput'))
     throw new Error('一張圖只能是材質或全螢幕效果：請刪掉 Effect Output，或刪掉 Fragment Output、Vertex Output');
-  const fc = makeCompiler(graph, 'fragment', kind);
   const { target } = options;
-  if (target) {
-    const node = fc.byId.get(target.nodeId);
-    if (!node) throw new Error(`找不到節點 ${target.nodeId}`);
-    const o = fc.visit(node)[target.port];
-    if (!o) throw new Error(`節點 ${target.nodeId} 沒有輸出 ${target.port}`);
-    // 節點縮圖是材質（平面上），全螢幕效果的圖也一樣：只是沒有 3D 的位置與法線
-    const effect = kind === 'effect';
-    return {
-      kind,
-      vertexHeader: effect ? '' : OBJ_VARYING,
-      vertex: effect ? '' : OBJ_ASSIGN,
-      fragmentHeader: (effect ? '' : OBJ_VARYING) + helperSource(fc),
-      fragment: `${effect ? EFFECT_PRELUDE : FRAGMENT_PRELUDE}${fc.lines.join('\n')}\n  color = vec4(${toLinear(convertType(o.expr, o.type, 'vec3'))}, 1.0);`,
-      textures: [...fc.textures],
-      transparent: false,
-      side: 'front',
-    };
-  }
-
-  if (kind === 'effect') {
-    const eout = graph.nodes.find((n) => n.type === 'effectOutput')!;
-    fc.visit(eout);
-    const i = fc.inputExprs.get(eout.id)!;
-    return {
-      kind,
-      vertexHeader: '',
-      vertex: '',
-      fragmentHeader: helperSource(fc),
-      // 顏色是畫面上的值（sRGB）：效果加在色調映射之後，不用轉換
-      fragment: `${EFFECT_PRELUDE}${fc.lines.join('\n')}\n  color = vec4(${i.color}, ${i.alpha});`,
-      textures: [...fc.textures],
-      transparent: false,
-      side: 'front',
-    };
-  }
-
-  const out = graph.nodes.find((n) => n.type === 'output');
-  if (!out) throw new Error('圖中沒有 Fragment Output 節點');
-  const vout = graph.nodes.find((n) => n.type === 'vertexOutput');
+  const out = graph.nodes.find((n) => n.type === (kind === 'effect' ? 'effectOutput' : 'output'));
+  if (!target && !out) throw new Error('圖中沒有 Fragment Output 節點');
+  const vout = kind === 'material' && !target ? graph.nodes.find((n) => n.type === 'vertexOutput') : undefined;
   const flat = vout?.params?.normals === 'flat';
-  fc.visit(out);
-  const i = fc.inputExprs.get(out.id)!;
-  const alphaLinked = fc.linked.has(`${out.id}:alpha`);
-  const alphaValue = Number(out.values?.alpha ?? 1);
-  const textures = new Set(fc.textures);
 
-  let vertexHeader = OBJ_VARYING;
-  let vertex = OBJ_ASSIGN;
-  if (vout) {
-    const vc = makeCompiler(graph, 'vertex');
-    vc.visit(vout);
-    const vi = vc.inputExprs.get(vout.id)!;
-    vertexHeader = OBJ_VARYING + helperSource(vc);
-    vertex = `${OBJ_ASSIGN}${VERTEX_PRELUDE}${vc.lines.join('\n')}\n  transformed += normal * (${vi.displacement}) + (${vi.offset});`;
-    for (const t of vc.textures) textures.add(t);
-  }
-  const side = String(out.params?.side ?? 'front');
+  // 片段階段：組出顏色
+  const fragment = (env: GraphEnv, mode: ShaderGraphKind = kind) => {
+    const c = makeCompiler(graph, 'fragment', mode, env, flat);
+    if (target) {
+      const node = c.byId.get(target.nodeId);
+      if (!node) throw new Error(`找不到節點 ${target.nodeId}`);
+      const o = c.visit(node)[target.port];
+      if (!o) throw new Error(`節點 ${target.nodeId} 沒有輸出 ${target.port}`);
+      return { c, color: vec4(convertType(o.node, o.type, 'vec3'), 1) };
+    }
+    c.visit(out!);
+    const i = c.inputNodes.get(out!.id)!;
+    return { c, color: kind === 'effect' ? vec4(i.color, i.alpha) : vec4(toLinear(i.color), i.alpha) };
+  };
+  const vertex = (env: GraphEnv) => {
+    const c = makeCompiler(graph, 'vertex', 'material', env);
+    c.visit(vout!);
+    const vi = c.inputNodes.get(vout!.id)!;
+    return { c, position: positionLocal.add(normalLocal.mul(vi.displacement)).add(vi.offset) };
+  };
+
+  // 先試組一次：圖有錯誤時現在就丟出（編輯器馬上顯示）；也收集貼圖、半透明
+  const stub = stubEnv(graph, kind);
+  const f = fragment(stub);
+  const textures = new Set(f.c.textures);
+  if (vout) for (const t of vertex(stub).c.textures) textures.add(t);
+  const alphaLinked = !!out && f.c.linked.has(`${out.id}:alpha`);
+  const alphaValue = Number(out?.values?.alpha ?? 1);
+  const side = String(out?.params?.side ?? 'front');
   return {
     kind,
-    vertexHeader,
-    vertex,
-    fragmentHeader: OBJ_VARYING + helperSource(fc),
-    fragment: `${flat ? FLAT_PRELUDE : FRAGMENT_PRELUDE}${fc.lines.join('\n')}\n  color = vec4(${toLinear(i.color)}, ${i.alpha});`,
     textures: [...textures],
-    transparent: alphaLinked || alphaValue < 1,
+    transparent: !target && kind === 'material' && (alphaLinked || alphaValue < 1),
     side: side === 'double' || side === 'back' ? side : 'front',
+    color: (env) => fragment(env).color,
+    position: vout ? (env) => vertex(env).position : null,
   };
 }
 
 /** 整張圖每個連接埠的實際型別（鍵是「節點編號:in|out:名稱」；編輯器替連線、連接埠上色） */
 export function analyzeShaderGraphTypes(graph: ShaderGraph): Record<string, GraphType> {
-  const c = makeCompiler(graph, 'fragment');
+  const c = makeCompiler(graph, 'fragment', shaderGraphKind(graph), stubEnv(graph, shaderGraphKind(graph)));
   for (const n of graph.nodes) {
     try {
       c.visit(n);

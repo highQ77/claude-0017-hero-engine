@@ -29,7 +29,7 @@ function fakeRenderer() {
     render() {},
     clear() {},
     dispose() {},
-  } as unknown as THREE.WebGLRenderer;
+  } as unknown as import('three/webgpu').WebGPURenderer;
 }
 
 function setup() {

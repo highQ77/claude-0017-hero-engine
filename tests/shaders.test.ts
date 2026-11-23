@@ -8,244 +8,174 @@ import {
   ShaderPlugin,
   ShaderPresets,
   ShadersKey,
-  glsl,
-  register,
-  type CustomMaterial,
+  shaderFns,
+  tsl,
+  type EffectContext,
+  type ShaderContext,
 } from '../src/shaders';
 import { fakeScheduler } from './helpers';
 
-/** 模擬 three.js 編譯前的流程：取得標準材質原始碼，交給 onBeforeCompile */
-function compileLit(material: THREE.Material, lib: 'standard' | 'basic' = 'standard') {
-  const src = THREE.ShaderLib[lib];
-  const shader = {
-    uniforms: THREE.UniformsUtils.clone(src.uniforms),
-    vertexShader: src.vertexShader,
-    fragmentShader: src.fragmentShader,
-  } as THREE.WebGLProgramParametersWithUniforms;
-  material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
-  return shader;
-}
+/** 節點材質的欄位（TSL） */
+type NodeMaterial = THREE.Material & {
+  isNodeMaterial?: boolean;
+  positionNode: unknown;
+  colorNode: unknown;
+  emissiveNode: unknown;
+  outputNode: unknown;
+};
 
-/** 展開 #include（和 three.js 相同規則），確認每個片段都存在 */
-function resolveIncludes(source: string, depth = 0): string {
-  if (depth > 10) throw new Error('include 太深');
-  return source.replace(/^[ \t]*#include +<([\w\d./]+)>/gm, (_m, name: string) => {
-    const chunk = (THREE.ShaderChunk as Record<string, string>)[name];
-    if (chunk === undefined) throw new Error(`找不到片段 <${name}>`);
-    return resolveIncludes(chunk, depth + 1);
-  });
-}
+const { vec4, vec3, float } = tsl;
 
-describe('uniform 型別推斷', () => {
-  test('常見型別', () => {
-    expect(glsl.typeOf(1)).toBe('float');
-    expect(glsl.typeOf(true)).toBe('bool');
-    expect(glsl.typeOf(new THREE.Color())).toBe('vec3');
-    expect(glsl.typeOf(new THREE.Vector2())).toBe('vec2');
-    expect(glsl.typeOf(new THREE.Vector4())).toBe('vec4');
-    expect(glsl.typeOf(new THREE.Matrix4())).toBe('mat4');
-    expect(glsl.typeOf(new THREE.Texture())).toBe('sampler2D');
-    expect(glsl.typeOf(null)).toBe('sampler2D');
-    expect(() => glsl.typeOf('x', 'name')).toThrow(/無法推斷 uniform「name」/);
-  });
-});
-
-describe('完全自訂材質（unlit）', () => {
-  test('產生的原始碼包含宣告、內建變數與開發者的程式碼', () => {
+describe('自訂材質（TSL）', () => {
+  test('unlit：建立節點材質，color 函式拿到 uniform 與內建的值', () => {
     const lib = new ShaderLibrary();
     lib.define({
       name: 'flat',
       base: 'unlit',
-      uniforms: { tint: new THREE.Color(1, 0, 0), strength: 0.5, weights: { value: [0, 0, 0, 0], glsl: 'float[4]' } },
-      vertex: 'transformed.y += strength;',
-      fragment: 'color = vec4(tint, 1.0);',
+      uniforms: { tint: new THREE.Color(1, 0, 0), strength: 0.5 },
+      color: (c: ShaderContext) => vec4(c.uniforms.tint.mul(c.uniforms.strength), 1),
+    });
+    const m = lib.createMaterial('flat') as unknown as NodeMaterial & { uniforms: Record<string, { value: unknown }> };
+    expect(m.isNodeMaterial).toBe(true);
+    expect(m).toBeInstanceOf(THREE.Material);
+    expect(m.colorNode).toBeTruthy();
+    expect(m.positionNode).toBeNull();
+    expect(m.uniforms.strength.value).toBe(0.5);
+    expect(lib.liveCount('flat')).toBe(1);
+  });
+
+  test('每個實例的 uniform 各自獨立；可以覆蓋初始值與材質參數', () => {
+    const lib = new ShaderLibrary();
+    lib.define({
+      name: 'fade',
+      base: 'standard',
+      uniforms: { progress: 0, tint: new THREE.Color(1, 1, 1) },
+      color: (c) => vec4(c.uniforms.tint, 1),
       options: { transparent: true },
     });
-    const m = lib.createMaterial('flat') as unknown as THREE.ShaderMaterial & CustomMaterial;
-    expect(m).toBeInstanceOf(THREE.ShaderMaterial);
-    expect(m.transparent).toBe(true);
-    expect(m.vertexShader).toContain('uniform vec3 tint;');
-    expect(m.vertexShader).toContain('uniform float weights[4];');
-    expect(m.vertexShader).toContain('transformed.y += strength;');
-    expect(m.fragmentShader).toContain('color = vec4(tint, 1.0);');
-    expect(m.fragmentShader).toContain('uniform float uTime;');
-    expect(m.fragmentShader).toContain('varying vec3 vWorldPosition;');
-    expect(() => resolveIncludes(m.fragmentShader)).not.toThrow();
-    expect(m.shaderName).toBe('flat');
+    const a = lib.createMaterial('fade');
+    const b = lib.createMaterial('fade', { progress: 0.7 }, { roughness: 0.2 });
+    a.uniforms.progress.value = 0.3;
+    expect(b.uniforms.progress.value).toBe(0.7);
+    expect(a.uniforms.tint.value).not.toBe(b.uniforms.tint.value); // 顏色也是各自一份
+    expect(a.transparent).toBe(true);
+    expect((b as unknown as { roughness: number }).roughness).toBe(0.2);
+    expect(() => lib.createMaterial('fade', { nope: 1 })).toThrow(/沒有 uniform「nope」/);
   });
 
-  test('每個實例的 uniform 各自獨立；內建 uniform 共用', () => {
-    const lib = new ShaderLibrary();
-    lib.define({ name: 'a', base: 'unlit', uniforms: { tint: new THREE.Color(1, 1, 1), amount: 1 } });
-    const m1 = lib.createMaterial('a');
-    const m2 = lib.createMaterial('a', { amount: 5 });
-    (m1.uniforms.tint.value as THREE.Color).set(0xff0000);
-    expect((m2.uniforms.tint.value as THREE.Color).getHex()).toBe(0xffffff);
-    expect([m1.uniforms.amount.value, m2.uniforms.amount.value]).toEqual([1, 5]);
-    expect(m1.uniforms.uTime).toBe(m2.uniforms.uTime);
-    lib.builtins.uTime.value = 3;
-    expect(m1.uniforms.uTime.value).toBe(3);
-    expect(() => lib.createMaterial('a', { nope: 1 })).toThrow(/沒有 uniform「nope」/);
-  });
-});
-
-describe('擴充標準材質', () => {
-  test('程式碼插入在正確位置，保留 three.js 原本的光照', () => {
+  test('標準材質保留光照：color、emissive、position 對應到節點；basic 不用 emissive', () => {
     const lib = new ShaderLibrary();
     lib.define({
       name: 'lit',
       base: 'standard',
-      options: { roughness: 0.3, color: 0x336699 },
-      uniforms: { glow: 2 },
-      vertex: '/*V*/ transformed.x += 1.0;',
-      fragment: '/*F*/ diffuseColor.rgb *= 0.5;',
-      emissive: '/*E*/ totalEmissiveRadiance += vec3(glow);',
-      output: '/*O*/ gl_FragColor.a = 1.0;',
+      color: () => vec4(1, 0, 0, 1),
+      emissive: () => vec3(0, 1, 0),
+      position: (c) => c.position.add(c.normal.mul(0.1)),
     });
-    const m = lib.createMaterial('lit') as CustomMaterial & THREE.MeshStandardMaterial;
-    expect(m).toBeInstanceOf(THREE.MeshStandardMaterial);
-    expect(m.roughness).toBe(0.3);
-    expect(m.color.getHex()).toBe(0x336699);
-
-    const shader = compileLit(m);
-    const vs = shader.vertexShader;
-    const fs = shader.fragmentShader;
-    const after = (src: string, anchor: string, marker: string) =>
-      expect(src.indexOf(marker)).toBeGreaterThan(src.indexOf(`#include <${anchor}>`));
-    after(vs, 'begin_vertex', '/*V*/');
-    expect(vs.indexOf('/*V*/')).toBeLessThan(vs.indexOf('#include <project_vertex>'));
-    after(fs, 'color_fragment', '/*F*/');
-    after(fs, 'emissivemap_fragment', '/*E*/');
-    after(fs, 'opaque_fragment', '/*O*/');
-    expect(fs.indexOf('/*O*/')).toBeLessThan(fs.indexOf('#include <tonemapping_fragment>'));
-    expect(fs).toContain('#include <lights_fragment_begin>'); // 光照還在
-    expect(shader.uniforms.glow).toBe(m.uniforms.glow);
-    expect(shader.uniforms.uTime).toBe(lib.builtins.uTime);
-    expect(() => resolveIncludes(vs)).not.toThrow();
-    expect(() => resolveIncludes(fs)).not.toThrow();
-    expect(m.customProgramCacheKey()).toBe('lit:0');
-
-    // 每個實例可以有自己的材質參數
-    const red = lib.createMaterial('lit', {}, { color: 0xff0000 }) as CustomMaterial & THREE.MeshStandardMaterial;
-    expect(red.color.getHex()).toBe(0xff0000);
-    expect(red.roughness).toBe(0.3);
+    const m = lib.createMaterial('lit') as unknown as NodeMaterial;
+    expect((m as unknown as { isMeshStandardMaterial?: boolean }).isMeshStandardMaterial).toBe(true);
+    expect([!!m.colorNode, !!m.emissiveNode, !!m.positionNode]).toEqual([true, true, true]);
+    lib.define({ name: 'b', base: 'basic', emissive: () => vec3(1) });
+    expect((lib.createMaterial('b') as unknown as NodeMaterial).emissiveNode).toBeNull();
   });
 
-  test('basic 材質不支援 emissive；不存在的插入點會清楚報錯', () => {
+  test('定義錯誤會清楚報錯；舊的 GLSL 寫法提示改用 TSL；材質與效果不能混用', () => {
     const lib = new ShaderLibrary();
-    expect(() => lib.define({ name: 'x', base: 'basic', emissive: 'a' })).toThrow(/沒有自發光/);
-    lib.define({ name: 'y', base: 'basic', fragment: 'diffuseColor.r = 1.0;' });
-    expect(() => compileLit(lib.createMaterial('y'), 'basic')).not.toThrow();
-  });
-
-  test('內建 uniform 名稱不能拿來用；重複註冊報錯；材質與效果不能混用', () => {
-    const lib = new ShaderLibrary();
-    expect(() => lib.define({ name: 'z', base: 'unlit', uniforms: { uTime: 1 } })).toThrow(/內建/);
-    lib.define({ name: 'z', base: 'unlit' });
-    expect(() => lib.define({ name: 'z', base: 'unlit' })).toThrow(/已註冊/);
-    expect(() => lib.createEffect('z')).toThrow(/是材質，不是效果/);
-    expect(() => lib.createMaterial('missing')).toThrow(/找不到著色器「missing」/);
+    expect(() => lib.define({ name: 'x', base: 'unlit' })).toThrow(/需要 color 函式/);
+    expect(() => lib.define({ name: 'x', base: 'metal' as never, color: () => vec4(1) })).toThrow(/base 不正確/);
+    expect(() => lib.define({ name: 'old', base: 'unlit', fragment: 'color = vec4(1.0);' } as never)).toThrow(
+      /舊的 GLSL 寫法（fragment）/,
+    );
+    expect(() => lib.defineEffect({ name: 'e' } as never)).toThrow(/需要 color 函式/);
+    lib.defineEffect({ name: 'fx', color: (c) => c.color });
+    lib.define({ name: 'mat', base: 'unlit', color: () => vec4(1) });
+    expect(() => lib.createMaterial('fx')).toThrow(/全螢幕效果，請用 createEffect/);
+    expect(() => lib.createEffect('mat')).toThrow(/材質，請用 createMaterial/);
+    expect(() => lib.createMaterial('none')).toThrow(/找不到著色器「none」/);
   });
 });
 
 describe('執行中更新', () => {
-  test('unlit：所有實例換上新程式碼、保留舊值、加入新 uniform', () => {
+  test('所有實例換上新節點、保留舊值、加入新 uniform；版本加一', () => {
     const lib = new ShaderLibrary();
-    lib.define({ name: 'u', base: 'unlit', uniforms: { a: 1 }, fragment: 'color = vec4(1.0);' });
-    const m = lib.createMaterial('u') as unknown as THREE.ShaderMaterial & CustomMaterial;
-    m.uniforms.a.value = 7;
-    const version = m.version;
-    lib.update('u', { fragment: 'color = vec4(a, b, 0.0, 1.0);', uniforms: { a: 1, b: 2 } });
-    expect(m.fragmentShader).toContain('color = vec4(a, b, 0.0, 1.0);');
-    expect(m.fragmentShader).toContain('uniform float b;');
-    expect(m.uniforms.a.value).toBe(7);
+    lib.define({ name: 'u', base: 'unlit', uniforms: { a: 1 }, color: () => vec4(1) });
+    const m = lib.createMaterial('u') as unknown as NodeMaterial & { uniforms: Record<string, { value: unknown }> };
+    m.uniforms.a.value = 5;
+    const before = m.colorNode;
+    const version = lib.version('u');
+    lib.update('u', { uniforms: { a: 1, b: 2 }, color: (c: ShaderContext) => vec4(float(c.uniforms.b), 0, 0, 1) });
+    expect(m.colorNode).not.toBe(before);
+    expect(m.uniforms.a.value).toBe(5);
     expect(m.uniforms.b.value).toBe(2);
-    expect(m.version).toBeGreaterThan(version); // needsUpdate
+    expect(lib.version('u')).toBe(version + 1);
+    expect(() => lib.update('none', {})).toThrow(/找不到/);
   });
 
-  test('標準材質：快取鍵改變，重新編譯時用新定義', () => {
+  test('釋放的材質不再追蹤；createFromDefinition 不留下名稱', () => {
     const lib = new ShaderLibrary();
-    lib.define({ name: 's', base: 'standard', fragment: '/*OLD*/' });
-    const m = lib.createMaterial('s');
-    lib.update('s', { fragment: '/*NEW*/' });
-    expect(m.customProgramCacheKey()).toBe('s:1');
-    const fs = compileLit(m).fragmentShader;
-    expect(fs).toContain('/*NEW*/');
-    expect(fs).not.toContain('/*OLD*/');
-  });
-
-  test('釋放的材質不再追蹤', () => {
-    const lib = new ShaderLibrary();
-    lib.define({ name: 'd', base: 'unlit' });
-    const m = lib.createMaterial('d');
-    expect(lib.liveCount('d')).toBe(1);
+    lib.define({ name: 'u', base: 'unlit', color: () => vec4(1) });
+    const m = lib.createMaterial('u');
+    expect(lib.liveCount('u')).toBe(1);
     m.dispose();
-    expect(lib.liveCount('d')).toBe(0);
+    expect(lib.liveCount('u')).toBe(0);
+    const once = lib.createFromDefinition({ name: 'preview', base: 'unlit', color: () => vec4(1) });
+    expect(once.shaderName).toBe('preview');
+    expect(lib.names).toEqual(['u']);
   });
 });
 
 describe('全螢幕效果', () => {
-  test('包成 ShaderPass，自動提供 color、uv、tDiffuse', () => {
+  test('apply 接上前一個效果的顏色；update 後版本加一（後製會重建）', () => {
     const lib = new ShaderLibrary();
     lib.defineEffect({
       name: 'invert',
-      uniforms: { mixAmount: 1 },
-      fragment: 'color.rgb = mix(color.rgb, 1.0 - color.rgb, mixAmount);',
+      uniforms: { amount: 1 },
+      color: (c) => vec4(c.color.rgb.oneMinus().mul(c.uniforms.amount), c.color.a),
     });
-    const pass = lib.createEffect('invert', { mixAmount: 0.5 });
-    const material = pass.material as THREE.ShaderMaterial;
-    expect(material.fragmentShader).toContain('vec4 color = texture2D(tDiffuse, uv);');
-    expect(material.fragmentShader).toContain('mix(color.rgb, 1.0 - color.rgb, mixAmount)');
-    expect(pass.uniforms.mixAmount.value).toBe(0.5);
-    expect(pass.uniforms.uResolution).toBe(lib.builtins.uResolution);
-
-    lib.update('invert', { fragment: 'color.rgb = vec3(0.0);' });
-    expect(material.fragmentShader).toContain('color.rgb = vec3(0.0);');
+    const fx = lib.createEffect('invert', { amount: 0.5 });
+    expect(fx.shaderName).toBe('invert');
+    expect(fx.enabled).toBe(true);
+    expect(fx.uniforms.amount.value).toBe(0.5);
+    expect(fx.apply(vec4(1, 0, 0, 1))).toBeTruthy();
+    const v = fx.version;
+    lib.update('invert', { color: (c: EffectContext) => c.color });
+    expect(fx.version).toBe(v + 1);
+    fx.dispose();
+    expect(lib.liveCount('invert')).toBe(0);
   });
 });
 
-describe('共用片段與內建範例', () => {
-  test('自訂片段可被 #include；名稱檢查', () => {
-    register.shaderChunk('my_helpers', 'float double_it(float x) { return x * 2.0; }');
-    expect(resolveIncludes('#include <my_helpers>')).toContain('double_it');
-    expect(() => register.shaderChunk('bad name', '')).toThrow();
-  });
-
-  test('所有內建範例都能註冊、建立，且 include 都找得到', () => {
+describe('內建範例與函式', () => {
+  test('所有內建範例都能註冊、建立', () => {
     const lib = new ShaderLibrary();
     for (const def of [ShaderPresets.dissolve(), ShaderPresets.hologram(), ShaderPresets.wave()]) {
       lib.define(def);
-      const m = lib.createMaterial(def.name);
-      const sources =
-        m instanceof THREE.ShaderMaterial
-          ? [m.vertexShader, m.fragmentShader]
-          : (() => {
-              const s = compileLit(m);
-              return [s.vertexShader, s.fragmentShader];
-            })();
-      for (const src of sources) expect(() => resolveIncludes(src)).not.toThrow();
+      const m = lib.createMaterial(def.name) as unknown as NodeMaterial;
+      expect(m.isNodeMaterial).toBe(true);
     }
-    for (const def of [EffectPresets.chromaticAberration(), EffectPresets.pixelate()]) {
+    for (const def of [EffectPresets.chromaticAberration(), EffectPresets.pixelate(), EffectPresets.rainOnWindow()]) {
       lib.defineEffect(def);
-      expect(() =>
-        resolveIncludes((lib.createEffect(def.name).material as THREE.ShaderMaterial).fragmentShader),
-      ).not.toThrow();
+      expect(lib.createEffect(def.name).apply(vec4(0, 0, 0, 1))).toBeTruthy();
     }
+  });
+
+  test('shaderFns 的函式回傳節點', () => {
+    const p = tsl.vec2(0.3, 0.7);
+    for (const node of [shaderFns.hash12(p), shaderFns.noise2(p), shaderFns.fbm2(p), shaderFns.voronoi(p)])
+      expect(node).toBeTruthy();
   });
 });
 
 describe('ShaderPlugin', () => {
-  test('每幀更新 uTime 與 uDeltaTime；可從 ECS 取得', () => {
+  test('可從 ECS 取得；材質描述可以寫 shaderGraph', () => {
     const clock = fakeScheduler();
     const ecs = new EcsPlugin();
     const plugin = new ShaderPlugin();
     const engine = new Engine({ scheduler: clock.scheduler, pauseOnHidden: false });
     engine.use(ecs).use(plugin);
     engine.start();
-    clock.frame(50);
-    clock.frame(50);
-    const lib = ecs.world.requireResource(ShadersKey);
-    expect(lib.builtins.uTime.value).toBeCloseTo(0.1, 5);
-    expect(lib.builtins.uDeltaTime.value).toBeCloseTo(0.05, 5);
+    expect(ecs.world.requireResource(ShadersKey)).toBe(plugin.library);
+    engine.removePlugin('shaders');
+    expect(ecs.world.getResource(ShadersKey)).toBeUndefined();
   });
 });

@@ -15,6 +15,9 @@
 import * as THREE from 'three';
 import type { EffectDefinition, ShaderDefinition } from '../ShaderLibrary';
 import { type CompiledShaderGraph, type ShaderGraph, compileShaderGraph, shaderGraphKind } from './compile';
+import { type ShaderNode, tsl } from '../tsl';
+
+const { max, sRGBTransferEOTF, vec3, vec4 } = tsl;
 import { NODE_DEFS } from './nodes';
 import { isObject } from '../../scene/json';
 import { readPackedFile } from '../../core/packedFiles';
@@ -181,6 +184,8 @@ export interface ShaderGraphDefinitionOptions {
    * 效果的圖用 shaderGraphDefinition 會得到一個材質：在平面上顯示效果套用在這張圖上的樣子
    */
   screen?: THREE.Texture;
+  /** Time 節點的值（省略時是經過的秒數；著色器編輯器傳自己的 uniform，才能暫停） */
+  time?: ShaderNode;
 }
 
 /** 節點圖的 uniform：uMouse、uLightDir（全螢幕效果的 uAspect 由畫面大小算出）、每個貼圖節點的 uTex<編號> */
@@ -219,16 +224,8 @@ export function shaderGraphDefinition(
     uAspect: 1,
     ...graphUniforms(file, compiled, textures),
   };
-  let fragment = compiled.fragment;
-  let fragmentHeader = compiled.fragmentHeader;
-  if (compiled.kind === 'effect') {
-    // 全螢幕效果當成平面材質預覽：畫面 = screen 這張圖（畫面上的顏色，不做色彩轉換）。
-    // tDiffuse 是引擎保留的名稱，材質裡用 uScreen 代替
-    uniforms.uScreen = options.screen ?? textures.get('', 'clamp');
-    fragmentHeader = `#define tDiffuse uScreen\n${fragmentHeader}`;
-    // 效果的顏色是畫面上的值；材質最後會從線性轉回 sRGB，所以先轉成線性
-    if (!options.target) fragment += '\n  color.rgb = sRGBTransferEOTF(vec4(max(color.rgb, vec3(0.0)), 1.0)).rgb;';
-  }
+  const effect = compiled.kind === 'effect';
+  if (effect) uniforms.uScreen = options.screen ?? textures.get('', 'clamp');
   return {
     name,
     base: 'unlit',
@@ -239,17 +236,28 @@ export function shaderGraphDefinition(
       depthWrite: !compiled.transparent,
       side: compiled.side,
     },
-    vertexHeader: compiled.vertexHeader,
-    vertex: compiled.vertex,
-    fragmentHeader,
-    fragment,
+    position: compiled.position ? (c) => compiled.position!({ uniforms: c.uniforms, time: options.time }) : undefined,
+    color: (c) => {
+      // 全螢幕效果當成平面材質預覽：畫面 = screen 這張圖（畫面上的顏色）
+      const env = effect
+        ? {
+            uniforms: c.uniforms,
+            uv: c.uv,
+            screen: (uv: ShaderNode) => c.uniforms.uScreen.sample(uv),
+            time: options.time,
+          }
+        : { uniforms: c.uniforms, time: options.time };
+      const color = compiled.color(env);
+      // 只預覽一個節點、或全螢幕效果的圖：顏色是畫面上的值，材質會從線性轉回 sRGB，所以先轉成線性
+      return options.target || effect ? vec4(sRGBTransferEOTF(max(color.rgb, vec3(0))), color.a) : color;
+    },
   };
 }
 
 /**
  * 全螢幕效果的節點圖（有 Effect Output）轉成效果的定義，交給 shaders.defineEffect 註冊，
  * 再用 shaders.createEffect 建立、postfx.addPass(effect, 'display') 加進後製（或寫在 postfx.settings.effects）。
- * uniform：uMouse（vec2）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>；uAspect 是畫面的寬高比。
+ * uniform：uMouse（vec2）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>；寬高比由畫面大小算出。
  * @example
  * shaders.defineEffect(shaderGraphEffectDefinition(parseShaderGraphFile(json), 'crt'));
  * postfx.addPass(shaders.createEffect('crt'), 'display');
@@ -266,8 +274,7 @@ export function shaderGraphEffectDefinition(
   return {
     name,
     uniforms: graphUniforms(file, compiled, textures),
-    header: `#define uAspect (uResolution.x / uResolution.y)\n${compiled.fragmentHeader}`,
-    fragment: compiled.fragment,
+    color: (c) => compiled.color({ uniforms: c.uniforms, uv: c.uv, screen: c.sample }),
   };
 }
 

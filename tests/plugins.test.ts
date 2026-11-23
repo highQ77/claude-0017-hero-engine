@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Engine } from '../src/core';
 import { EcsPlugin } from '../src/ecs';
 import { AssetPlugin } from '../src/assets';
-import { ShaderPlugin, ShadersKey } from '../src/shaders';
+import { ShaderPlugin, ShadersKey, tsl } from '../src/shaders';
 import { UI2D, measure } from '../src/ui2d';
 import * as ui2d from '../src/ui2d';
 import * as physics from '../src/physics';
@@ -92,8 +92,7 @@ describe('自動撤銷', () => {
         ctx.setResource(key, 42);
         ctx.registerLoader('custom', { extensions: ['.custom'], load: async () => 'ok' });
         ctx.registerUIComponent('UIThing', UIThing);
-        ctx.defineShader({ name: 'testShader', base: 'unlit' });
-        ctx.registerChunk('test_chunk', 'float x;');
+        ctx.defineShader({ name: 'testShader', base: 'unlit', color: () => tsl.vec4(1) });
         ctx.onDispose(() => runs.push('disposed'));
         expect(ctx.api.THREE).toBe(THREE); // 共用同一份 three.js
       },
@@ -105,7 +104,6 @@ describe('自動撤銷', () => {
     expect(world.getResource(key)).toBe(42);
     expect(UI2D.components.has('UIThing')).toBe(true);
     expect(world.requireResource(ShadersKey).has('testShader')).toBe(true);
-    expect((THREE.ShaderChunk as Record<string, string>).test_chunk).toBe('float x;');
 
     plugins.uninstall('test/everything');
     runs.length = 0;
@@ -115,7 +113,6 @@ describe('自動撤銷', () => {
     expect(world.getResource(key)).toBeUndefined();
     expect(UI2D.components.has('UIThing')).toBe(false);
     expect(world.requireResource(ShadersKey).has('testShader')).toBe(false);
-    expect((THREE.ShaderChunk as Record<string, string>).test_chunk).toBeUndefined();
   });
 
   test('覆蓋內建元件時，移除後還原原本的', async () => {

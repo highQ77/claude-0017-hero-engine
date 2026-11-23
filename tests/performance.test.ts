@@ -92,7 +92,7 @@ function fakeRenderer(pixelRatio: number) {
   };
   return new Proxy(r as Record<string | symbol, unknown>, {
     get: (o, k) => (k in o ? o[k] : () => undefined),
-  }) as unknown as THREE.WebGLRenderer;
+  }) as unknown as import('three/webgpu').WebGPURenderer;
 }
 
 describe('RenderPlugin 與後製整合', () => {

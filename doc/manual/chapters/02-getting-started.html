@@ -94,7 +94,7 @@ function use<T extends Plugin>(plugin: T): T {
 export const ecs = use(new EcsPlugin());
 export const scenePlugin = use(new ScenePlugin());
 export const scenes = scenePlugin.scenes;          // 常用的物件另外匯出短名稱
-export const render = use(new RenderPlugin({ background: 0x15181f, shadows: true }));
+export const render = use(new RenderPlugin({ backend: 'webgpu', background: 0x15181f, shadows: true }));
 // export const postfx = use(new PostProcessingPlugin({ bloom: { enabled: true } }));
 export const audioPlugin = use(new AudioPlugin());
 export const audio = audioPlugin.audio;

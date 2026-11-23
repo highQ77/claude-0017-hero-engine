@@ -194,7 +194,8 @@ export default pluginApi.plugin<PerfMonitorOptions>({
         stats.history.push(ms);
         if (stats.history.length > HISTORY) stats.history.shift();
         if (info) {
-          gpuAcc.calls += info.render.calls;
+          // drawCalls：這一幀的繪製次數（WebGPURenderer 的 calls 是從開始到現在的累計，不會歸零）
+          gpuAcc.calls += (info.render as { drawCalls?: number }).drawCalls ?? info.render.calls;
           gpuAcc.triangles += info.render.triangles;
           gpuAcc.points += info.render.points;
           gpuAcc.lines += info.render.lines;
@@ -239,7 +240,8 @@ export default pluginApi.plugin<PerfMonitorOptions>({
             lines: gpuAcc.lines / frames,
             geometries: info.memory.geometries,
             textures: info.memory.textures,
-            programs: info.programs?.length ?? 0,
+            // 著色器程式的數量（WebGPU 的統計有的話）
+            programs: (info as { programs?: unknown[] | null }).programs?.length ?? 0,
           }
         : null;
       stats.resolution = render

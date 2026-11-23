@@ -1,4 +1,4 @@
-import type { UICanvasHost } from './elements';
+import type { UICanvasLayers } from './elements';
 import type { UI2D } from './UI2D';
 import { UIPainter, type Context2D } from './UIPainter';
 
@@ -12,8 +12,8 @@ export interface UIRenderer {
   render(): void;
   /** 釋放 */
   dispose(): void;
-  /** 畫布宿主（UICanvas 直接畫在顯示層的 WebGL 上）；沒有時 UICanvas 自己建立 WebGL 再複製到介面 */
-  readonly canvasHost?: UICanvasHost | null;
+  /** 畫布分層（引擎內的介面才有）：UICanvas 的內容由顯示層疊上去，不複製進介面畫布 */
+  readonly canvasLayers?: UICanvasLayers | null;
   /** 蓋在整個畫面（含介面）上的單色層，改透明度不用重畫介面（場景轉場的淡入淡出用；沒有時用介面圖層代替） */
   readonly fader?: ScreenFader;
 }
@@ -27,7 +27,7 @@ export interface ScreenFader {
 /**
  * 獨立畫布顯示層（編輯器預覽、沒有 3D 引擎時使用）：
  * 在容器裡放一張畫布，用 UIPainter 繪製；滑鼠事件轉給 UI2D 處理。
- * 遊戲中請用 UIPlugin（把介面疊在 WebGL 畫面上）。
+ * 遊戲中請用 UIPlugin（把介面疊在 3D 畫面上）。
  */
 export class CanvasUIRenderer implements UIRenderer {
   /** 繪製介面的畫布 */

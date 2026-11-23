@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest';
-import type * as THREE from 'three';
 import { Engine } from '../src/core';
 import { EcsPlugin } from '../src/ecs';
 import { Name, Parent, ScenePlugin, Transform, type SceneFileData } from '../src/scene';
@@ -135,7 +134,7 @@ describe('3D 場景編輯器：同步到 world', () => {
       render() {},
       clear() {},
       dispose() {},
-    } as unknown as THREE.WebGLRenderer;
+    } as unknown as import('three/webgpu').WebGPURenderer;
     engine
       .use(ecs)
       .use(new ScenePlugin())

@@ -100,15 +100,7 @@ describe('打包時只包含用到的部分', () => {
     // 其他模組只有資源鍵與註冊用的小檔案
     const outside = files.filter((f) => !f.startsWith('plugins/'));
     expect(outside).toEqual(
-      [
-        'assets/keys',
-        'core/Logger',
-        'core/version',
-        'ecs/Resource',
-        'shaders/chunks',
-        'shaders/keys',
-        'ui2d/registry',
-      ].sort(),
+      ['assets/keys', 'core/Logger', 'core/version', 'ecs/Resource', 'shaders/keys', 'ui2d/registry'].sort(),
     );
   });
 });

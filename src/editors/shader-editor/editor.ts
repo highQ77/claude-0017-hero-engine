@@ -7,7 +7,6 @@
  *   遊戲裡用 shaders.define(await loadShaderGraph('shaders/<名稱>.shader.json'))
  */
 import * as THREE from 'three';
-import type { EffectDefinition, ShaderDefinition } from '../../shaders';
 import {
   CATEGORIES,
   NODE_DEFS,
@@ -1128,20 +1127,8 @@ const currentFile = (): ShaderGraphFile => ({
   preview: { mesh: main?.meshKind ?? 'sphere' },
 });
 
-/** GLSL 分頁要顯示的段落 */
+/** 程式碼分頁要顯示的段落 */
 type CodeSection = readonly [title: string, src: string];
-const codeSections = (def: ShaderDefinition): CodeSection[] => [
-  ['頂點：宣告與函式（vertexHeader）', def.vertexHeader ?? ''],
-  ['頂點：main 裡（修改 transformed）', def.vertex ?? ''],
-  ['片段：宣告與函式（fragmentHeader）', def.fragmentHeader ?? ''],
-  ['片段：main 裡（設定 color）', def.fragment ?? ''],
-];
-/** 全螢幕效果：顯示遊戲裡實際用的效果程式（shaders.defineEffect 的 header、fragment） */
-const effectSections = (def: EffectDefinition): CodeSection[] => [
-  ['全螢幕效果：宣告與函式（header）', def.header ?? ''],
-  ['全螢幕效果：main 裡（color 是畫面原本的顏色，改成新的顏色）', def.fragment],
-];
-
 function compileAll(): void {
   portTypes = analyzeShaderGraphTypes(graph);
   applyPortColors();
@@ -1154,13 +1141,27 @@ function compileAll(): void {
   meshSelect.title = effect ? '全螢幕效果固定用平面 2D 預覽' : '';
   if (effect && main && main.meshKind !== 'quad') setMesh('quad');
   try {
-    // 只編譯一次：GLSL 分頁、主預覽都用這份定義
+    // 只編譯一次：程式碼分頁、主預覽都用這份定義
     const def = graphDefinition(file);
     const effectDef = effect ? graphEffectDefinition(file, fileName ? shaderNameOf(fileName) : 'effect') : null;
-    const sections = effectDef ? effectSections(effectDef) : codeSections(def);
-    lastSrc = sections.map(([title, src]) => `// ===== ${title} =====\n${src}\n`).join('');
-    renderCode(sections, Object.keys((effectDef ?? def).uniforms ?? {}), !!effectDef);
+    const uniforms = Object.keys((effectDef ?? def).uniforms ?? {});
     showError(main ? main.setDefinition(def) : '');
+    // 程式碼分頁：three.js 從節點產生的著色器程式（WGSL），產生完才顯示
+    const version = ++codeVersion;
+    void main?.shaderCode().then(
+      (code) => {
+        if (version !== codeVersion || !code) return;
+        const sections: CodeSection[] = [
+          ['頂點著色器（three.js 產生的 WGSL）', code.vertexShader ?? ''],
+          ['片段著色器（three.js 產生的 WGSL）', code.fragmentShader ?? ''],
+        ];
+        lastSrc = sections.map(([title, src]) => `// ===== ${title} =====\n${src}\n`).join('');
+        renderCode(sections, uniforms, !!effectDef);
+      },
+      (error: unknown) => {
+        if (version === codeVersion) codeEl.textContent = `// 無法產生程式碼：${(error as Error).message}`;
+      },
+    );
   } catch (error) {
     const msg = (error as Error).message;
     showError(msg);
@@ -1192,10 +1193,10 @@ function renderCode(sections: CodeSection[], uniforms: string[], effect: boolean
   frag.append(h('span', 'code-title', '// ===== uniform =====\n'));
   frag.append(
     effect
-      ? `// tDiffuse（畫面）、uTime、uResolution（引擎內建）、${uniforms.join('、')}\n` +
+      ? `// ${uniforms.join('、')}（下面是預覽用的平面材質；遊戲裡套用在畫面上）\n` +
           `// 遊戲裡：shaders.defineEffect(await loadShaderGraphEffect('shaders/檔名.shader.json'))，\n` +
           `//         postfx.addPass(shaders.createEffect('檔名'), 'display')，或寫在 postfx.settings.effects\n\n`
-      : `// uTime（引擎內建）、${uniforms.join('、')}\n\n`,
+      : `// ${uniforms.join('、')}（material.uniforms.名稱.value 可以改）\n\n`,
   );
   for (const [title, src] of sections) {
     if (!src) continue;
@@ -1211,12 +1212,14 @@ function renderCode(sections: CodeSection[], uniforms: string[], effect: boolean
 // ───────── 預覽 ─────────
 
 let main: MainPreview | null = null;
+/** 第幾次產生程式碼（舊的晚到時不顯示） */
+let codeVersion = 0;
 let thumbs: ThumbnailRenderer | null = null;
 try {
   main = new MainPreview(previewCanvas);
   thumbs = new ThumbnailRenderer();
 } catch (error) {
-  showError(`無法建立預覽（需要 WebGL2）：${(error as Error).message}`);
+  showError(`無法建立預覽（需要 WebGPU 或 WebGL2）：${(error as Error).message}`);
 }
 
 const state: PreviewState = { time: 0, mouse: new THREE.Vector2(0.5, 0.5) };
@@ -1491,7 +1494,7 @@ $<HTMLInputElement>('#file-input').addEventListener('change', async (e) => {
 $('#btn-copy').onclick = () => {
   if (!lastSrc) return toast('目前沒有可複製的程式碼');
   navigator.clipboard.writeText(lastSrc).then(
-    () => toast('已複製 GLSL'),
+    () => toast('已複製著色器程式碼'),
     () => toast('複製失敗'),
   );
 };

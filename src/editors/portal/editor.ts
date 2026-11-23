@@ -7,6 +7,7 @@
  * 背景是一組旋轉的 3D 幾何物件（three.js），滑鼠移動時鏡頭會稍微跟著偏。
  */
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu';
 import { showAlert, showPrompt } from '../shared/dialog';
 import { h } from '../shared/dom';
 import { request } from '../shared/http';
@@ -677,7 +678,8 @@ void load().then(async () => {
 
 const canvas = document.getElementById('bg') as HTMLCanvasElement;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+// WebGPURenderer（setAnimationLoop 會先等它初始化完成）
+const renderer = new WebGPURenderer({ canvas, antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
@@ -805,10 +807,12 @@ function resize(): void {
 addEventListener('resize', resize);
 resize();
 
-const clock = new THREE.Clock();
+// THREE.Timer：three.js r183 起取代 THREE.Clock（每幀先 update 再讀 getDelta）
+const timer = new THREE.Timer();
 let time = 0;
-renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.05) * (reduceMotion ? 0.15 : 1);
+renderer.setAnimationLoop((now) => {
+  timer.update(now);
+  const dt = Math.min(timer.getDelta(), 0.05) * (reduceMotion ? 0.15 : 1);
   time += dt;
   for (const s of spinners) {
     s.obj.rotation.x += s.spin.x * dt;

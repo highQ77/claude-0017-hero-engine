@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Entity, World } from '../ecs';
 import { Transform } from '../scene';
 import { ParticleEmitter, type ParticleEmitterData, type Range } from './components';
-import { createParticleGeometry, createParticleMaterial } from './ParticleMaterial';
+import { type ParticleMaterial, createParticleGeometry, createParticleMaterial } from './ParticleMaterial';
 
 /** 每個發射器的粒子資料（結構化陣列，避免為每個粒子建立物件） */
 interface Pool {
@@ -20,7 +20,7 @@ interface Pool {
   rot: Float32Array;
   spin: Float32Array;
   mesh: THREE.Mesh;
-  material: THREE.ShaderMaterial;
+  material: ParticleMaterial;
   attributes: ReturnType<typeof createParticleGeometry>['attributes'];
   /** 還沒發射完的小數部分 */
   carry: number;

@@ -20,7 +20,7 @@ postfx.removePass(rain); // 關
 rain.dispose();
 </script>
 <h3>後製和著色器共用</h3>
-<p>後製的全螢幕效果都由著色器庫（<code>shaders</code>）建立：內建的調色加暗角也是著色器庫的效果（<code>ColorGradeEffect</code>，名稱 <code>postfx.colorGrade</code>），和自訂效果一樣可以用內建的 <code>uTime</code>、<code>uResolution</code>、<code>#include</code> 共用的著色器片段，也能用 <code>shaders.update</code> 在執行中修改。沒有安裝 <code>ShaderPlugin</code> 時，後製用自己的著色器庫（<code>postfx.shaderLibrary</code>）。</p>
+<p>後製的全螢幕效果都由著色器庫（<code>shaders</code>）建立：內建的調色加暗角也是著色器庫的效果（<code>ColorGradeEffect</code>，名稱 <code>postfx.colorGrade</code>），和自訂效果一樣用 TSL 寫（<code>color</code> 函式），也能用 <code>shaders.update</code> 在執行中修改。沒有安裝 <code>ShaderPlugin</code> 時，後製用自己的著色器庫（<code>postfx.shaderLibrary</code>）。</p>
 <p>不想自己呼叫 <code>addPass</code> 時，把效果寫在 <code>postfx.settings.effects</code>（依順序套用）：效果名稱（已註冊的，或內建的 <code>EffectPresets</code>，會自動註冊），或著色器編輯器做的全螢幕效果節點圖檔。載入中的效果先不套用，載入完成後自動加進來；開發時在著色器編輯器存檔，效果會立刻更新。</p>
 <script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="postfx.settings.effects">
 postfx.settings.effects = [

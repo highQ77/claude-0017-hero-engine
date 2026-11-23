@@ -9,6 +9,9 @@
  */
 export const ENGINE_DEPS = [
   'three',
+  // WebGPURenderer、節點材質（TSL）：RenderPlugin 預設用 WebGPU
+  'three/webgpu',
+  'three/tsl',
   'yoga-layout/load',
   'lil-gui',
   'tone',
@@ -23,17 +26,13 @@ export const ENGINE_DEPS = [
     'loaders/HDRLoader.js',
     'loaders/TTFLoader.js',
     'libs/meshopt_decoder.module.js',
-    'postprocessing/BokehPass.js',
-    'postprocessing/EffectComposer.js',
-    'postprocessing/FilmPass.js',
-    'postprocessing/GTAOPass.js',
-    'postprocessing/OutputPass.js',
-    'postprocessing/Pass.js',
-    'postprocessing/RenderPass.js',
-    'postprocessing/ShaderPass.js',
-    'postprocessing/SMAAPass.js',
-    'postprocessing/UnrealBloomPass.js',
-    'shaders/FXAAShader.js',
     'utils/SkeletonUtils.js',
+    // 後製（TSL 節點）
+    'tsl/display/BloomNode.js',
+    'tsl/display/DepthOfFieldNode.js',
+    'tsl/display/FilmNode.js',
+    'tsl/display/FXAANode.js',
+    'tsl/display/GTAONode.js',
+    'tsl/display/SMAANode.js',
   ].map((p) => `three/examples/jsm/${p}`),
 ];

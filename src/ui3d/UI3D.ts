@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Entity, World } from '../ecs';
 import { defineComponent } from '../ecs/Component';
 import { SceneObject } from '../render/components';
-import { UI2D, UITextureRenderer, type UIHandler } from '../ui2d';
+import { UI2D, UITextureRenderer, type UIHandler, type UITextureCopier } from '../ui2d';
 import { createLogger } from '../core/Logger';
 
 const log = createLogger('ui3d');
@@ -147,10 +147,10 @@ const shapeKey = (p: UIPanel3DData, st: PanelState) =>
 export interface UI3DControllerOptions {
   /** 所有面板共用的事件處理函式 */
   handlers?: Record<string, UIHandler>;
-  /** WebGL 繪製器（局部上傳用；沒有時每次整張上傳） */
-  gl?: () => THREE.WebGLRenderer | null;
   /** 面板畫面更新後呼叫（例如遊戲暫停時補畫一次） */
   onPanelRendered?: () => void;
+  /** 局部更新面板貼圖用的繪製器（沒有時每次整張上傳） */
+  copier?: () => UITextureCopier | null;
   /** 建立介面（測試可替換） */
   createUI?: () => Promise<UI2D>;
 }
@@ -356,7 +356,7 @@ export class UI3DController {
           return;
         }
         st.ui = ui;
-        st.target = new UITextureRenderer(this.options.gl ?? (() => null), () => this.options.onPanelRendered?.());
+        st.target = new UITextureRenderer(() => this.options.onPanelRendered?.(), this.options.copier);
         ui.setRenderer(st.target);
         // 介面檔 <UI width height> 的固定尺寸（元件上沒指定時使用）
         st.xmlWidth = fixedSize(ui.root?.raw.width);

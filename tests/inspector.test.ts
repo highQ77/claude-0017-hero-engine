@@ -97,7 +97,7 @@ function fakeRenderer() {
     dispose() {},
     setRenderTarget() {},
     render() {},
-  } as unknown as THREE.WebGLRenderer;
+  } as unknown as import('three/webgpu').WebGPURenderer;
 }
 
 const managers: PluginManager[] = [];

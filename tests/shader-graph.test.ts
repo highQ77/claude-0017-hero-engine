@@ -14,16 +14,23 @@ import {
   type ShaderGraph,
 } from '../src/shaders/graph';
 import { Texture } from 'three';
-import { ShaderLibrary } from '../src/shaders';
+import { ShaderLibrary, tsl } from '../src/shaders';
 import { EXAMPLES, buildExample, createNode } from '../src/editors/shader-editor/examples';
 
 describe('節點式著色器：編譯', () => {
-  test('型別轉換', () => {
-    expect(convertType('a', 'float', 'vec3')).toBe('vec3(a)');
-    expect(convertType('a', 'vec4', 'float')).toBe('(a).x');
-    expect(convertType('a', 'vec4', 'vec2')).toBe('(a).xy');
-    expect(convertType('a', 'vec2', 'vec3')).toBe('vec3(a, 0.0)');
-    expect(convertType('a', 'vec3', 'vec4')).toBe('vec4(a, 1.0)');
+  test('型別轉換：變窄取前幾個分量，變寬補 0（alpha 補 1）', () => {
+    const v = { x: 'X', xy: 'XY', xyz: 'XYZ' };
+    expect(convertType(v, 'vec3', 'vec3')).toBe(v);
+    expect(convertType(v, 'vec4', 'float')).toBe('X');
+    expect(convertType(v, 'vec4', 'vec2')).toBe('XY');
+    expect(convertType(v, 'vec4', 'vec3')).toBe('XYZ');
+    // 變寬：產生新的節點
+    for (const [from, to] of [
+      ['float', 'vec3'],
+      ['vec2', 'vec3'],
+      ['vec3', 'vec4'],
+    ] as const)
+      expect(convertType(tsl.vec3(1, 2, 3), from, to)).toBeTruthy();
   });
 
   test('所有範例都能編譯成引擎的自訂著色器（ShaderLibrary 接受、建立得出材質）', () => {
@@ -34,8 +41,9 @@ describe('節點式著色器：編譯', () => {
         textures: { get: () => null } as never,
       });
       lib.define(def);
-      const m = lib.createMaterial(def.name) as unknown as { fragmentShader: string; vertexShader: string };
-      expect(m.fragmentShader).toContain('color = vec4(');
+      const m = lib.createMaterial(def.name) as unknown as { isNodeMaterial: boolean; colorNode: unknown };
+      expect(m.isNodeMaterial).toBe(true);
+      expect(m.colorNode).toBeTruthy();
       // 每個節點的縮圖也要能編譯
       for (const n of g.nodes) {
         const out = NODE_DEFS[n.type].outputs[0];
@@ -44,7 +52,7 @@ describe('節點式著色器：編譯', () => {
     }
   });
 
-  test('泛型 T：輸出取最寬的輸入；頂點位移放進頂點著色器；alpha 有連接時半透明', () => {
+  test('泛型 T：輸出取最寬的輸入；有 Vertex Output 時有頂點位移；alpha 有連接時半透明', () => {
     const g = buildExample('hologram');
     const types = analyzeShaderGraphTypes(g);
     const color = g.nodes.find((n) => n.type === 'color')!;
@@ -53,19 +61,23 @@ describe('節點式著色器：編譯', () => {
     expect(compileShaderGraph(g).transparent).toBe(true);
 
     const terrain = compileShaderGraph(buildExample('terrain'));
-    expect(terrain.vertex).toContain('transformed += normal * (');
-    expect(terrain.vertexHeader).toContain('float sgFbm'); // 頂點階段用到的輔助函式
-    expect(terrain.fragment).toContain('dFdx'); // 依位移重算法線
-    expect(compileShaderGraph(buildExample('rings')).transparent).toBe(false);
+    expect(terrain.kind).toBe('material');
+    expect(terrain.position).toBeTypeOf('function');
+    expect(terrain.position!({ uniforms: {} })).toBeTruthy();
+    const rings = compileShaderGraph(buildExample('rings'));
+    expect(rings.transparent).toBe(false);
+    expect(rings.position).toBeNull();
   });
 
-  test('貼圖節點：片段用 texture、頂點用 textureLod；uniform 名稱是 uTex<編號>', () => {
+  test('貼圖節點：列在 textures；uniform 名稱是 uTex<編號>', () => {
     const g = buildExample('textured');
     const tex = g.nodes.find((n) => n.type === 'texture')!;
     const c = compileShaderGraph(g);
     expect(c.textures).toEqual([tex.id]);
-    expect(c.fragment).toContain(`texture(uTex${tex.id}`);
-    expect(c.vertex).toContain(`textureLod(uTex${tex.id}`);
+    const def = shaderGraphDefinition({ format: 'hero-shader-graph', version: 1, graph: g }, 'tex', {
+      textures: { get: () => new Texture() } as never,
+    });
+    expect(Object.keys(def.uniforms ?? {})).toContain(`uTex${tex.id}`);
   });
 
   test('錯誤：沒有輸出節點、循環連線、未知節點', () => {
@@ -134,20 +146,30 @@ describe('節點式著色器：全螢幕效果（Effect Output）', () => {
     const lib = new ShaderLibrary();
     for (const ex of effectExamples) {
       const def = shaderGraphEffectDefinition(fileOf(buildExample(ex.id)), `fx-${ex.id}`);
-      // 顏色是畫面上的值：不做 sRGB 轉換；讀畫面用 tDiffuse
-      expect(def.fragment).not.toContain('sRGBTransferEOTF');
-      expect(def.header).toContain('#define uAspect');
+      expect(def.color).toBeTypeOf('function');
       lib.defineEffect(def);
       const pass = lib.createEffect(def.name);
       expect(pass.shaderName).toBe(def.name);
-      expect((pass.material as { fragmentShader: string }).fragmentShader).toContain('tDiffuse');
+      expect(pass.apply(tsl.vec4(0, 0, 0, 1))).toBeTruthy();
     }
   });
 
   test('Effect Output 沒有連接時是畫面原本的顏色', () => {
     const g: ShaderGraph = { nodes: [], links: [], nextId: 1 };
     createNode(g, 'effectOutput', 0, 0);
-    expect(compileShaderGraph(g).fragment).toContain('texture(tDiffuse, vUv).rgb');
+    const read: unknown[] = [];
+    const screenColor = tsl.vec4(0.1, 0.2, 0.3, 1);
+    const c = compileShaderGraph(g);
+    expect(c.kind).toBe('effect');
+    c.color({
+      uniforms: {},
+      uv: tsl.vec2(0.5),
+      screen: (uv) => {
+        read.push(uv);
+        return screenColor;
+      },
+    });
+    expect(read).toHaveLength(1); // 讀了畫面原本的顏色
   });
 
   test('材質裡用 Screen Color 會給出清楚的錯誤', () => {
@@ -169,13 +191,12 @@ describe('節點式著色器：全螢幕效果（Effect Output）', () => {
     expect(() => shaderGraphEffectDefinition(fileOf(buildExample('blank')), 'x')).toThrow(/不是全螢幕效果/);
   });
 
-  test('效果的圖在編輯器裡預覽：變成平面材質，畫面換成指定的圖，輸出轉成線性', () => {
+  test('效果的圖在編輯器裡預覽：變成平面材質，畫面換成指定的圖', () => {
     const lib = new ShaderLibrary();
     const screen = new Texture();
     const def = shaderGraphDefinition(fileOf(buildExample('fxVignette')), 'preview-fx', { screen });
     expect(def.uniforms?.uScreen).toBe(screen);
-    expect(def.fragmentHeader).toContain('#define tDiffuse uScreen');
-    expect(def.fragment).toContain('sRGBTransferEOTF');
+    expect(def.base).toBe('unlit');
     expect(lib.createFromDefinition(def)).toBeTruthy();
   });
 });

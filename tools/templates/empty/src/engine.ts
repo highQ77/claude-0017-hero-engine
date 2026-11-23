@@ -48,7 +48,10 @@ export const scenePlugin = use(new ScenePlugin());
 export const scenes = scenePlugin.scenes;
 /** 父子關係：hierarchy.setParent(子, 父) */
 export const hierarchy = scenePlugin.hierarchy;
-/** 繪製：攝影機、燈光、網格（background、shadows 等建立時的設定）；render.scene、render.raycast(…) */
+/**
+ * 繪製：攝影機、燈光、網格（background、shadows 等建立時的設定）；render.scene、render.raycast(…)
+ * 用 WebGPU 繪製（瀏覽器不支援時自動改用 WebGL2）
+ */
 export const render = use(new RenderPlugin({ background: 0x15181f, shadows: true }));
 /** 後製特效：光暈、暗角、調色（postfx.settings.bloom.strength = 1）。裝了之後畫面會套用色調映射（預設 ACES），色調會和沒裝時不同 */
 // export const postfx = use(new PostProcessingPlugin({ bloom: { enabled: true } }));

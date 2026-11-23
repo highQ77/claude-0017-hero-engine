@@ -183,6 +183,15 @@ console.log('拖曳轉動、滾輪縮放、右鍵平移；手放開後自動旋�
 engine.start();
 ```
 
+## isWebGPURenderer
+判斷繪製器是不是 WebGPURenderer（測試用的替身繪製器不是）。實際用 WebGPU 還是 WebGL2 備援看 `render.gpuApi`。
+
+```ts
+await render.ready;
+console.log('是 WebGPURenderer 嗎？', isWebGPURenderer(render.renderer));
+console.log('實際的圖形介面：', render.gpuApi);
+```
+
 ## RenderPlugin
 繪製外掛（`render`）：把網格、攝影機、燈光畫出來。也提供點選（`pick`）、畫面大小、取得 three.js 物件。點畫面上的方塊看看。
 
@@ -450,9 +459,10 @@ Light 在場景檔裡的寫法（顏色是 '#rrggbb'，角度用度）。
 console.log(lightCodec.write({ ...Light.create(), kind: 'spot', color: 0xffcc00, angle: Math.PI / 6 }));
 ```
 
-`create.attribute`：給幾何加上自訂的頂點資料，著色器裡用 `attribute` 讀取。這裡每個頂點存一個高度權重，頂點著色器依時間上下擺動。
+`create.attribute`：給幾何加上自訂的頂點資料，著色器裡用 TSL 的 `attribute('名稱')` 讀取。這裡每個頂點存一個高度權重，頂點依時間上下擺動（自訂著色器見 `@engine/shaders`）。
 
 ```ts
+const { attribute, sin, vec3 } = tsl;
 spawn.camera(world, { position: [0, 2, 4], target: [0, 0, 0] });
 spawn.defaultLights(world);
 const geometry = create.geometry({ plane: [3, 3, 30, 30] });
@@ -460,16 +470,16 @@ const count = geometry.getAttribute('position').count;
 const weight = new Float32Array(count);
 for (let i = 0; i < count; i++) weight[i] = Math.random();
 geometry.setAttribute('aWeight', create.attribute(weight, 1));
-const material = create.material({ standard: { color: '#9acd32', side: 'double' } });
-const uniforms = { uTime: { value: 0 } };
-material.onBeforeCompile = (shader) => {
-  Object.assign(shader.uniforms, uniforms);
-  shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute float aWeight;\nuniform float uTime;')
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.z += sin(uTime * 3.0 + aWeight * 6.28) * 0.15 * aWeight;');
-};
-spawn.mesh(world, { geometry, material, rotation: [-Math.PI / 2.5, 0, 0] });
-engine.on('update', (t) => (uniforms.uTime.value = t.elapsed));
+shaders.define({
+  name: 'weighted',
+  base: 'standard',
+  options: { color: '#9acd32', side: 'double' },
+  position: (c) => {
+    const w = attribute('aWeight', 'float');
+    return c.position.add(vec3(0, 0, sin(c.time.mul(3).add(w.mul(6.28))).mul(0.15).mul(w)));
+  },
+});
+spawn.mesh(world, { geometry, material: shaders.createMaterial('weighted'), rotation: [-Math.PI / 2.5, 0, 0] });
 console.log('頂點數：', count, '，每個頂點', geometry.getAttribute('aWeight').itemSize, '個數字');
 engine.start();
 ```
@@ -787,6 +797,29 @@ engine.timers.after(0.2, () => {
 const options: RenderOptions = { background: '#203040', shadows: true, antialias: true, orbitControls: { autoRotate: 0.5 } };
 console.log('設定：', options);
 console.log('目前的背景：', render.renderer.getClearColor(new Color()).getHexString());
+```
+
+## EngineRenderer
+`render.renderer` 的型別：three.js 的 WebGPURenderer（瀏覽器不支援 WebGPU 時它自動改用 WebGL2，`render.gpuApi` 是實際用的圖形介面）。尺寸、像素比、背景顏色、陰影…可以直接用。
+
+```ts
+const r: EngineRenderer = render.renderer;
+await render.ready; // WebGPURenderer 要先非同步初始化
+console.log('像素比', r.getPixelRatio(), '，陰影', r.shadowMap.enabled, '，圖形介面', render.gpuApi);
+```
+
+## OverlayCompositor
+接管繪製的外掛（例如後製）用來把介面疊到最後輸出的顏色上：`render.setDrawHandler(handler, { compositesOverlays: true })` 時，handler 的第三個參數就是它。在最後的顏色上呼叫 `composite`、直接畫到畫布，回傳 `'composited'`，可以省下一次全螢幕的合成（後製外掛就是這樣做的）。
+
+```ts
+spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { torusKnot: [0.6, 0.2] }, material: '#9acd32' });
+postfx.settings.bloom.enabled = true;
+engine.timers.after(0.5, () => console.log('後製的步驟：', postfx.passNames.join(' → '), '（overlay：介面在最後一起輸出）'));
+const check: OverlayCompositor | null = null;
+console.log('自己接管繪製時，handler 的第三個參數是 OverlayCompositor：', check === null ? '（這裡沒有接管）' : check);
+engine.start();
 ```
 
 ## RenderLayerData

@@ -7,7 +7,7 @@ import { Camera, Light, MeshRenderer, RenderPlugin, create, spawn } from '../src
 import { Collider, PhysicsPlugin, load } from '../src/physics';
 import * as hero from '../src';
 import { RenderResources, SceneObject } from '../src/render';
-import { ShaderLibrary } from '../src/shaders';
+import { ShaderLibrary, tsl } from '../src/shaders';
 import * as core from '../src/core';
 import { fakeScheduler } from './helpers';
 
@@ -21,7 +21,7 @@ function fakeRenderer() {
     render() {},
     clear() {},
     dispose() {},
-  } as unknown as THREE.WebGLRenderer;
+  } as unknown as import('three/webgpu').WebGPURenderer;
 }
 
 function setup() {
@@ -311,7 +311,7 @@ describe('描述的進階寫法（不需要 import three）', () => {
       name: 'glow',
       base: 'unlit',
       options: { blending: 'additive', side: 'double' },
-      fragment: 'color = vec4(1.0);',
+      color: () => tsl.vec4(1),
     });
     const m = lib.createMaterial('glow');
     expect([m.blending, m.side]).toEqual([THREE.AdditiveBlending, THREE.DoubleSide]);

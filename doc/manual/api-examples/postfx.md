@@ -32,7 +32,7 @@ engine.start();
 ```
 
 ## ColorGradeEffect
-內建的調色加暗角（合併成一次全螢幕繪製），是 ShaderLibrary 的全螢幕效果（名稱 `postfx.colorGrade`）：開啟 `settings.color` 或 `settings.vignette` 時由後製註冊、建立。可以讀它的定義，也可以用 `shaders.update` 在執行中修改著色器。
+內建的調色加暗角（合併成一次全螢幕繪製），是 ShaderLibrary 的全螢幕效果（名稱 `postfx.colorGrade`）：開啟 `settings.color` 或 `settings.vignette` 時由後製註冊、建立。可以讀它的定義，也可以用 `shaders.update` 在執行中修改（`color` 函式，TSL）。
 
 ```ts
 spawn.camera(world, { position: [0, 1.5, 4], target: [0, 0.5, 0] });
@@ -45,8 +45,13 @@ console.log('效果名稱：', ColorGradeEffect.name, '，uniform：', Object.ke
 // 管線建立後（下一幀）就註冊好了：把暗角改成藍色調
 engine.timers.after(0.5, () => {
   console.log('已註冊：', shaders.has(ColorGradeEffect.name));
+  const original = ColorGradeEffect.color;
   shaders.update(ColorGradeEffect.name, {
-    fragment: `${ColorGradeEffect.fragment}\n    color.rgb = mix(color.rgb, vec3(0.1, 0.2, 0.6), dot(uv - 0.5, uv - 0.5));`,
+    color: (c: EffectContext) => {
+      const graded = original(c);
+      const d = c.uv.sub(0.5);
+      return tsl.vec4(tsl.mix(graded.rgb, tsl.vec3(0.1, 0.2, 0.6), d.dot(d)), graded.a);
+    },
   });
 });
 engine.start();
@@ -114,22 +119,19 @@ engine.start();
 ```
 
 ## PassStage
-自訂效果放在哪個階段：`scene` 在色調映射前（線性顏色），`display` 在之後（最終顏色）。這裡在 display 加一個掃描線效果。
+自訂效果放在哪個階段：`scene` 在色調映射前（線性顏色），`display` 在之後（最終顏色）。這裡在 display 加一個掃描線效果（`PostFxPass`：`apply` 拿到前一個效果的顏色節點，回傳新的顏色）。
 
 ```ts
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
-
+const { sin, vec4, screenUV, time } = tsl;
 spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
 spawn.defaultLights(world);
 spawn.mesh(world, { geometry: { torusKnot: [0.6, 0.2] }, material: '#ffa94f' });
-const scanlines = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, time: { value: 0 } },
-  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: 'uniform sampler2D tDiffuse; uniform float time; varying vec2 vUv; void main() { vec4 c = texture2D(tDiffuse, vUv); c.rgb *= 0.8 + 0.2 * sin(vUv.y * 600.0 + time * 5.0); gl_FragColor = c; }',
-});
+const scanlines: PostFxPass = {
+  enabled: true,
+  apply: (input) => vec4(input.rgb.mul(sin(screenUV.y.mul(600).add(time.mul(5))).mul(0.2).add(0.8)), input.a),
+};
 const stage: PassStage = 'display';
 postfx.addPass(scanlines, stage);
-engine.on('update', (t) => (scanlines.uniforms.time.value = t.elapsed));
 engine.timers.after(0.3, () => console.log('效果清單：', postfx.passNames));
 engine.start();
 ```
@@ -169,4 +171,3 @@ addEventListener('pointerdown', () => {
 engine.timers.after(1, () => console.log('效果清單：', postfx.passNames.join(' → ')));
 engine.start();
 ```
-

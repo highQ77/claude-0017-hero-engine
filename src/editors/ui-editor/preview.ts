@@ -1,6 +1,6 @@
 /**
  * 編輯器的「正式預覽」：用真正的遊戲引擎（RenderPlugin + UIPlugin）跑目前的介面，
- * 介面由引擎畫在 WebGL 畫面上，背後可以有一個簡單的 3D 場景，和遊戲裡看到的一模一樣。
+ * 介面由引擎疊在 3D 畫面上，背後可以有一個簡單的 3D 場景，和遊戲裡看到的一模一樣。
  */
 import * as THREE from 'three';
 import { Engine } from '../../core';

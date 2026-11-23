@@ -48,8 +48,18 @@ export const scenePlugin = use(new ScenePlugin());
 export const scenes = scenePlugin.scenes;
 /** 父子關係：hierarchy.setParent(子, 父) */
 export const hierarchy = scenePlugin.hierarchy;
-/** 繪製：攝影機、燈光、網格（background、shadows 等建立時的設定）；render.scene、render.raycast(…) */
-export const render = use(new RenderPlugin({ background: 0x15181f, shadows: true }));
+/**
+ * 繪製：攝影機、燈光、網格（background、shadows 等建立時的設定）；render.scene、render.raycast(…)
+ * 動態解析度：跟不上 60 FPS 時自動降低 3D 的繪製解析度（介面不受影響）。
+ * 環境光遮蔽、景深這些效果很吃 GPU，高解析度螢幕全螢幕時需要它
+ */
+export const render = use(
+  new RenderPlugin({
+    background: 0x15181f,
+    shadows: true,
+    adaptiveResolution: { targetFps: 60, minPixelRatio: 0.75 },
+  }),
+);
 /** 後製特效：光暈、暗角、調色（postfx.settings.bloom.strength = 1）。裝了之後畫面會套用色調映射（預設 ACES），色調會和沒裝時不同 */
 export const postfx = use(new PostProcessingPlugin());
 /** 資源載入：模型（Model 元件）、貼圖、音效檔 */

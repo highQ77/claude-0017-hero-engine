@@ -97,33 +97,25 @@ export interface UIContext {
   editorHints?: boolean;
   /** 已載入的圖片（元件自己繪製圖片時用） */
   imageSource?(url: string): CanvasImageSource | undefined;
-  /** 顯示層提供的畫布宿主（引擎內顯示時才有）：UICanvas 直接畫在顯示層的 WebGL 上，不用複製 */
-  canvasHost?(): UICanvasHost | null;
-}
-
-/** 畫布圖層：UICanvas 在顯示層上的一塊（宿主每次繪製時依元件位置畫出 texture） */
-export interface UICanvasLayer {
-  /** 對應的元件（位置、大小、透明度、裁切都跟著它） */
-  readonly element: UIElement;
-  /** 要畫的 GPU 貼圖（預乘 alpha、sRGB 值、第 0 列是底部）；還沒有時是 null */
-  texture(): WebGLTexture | null;
-  /** 每次繪製前呼叫（例如更新給 3D 用的貼圖） */
-  beforeDraw?(): void;
+  /** 顯示層把 UICanvas 分開疊上去（引擎內的介面才有）：畫布內容不用複製進介面畫布 */
+  canvasLayers?(): UICanvasLayers | null;
 }
 
 /**
- * 畫布宿主：把顯示層的 WebGL 2 借給 UICanvas，並在介面上疊出每個畫布。
- * 引擎內（UIPlugin）有；網頁版的介面、編輯器沒有（UICanvas 改用自己的 WebGL，再複製到介面）。
+ * 畫布分層：顯示層把 UICanvas 的內容用它自己的貼圖疊在介面上（一塊四邊形），不複製進介面畫布。
+ * 畫布每幀重畫（動畫、圖表）時，介面不用重畫、不用上傳；蓋在畫布上面的東西（下拉選單、提示）出現時，
+ * 顯示層會改回複製進介面（才能維持上下順序）。
  */
-export interface UICanvasHost {
-  /** 顯示層的 WebGL 2 */
-  readonly gl: WebGL2RenderingContext;
-  /** 自己用過 GL 之後呼叫，讓顯示層重新設定它的 GL 狀態 */
-  resetState(): void;
-  /** 登記畫布圖層，回傳取消登記的函式 */
-  add(layer: UICanvasLayer): () => void;
-  /** GPU 貼圖 → three.js 貼圖（給 3D 物件用；釋放 three.js 貼圖時不會刪掉原本的 GPU 貼圖） */
-  wrapTexture(texture: WebGLTexture, colorSpace: 'srgb' | 'none'): import('three').Texture;
+export interface UICanvasLayers {
+  /** 這個畫布現在是不是分層顯示（是的話介面只畫它的背景與邊框） */
+  isLayered(el: UIElement): boolean;
+  /** 分層顯示的畫布畫了新內容（它的貼圖已經標記要更新）：介面不用重畫，只要再畫一幀 */
+  contentChanged(el: UIElement): void;
+  /**
+   * 3D 畫面用 WebGL 2 繪製時（瀏覽器不支援 WebGPU 的備援）：借用它的 WebGL，畫布直接畫進它的貼圖，
+   * 疊上介面、貼到 3D 都不用複製。WebGPU 時是 null（畫布用自己的 WebGL，再上傳成貼圖）
+   */
+  sharedGL?(): { gl: WebGL2RenderingContext; resetState(): void } | null;
 }
 
 /** 畫在所有元件之上的東西（座標為介面座標） */

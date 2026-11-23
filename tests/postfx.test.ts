@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { Engine } from '../src/core';
 import { EcsPlugin } from '../src/ecs';
 import { ScenePlugin, Transform } from '../src/scene';
@@ -8,12 +7,12 @@ import { Camera, RenderPlugin } from '../src/render';
 import { ColorGradeEffect, PostFxKey, PostProcessingPlugin } from '../src/postfx';
 import { defaultPostFxSettings } from '../src/postfx/PostProcessingPlugin';
 import { postfxSettings } from '../src/postfx/sceneSettings';
-import { ShaderPlugin } from '../src/shaders';
+import { ShaderPlugin, tsl, type CustomEffect, type PostFxPass } from '../src/shaders';
 import { fakeScheduler } from './helpers';
 
 /**
  * 繪製器替身：記錄 render 呼叫，其他沒實作的方法一律當成什麼都不做。
- * 讓 three.js 的後製管線可以在 Node 裡完整跑一次。
+ * 後製管線（TSL 節點）可以在 Node 裡建立；實際的 GPU 繪製不檢查。
  */
 function fakeRenderer() {
   const calls: { scene: THREE.Object3D; camera: THREE.Camera; target: unknown }[] = [];
@@ -42,8 +41,18 @@ function fakeRenderer() {
   const renderer = new Proxy(base as Record<string | symbol, unknown>, {
     get: (obj, key) => (key in obj ? obj[key] : () => undefined),
   });
-  return { renderer: renderer as unknown as THREE.WebGLRenderer, calls, base };
+  return { renderer: renderer as unknown as import('three/webgpu').WebGPURenderer, calls, base };
 }
+
+/** 目前的管線（內部欄位，測試用） */
+type TestChain = {
+  signature: string;
+  bloom: { strength: { value: number } } | null;
+  u: Record<string, { value: number }>;
+  grade: CustomEffect | null;
+  effects: { index: number; pass: CustomEffect }[];
+};
+const chainOf = (postfx: PostProcessingPlugin) => (postfx as unknown as { chain: TestChain }).chain;
 
 function setup(settings: ConstructorParameters<typeof PostProcessingPlugin>[0] = {}) {
   const clock = fakeScheduler();
@@ -90,41 +99,58 @@ describe('後製外掛', () => {
     postfx.settings.bloom.enabled = true;
     clock.frame(16);
     expect(postfx.passNames).toEqual(['render', 'bloom', 'output']);
-    const chain = (postfx as unknown as { chain: { composer: unknown } }).chain;
-
-    // 管線真的有跑：場景先畫進中間畫布，接著是光暈的多次全螢幕繪製，最後輸出到畫面
-    const frame = fake.calls.slice(-30);
-    const sceneCall = fake.calls.find((c) => c.scene instanceof THREE.Scene && c.target !== null);
-    expect(sceneCall).toBeDefined();
-    expect(fake.calls.length).toBeGreaterThan(5);
-    expect(frame.at(-1)!.target).toBeNull();
+    const chain = chainOf(postfx);
 
     postfx.settings.bloom.strength = 2;
     clock.frame(16);
-    expect((postfx as unknown as { chain: { composer: unknown } }).chain).toBe(chain);
-    const bloom = (postfx as unknown as { chain: { bloom: { strength: number } } }).chain.bloom;
-    expect(bloom.strength).toBe(2);
+    expect(chainOf(postfx)).toBe(chain);
+    expect(chain.bloom!.strength.value).toBe(2);
 
     postfx.settings.bloom.enabled = false;
-    fake.calls.length = 0;
     clock.frame(16);
     expect(postfx.passNames).toEqual([]);
+    fake.calls.length = 0;
+    clock.frame(16);
     expect(fake.calls).toHaveLength(1); // 回到直接繪製
+    expect(fake.calls[0].target).toBeNull();
+  });
+
+  test('切換回用過的效果組合：直接用保留的管線，不重建（Safari 重建要重新編譯著色器）', async () => {
+    const { clock, postfx } = setup();
+    postfx.settings.bloom.enabled = true;
+    clock.frame(16);
+    const bloomChain = chainOf(postfx);
+    postfx.settings.bloom.enabled = false;
+    postfx.settings.vignette.enabled = true;
+    clock.frame(16);
+    expect(chainOf(postfx)).not.toBe(bloomChain);
+    postfx.settings.bloom.enabled = true;
+    postfx.settings.vignette.enabled = false;
+    clock.frame(16);
+    expect(chainOf(postfx)).toBe(bloomChain);
+    // 預先建立：之後切換到這個組合時直接用
+    const warming = postfx.prewarm([{ dof: { enabled: true } }]);
+    clock.frame(16); // 預先建立在繪製時進行（每幀一個）
+    await warming;
+    postfx.settings.dof.enabled = true;
+    const before = (postfx as unknown as { cache: Map<string, unknown> }).cache.size;
+    clock.frame(16);
+    expect(postfx.passNames).toContain('dof');
+    expect((postfx as unknown as { cache: Map<string, unknown> }).cache.size).toBe(before); // 拿走一條、放回一條
   });
 
   test('調色與暗角共用一個效果，數值每幀寫入', () => {
     const { clock, postfx } = setup({ color: { enabled: true, saturation: 0.2, tint: 0xff8800 } });
     clock.frame(16);
     expect(postfx.passNames).toEqual(['render', 'output', 'grade']);
-    const grade = (postfx as unknown as { chain: { grade: ShaderPass } }).chain.grade;
-    const u = grade.uniforms as Record<string, THREE.IUniform>;
+    const u = chainOf(postfx).grade!.uniforms;
     expect(u.saturation.value).toBe(0.2);
-    expect(u.vignetteEnabled.value).toBe(false);
+    expect(u.vignetteEnabled.value).toBe(0);
     expect((u.tint.value as THREE.Color).getHex()).toBe(0xff8800);
     postfx.settings.vignette.enabled = true;
     clock.frame(16);
     expect(postfx.passNames).toEqual(['render', 'output', 'grade']);
-    expect(u.vignetteEnabled.value).toBe(true);
+    expect(u.vignetteEnabled.value).toBe(1);
   });
 
   test('景深自動對焦到實體', () => {
@@ -135,38 +161,41 @@ describe('後製外掛', () => {
     postfx.settings.dof.focusOn = target;
     clock.frame(16);
     clock.frame(16);
-    const dof = (postfx as unknown as { chain: { dof: { uniforms: Record<string, THREE.IUniform> } } }).chain.dof;
-    expect(dof.uniforms.focus.value).toBeCloseTo(6, 5);
+    expect(chainOf(postfx).u.focus.value).toBeCloseTo(6, 5);
   });
 
   test('自訂效果插入指定階段；移除後重建', () => {
     const { clock, postfx } = setup();
-    const scenePass = new ShaderPass({ uniforms: { tDiffuse: { value: null } }, vertexShader: '', fragmentShader: '' });
-    const displayPass = new ShaderPass({
-      uniforms: { tDiffuse: { value: null } },
-      vertexShader: '',
-      fragmentShader: '',
+    const applied: string[] = [];
+    const pass = (name: string): PostFxPass => ({
+      enabled: true,
+      apply: (input) => {
+        applied.push(name);
+        return input;
+      },
     });
+    const scenePass = pass('scene');
     postfx.addPass(scenePass, 'scene');
-    postfx.addPass(displayPass, 'display');
+    postfx.addPass(pass('display'), 'display');
     clock.frame(16);
     expect(postfx.passNames).toEqual(['render', 'custom1', 'output', 'custom2']);
+    expect(applied).toEqual(['scene', 'display']); // 建立管線時依順序接上
     postfx.removePass(scenePass);
     clock.frame(16);
     expect(postfx.passNames).toEqual(['render', 'output', 'custom2']);
   });
 
-  test('切換攝影機會重建；畫面尺寸改變會更新 FXAA 解析度', () => {
-    const { clock, postfx, world, render } = setup({ antialias: 'fxaa' });
+  test('切換攝影機、改反鋸齒會重建', () => {
+    const { clock, postfx, world } = setup({ antialias: 'fxaa' });
     clock.frame(16);
-    const sig1 = (postfx as unknown as { chain: { signature: string } }).chain.signature;
+    expect(postfx.passNames).toEqual(['render', 'output', 'fxaa']);
+    const sig1 = chainOf(postfx).signature;
     world.spawn(Transform, Camera.with({ priority: 10 }));
     clock.frame(16);
-    const chain = (postfx as unknown as { chain: { signature: string; fxaa: ShaderPass } }).chain;
-    expect(chain.signature).not.toBe(sig1);
-    render.setSize(400, 200);
-    const res = (chain.fxaa.uniforms as Record<string, THREE.IUniform>).resolution.value as THREE.Vector2;
-    expect([res.x, res.y]).toEqual([1 / 400, 1 / 200]);
+    expect(chainOf(postfx).signature).not.toBe(sig1);
+    postfx.settings.antialias = 'none';
+    clock.frame(16);
+    expect(postfx.passNames).toEqual([]); // 沒有效果：直接繪製
   });
 
   test('卸載後恢復直接繪製；資源可從 ECS 取得', () => {
@@ -192,8 +221,6 @@ describe('後製外掛：效果和著色器庫共用', () => {
   const settle = async () => {
     for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5));
   };
-  const chainOf = (postfx: PostProcessingPlugin) =>
-    (postfx as unknown as { chain: { grade: ShaderPass; effects: { index: number; pass: ShaderPass }[] } }).chain;
 
   function setupWithShaders(settings: ConstructorParameters<typeof PostProcessingPlugin>[0] = {}) {
     const clock = fakeScheduler();
@@ -215,9 +242,12 @@ describe('後製外掛：效果和著色器庫共用', () => {
     expect(postfx.shaderLibrary).toBe(library);
     expect(library.has(ColorGradeEffect.name)).toBe(true);
     expect(library.liveCount(ColorGradeEffect.name)).toBe(1);
-    library.update(ColorGradeEffect.name, { fragment: `${ColorGradeEffect.fragment}\n color.r = 1.0;` });
-    const m = chainOf(postfx).grade.material as THREE.ShaderMaterial;
-    expect(m.fragmentShader).toContain('color.r = 1.0;');
+    const grade = chainOf(postfx).grade;
+    library.update(ColorGradeEffect.name, { color: (c: { color: { a: unknown } }) => tsl.vec4(1, 0, 0, c.color.a) });
+    clock.frame(16);
+    // 定義改了：重建管線，換成新的效果
+    expect(chainOf(postfx).grade).not.toBe(grade);
+    expect(postfx.passNames).toEqual(['render', 'output', 'grade']);
   });
 
   test('沒有 ShaderPlugin 時用後製自己的著色器庫', () => {
@@ -231,12 +261,12 @@ describe('後製外掛：效果和著色器庫共用', () => {
     library.defineEffect({
       name: 'tintRed',
       uniforms: { amount: 0.5, tint: new THREE.Color(1, 0, 0) },
-      fragment: 'color.r += amount;',
+      color: (c) => tsl.vec4(c.color.rgb.add(tsl.vec3(c.uniforms.amount, 0, 0)), c.color.a),
     });
     postfx.settings.effects = [{ name: 'tintRed', uniforms: { amount: 0.8, tint: '#00ff00' } }];
     clock.frame(16);
     expect(postfx.passNames).toEqual(['render', 'output', 'fx:0:tintRed']);
-    const u = chainOf(postfx).effects[0].pass.uniforms as Record<string, THREE.IUniform>;
+    const u = chainOf(postfx).effects[0].pass.uniforms;
     expect(u.amount.value).toBe(0.8);
     expect((u.tint.value as THREE.Color).getHex()).toBe(0x00ff00);
     // 改數值不用重建
@@ -287,18 +317,16 @@ describe('後製外掛：效果和著色器庫共用', () => {
       await settle();
       clock.frame(16);
       expect(postfx.passNames).toEqual(['render', 'output', 'fx:0:red']);
-      expect((chainOf(postfx).effects[0].pass.material as THREE.ShaderMaterial).fragmentShader).toContain(
-        'vec3(1.0, 0.0, 0.0)',
-      );
+      const first = chainOf(postfx).effects[0].pass;
+      const version = library.version('red');
       // 存檔（開發伺服器通知）：重新載入、重建
       content = graph('#0000ff');
       postfx.reloadGraph('shaders/red.shader.json');
       await settle();
       clock.frame(16);
       expect(library.has('red')).toBe(true);
-      expect((chainOf(postfx).effects[0].pass.material as THREE.ShaderMaterial).fragmentShader).toContain(
-        'vec3(0.0, 0.0, 1.0)',
-      );
+      expect(library.version('red')).toBeGreaterThan(version); // 定義換成新的節點圖
+      expect(chainOf(postfx).effects[0].pass).not.toBe(first); // 管線重建
     } finally {
       globalThis.fetch = realFetch;
     }

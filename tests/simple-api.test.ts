@@ -2,7 +2,8 @@
  * 精簡寫法：ecs.each、world.require、Transform.at、math.rotate／setRotation、spawn.entity（父節點、名稱）、setHandlers
  */
 import { describe, expect, test, vi } from 'vitest';
-import { Vector3, type WebGLRenderer } from 'three';
+import { Vector3 } from 'three';
+import type { WebGPURenderer } from 'three/webgpu';
 import { Engine } from '../src/core';
 import { EcsPlugin, World, define } from '../src/ecs';
 import { Name, Parent, ScenePlugin, Transform, math } from '../src/scene';
@@ -21,7 +22,7 @@ function setup() {
     render() {},
     clear() {},
     dispose() {},
-  } as unknown as WebGLRenderer;
+  } as unknown as WebGPURenderer;
   const engine = new Engine({ scheduler: clock.scheduler, pauseOnHidden: false });
   engine
     .use(ecs)

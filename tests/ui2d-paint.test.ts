@@ -74,6 +74,28 @@ function paint(ui: UI2D) {
 }
 
 describe('UIPainter：引擎內繪製', () => {
+  test('局部重畫：完全在範圍外的元件不畫（含陰影的元件留餘裕）；捲動區整個在外時裡面也不走', async () => {
+    const ui = await makeUI(400, 300);
+    ui.loadString(`
+      <UILayout dir="v" gap="10" padding="10">
+        <UILabel id="a" width="100" height="20">上面</UILabel>
+        <UILabel id="b" width="100" height="20" background="#222" shadow="0 4 12 #000">有陰影</UILabel>
+        <UIScrollView height="40"><UILabel>捲動區裡</UILabel></UIScrollView>
+        <UILabel id="c" width="100" height="20">下面</UILabel>
+      </UILayout>`);
+    const { ctx, ops } = recordingContext();
+    const painter = new UIPainter(() => ({}) as CanvasImageSource);
+    const c = ui.require('c').absoluteRect;
+    painter.paint(ctx, ui.root!, 400, 300, 1, ui.paintState, { x: c.x, y: c.y, width: c.width, height: c.height });
+    const texts = ops.filter((o) => o.startsWith('text')).map((o) => o.slice(5, o.indexOf('」')));
+    expect(texts).toEqual(['下面']);
+    // 陰影延伸到下方：範圍只碰到陰影時也要畫
+    const b = ui.require('b').absoluteRect;
+    const { ctx: ctx2, ops: ops2 } = recordingContext();
+    painter.paint(ctx2, ui.root!, 400, 300, 1, ui.paintState, { x: b.x, y: b.y + b.height + 6, width: 50, height: 4 });
+    expect(ops2.some((o) => o.includes('有陰影'))).toBe(true);
+  });
+
   test('背景、邊框、文字依排版位置畫出；隱藏的不畫', async () => {
     const ui = await makeUI();
     ui.loadString(`
@@ -257,7 +279,7 @@ describe('RenderPlugin 疊加圖層', () => {
       },
     };
     const render = new RenderPlugin({
-      renderer: fake as unknown as THREE.WebGLRenderer,
+      renderer: fake as unknown as import('three/webgpu').WebGPURenderer,
       size: { width: 10, height: 10 },
     });
     const engine = new Engine({ scheduler: clock.scheduler, pauseOnHidden: false });

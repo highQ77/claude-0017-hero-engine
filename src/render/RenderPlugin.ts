@@ -1,5 +1,9 @@
 import * as THREE from 'three';
+import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
+import { Fn, max, screenUV, texture as textureNode, vec4 } from 'three/tsl';
+import { type ShaderNode, tsl } from './tsl';
 import type { Engine, Plugin } from '../core/Engine';
+import { createLogger } from '../core/Logger';
 import type { EcsPlugin, Entity, World } from '../ecs';
 import { AdaptiveResolution, type AdaptiveResolutionOptions } from './AdaptiveResolution';
 import { Binding } from './Binding';
@@ -17,10 +21,55 @@ import { OrbitController, autoOrbitControl, type OrbitControlData } from './Orbi
 import { RenderKey } from './keys';
 export { RenderKey } from './keys';
 
-const _origin = new THREE.Vector2(0, 0);
+const _size = new THREE.Vector2();
+const _quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-/** 接管繪製的函式 */
-export type DrawHandler = (scene: THREE.Scene, camera: THREE.Camera) => void;
+/**
+ * 把介面疊到畫面的顏色上。shown：畫面上的顏色（已經轉成 sRGB）；ui：介面的緩衝區（線性、預乘 alpha）。
+ * 介面先還原顏色、轉成 sRGB、再乘回 alpha，在 sRGB 空間混合（和一般網頁的半透明混合一樣）
+ */
+function compositeOverlay(shown: ShaderNode, ui: THREE.Texture): ShaderNode {
+  const { sRGBTransferOETF } = tsl;
+  const u = textureNode(ui, screenUV);
+  const uiRgb = sRGBTransferOETF(u.rgb.div(max(u.a, 1e-5))).mul(u.a);
+  const inv = u.a.oneMinus();
+  return vec4(uiRgb.add(shown.rgb.mul(inv)), u.a.add(shown.a.mul(inv)));
+}
+const log = createLogger('render');
+
+/**
+ * 繪製器：three.js 的 WebGPURenderer。瀏覽器不支援 WebGPU 時，它會自動改用 WebGL2 畫（render.gpuApi 是 'webgl2'），
+ * 遊戲不用另外處理。材質是 three.js 的節點材質（一般的材質會自動轉換），自訂著色器用 TSL（見 @engine/shaders）
+ */
+export type EngineRenderer = WebGPURenderer;
+
+/** 是不是 WebGPURenderer（測試用的替身不是） */
+export function isWebGPURenderer(renderer: unknown): renderer is WebGPURenderer {
+  // 只認 true（測試用的替身可能對任何屬性都回傳函式）
+  return (renderer as { isWebGPURenderer?: unknown } | null)?.isWebGPURenderer === true;
+}
+
+/**
+ * 接管繪製的函式（例如後製）：畫到目前的繪製目標（renderer.getRenderTarget()）。
+ * 回傳 'encoded' 表示畫出來的已經是色調映射、轉成 sRGB 之後的顏色（RenderPlugin 不再轉換）
+ */
+export type DrawHandler = (
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  overlay?: OverlayCompositor | null,
+) => 'encoded' | 'composited' | undefined | void;
+
+/**
+ * 把疊加圖層（介面等）疊到畫面上的節點函式（setDrawHandler 時 compositesOverlays: true 才會拿到）。
+ * 接管繪製的外掛在最後輸出的顏色（已經轉成 sRGB）上呼叫 composite，直接畫到畫布，回傳 'composited'：
+ * 省下「先畫到全螢幕緩衝區、再合成一次」的成本
+ */
+export interface OverlayCompositor {
+  /** 介面緩衝區換了時會變（用來判斷要不要重建） */
+  readonly key: string;
+  /** color：畫面上的顏色（sRGB，vec4 節點）；回傳疊上介面後的顏色 */
+  composite(color: ShaderNode): ShaderNode;
+}
 
 /** 射線檢測的結果 */
 export interface RaycastHit {
@@ -44,8 +93,8 @@ export interface RenderOptions {
   container?: HTMLElement;
   /** 使用既有的畫布 */
   canvas?: HTMLCanvasElement;
-  /** 自行提供繪製器（例如 WebGPURenderer 或測試用的替身） */
-  renderer?: THREE.WebGLRenderer;
+  /** 自行提供繪製器（例如設定不同的 WebGPURenderer，或測試用的替身） */
+  renderer?: EngineRenderer;
   /** 反鋸齒（預設 true） */
   antialias?: boolean;
   /** 預設為裝置像素比，最高 2 */
@@ -100,7 +149,10 @@ export class RenderPlugin implements Plugin {
   private readonly layerReset = new Set<Entity>();
   private offLayerHook: () => void = () => {};
 
-  private _renderer: THREE.WebGLRenderer | null = null;
+  private _renderer: EngineRenderer | null = null;
+  /** WebGPURenderer 要先非同步初始化，完成前不繪製 */
+  private initialized = true;
+  private _ready: Promise<void> = Promise.resolve();
   private ownsRenderer = false;
   private appendedCanvas = false;
   /** 取消登記場景檔存讀規則 */
@@ -114,6 +166,10 @@ export class RenderPlugin implements Plugin {
   private readonly raycaster = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
   private drawHandler: DrawHandler | null = null;
+  /** 接管繪製的外掛會自己疊介面（setDrawHandler 的 compositesOverlays） */
+  private handlerComposites = false;
+  /** 接管繪製的外掛自己疊介面時，介面先畫到這裡 */
+  private overlayFrame: { target: THREE.RenderTarget; compositor: OverlayCompositor } | null = null;
   private adaptive: AdaptiveResolution | null = null;
   /** MeshRenderer 用描述建立的幾何、材質（共用、自動釋放） */
   readonly resources = new RenderResources();
@@ -121,10 +177,19 @@ export class RenderPlugin implements Plugin {
   private _scale = 1;
   /** 降低解析度時，3D 場景先畫在這裡再放大到畫布 */
   private lowRes: {
-    texture: THREE.FramebufferTexture;
+    /** 3D 場景先畫在這裡 */
+    target: THREE.RenderTarget;
     scene: THREE.Scene;
     camera: THREE.OrthographicCamera;
-    material: THREE.ShaderMaterial;
+    material: THREE.Material;
+    width: number;
+    height: number;
+  } | null = null;
+  /** WebGPU 有介面時的緩衝區：3D 畫面、介面、合成用的平面（依色調映射方式） */
+  private frame: {
+    target: THREE.RenderTarget;
+    ui: THREE.RenderTarget;
+    quads: Map<string, THREE.Mesh>;
   } | null = null;
   private engine: Engine | null = null;
   private readonly overlays: { scene: THREE.Scene; camera: THREE.Camera; order: number }[] = [];
@@ -150,10 +215,25 @@ export class RenderPlugin implements Plugin {
     this.options = { ...RenderPlugin.defaults, ...options };
   }
 
-  /** three.js 繪製器（進階用途） */
-  get renderer(): THREE.WebGLRenderer {
+  /** three.js 繪製器（進階用途）：WebGPURenderer */
+  get renderer(): EngineRenderer {
     if (!this._renderer) throw new Error('RenderPlugin 尚未安裝');
     return this._renderer;
+  }
+
+  /**
+   * 實際用的圖形介面：'webgpu'，或 'webgl2'（瀏覽器不支援 WebGPU 時 WebGPURenderer 自動改用）。
+   * 初始化完成（ready）之前是 null
+   */
+  get gpuApi(): 'webgpu' | 'webgl2' | null {
+    const r = this._renderer;
+    if (!r || !this.initialized || !isWebGPURenderer(r)) return null;
+    return (r.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend ? 'webgpu' : 'webgl2';
+  }
+
+  /** 繪製器準備好了（WebGPURenderer 要非同步初始化；完成前不繪製）。初始化失敗時 reject */
+  get ready(): Promise<void> {
+    return this._ready;
   }
 
   /** 畫布的大小（CSS 像素） */
@@ -251,11 +331,12 @@ export class RenderPlugin implements Plugin {
    * 接管實際繪製（例如後製外掛）。傳 null 恢復成直接繪製。
    * 同時只能有一個接管者。
    */
-  setDrawHandler(handler: DrawHandler | null): void {
+  setDrawHandler(handler: DrawHandler | null, options: { compositesOverlays?: boolean } = {}): void {
     if (handler && this.drawHandler && handler !== this.drawHandler) {
       throw new Error('已經有其他外掛接管繪製');
     }
     this.drawHandler = handler;
+    this.handlerComposites = !!handler && !!options.compositesOverlays;
   }
 
   /**
@@ -301,45 +382,39 @@ export class RenderPlugin implements Plugin {
   }
 
   /**
-   * 直接繪製（沒有後製）且解析度降低時：
-   * 先把 3D 場景畫在畫布左下角較小的範圍，複製成貼圖，再放大鋪滿整個畫布。
-   * 畫在畫布本身（不是另外的緩衝區），色調映射、顏色轉換、半透明疊加、反鋸齒都和正常繪製完全一樣，只有解析度不同。
+   * 直接繪製（沒有後製）且解析度降低時：3D 場景畫在較小的繪製目標（線性色彩、還沒色調映射），
+   * 再用節點材質放大鋪滿畫面；色調映射、顏色轉換在鋪滿時才做（和直接畫到畫面一樣）。
    */
-  private drawLowRes(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
-    const pr = renderer.getPixelRatio();
+  private drawLowRes(renderer: EngineRenderer, camera: THREE.Camera): void {
     const sw = Math.max(1, Math.round(this.width * this.pixelRatio));
     const sh = Math.max(1, Math.round(this.height * this.pixelRatio));
-    if (!this.lowRes || this.lowRes.texture.image.width !== sw || this.lowRes.texture.image.height !== sh) {
+    if (!this.lowRes || this.lowRes.width !== sw || this.lowRes.height !== sh) {
       this.disposeLowRes();
-      const texture = new THREE.FramebufferTexture(sw, sh);
-      texture.minFilter = texture.magFilter = THREE.LinearFilter;
-      // 複製出來的像素已經是最後的顏色：原樣輸出，不再做色調映射或顏色轉換
-      const material = new THREE.ShaderMaterial({
-        uniforms: { map: { value: texture } },
-        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-        fragmentShader: 'uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vUv); }',
-        depthTest: false,
-        depthWrite: false,
-        toneMapped: false,
-      });
+      // 反鋸齒：和直接畫到畫面一樣
+      const samples = (this.options.antialias ?? true) ? 4 : 0;
+      const target = new THREE.RenderTarget(sw, sh, { type: THREE.HalfFloatType, depthBuffer: true, samples });
+      target.texture.minFilter = target.texture.magFilter = THREE.LinearFilter;
+      const material = new MeshBasicNodeMaterial({ depthTest: false, depthWrite: false });
+      // 用螢幕座標取樣：WebGPU 與 WebGL2（WebGPURenderer 的備援）的繪製目標上下方向不同，screenUV 兩邊都對
+      material.colorNode = textureNode(target.texture, screenUV);
       const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
       quad.frustumCulled = false;
       const scene = new THREE.Scene();
       scene.add(quad);
-      this.lowRes = { texture, scene, camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), material };
+      const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      this.lowRes = { target, scene, camera: cam, material, width: sw, height: sh };
     }
     const lr = this.lowRes;
-    // setViewport 的單位是 CSS 像素（會乘上像素比）
-    renderer.setViewport(0, 0, sw / pr, sh / pr);
+    const output = renderer.getRenderTarget();
+    renderer.setRenderTarget(lr.target);
     renderer.render(this.scene, camera);
-    renderer.copyFramebufferToTexture(lr.texture, _origin);
-    renderer.setViewport(0, 0, this.width, this.height);
+    renderer.setRenderTarget(output);
     renderer.render(lr.scene, lr.camera);
   }
 
   private disposeLowRes(): void {
     if (!this.lowRes) return;
-    this.lowRes.texture.dispose();
+    this.lowRes.target.dispose();
     this.lowRes.material.dispose();
     (this.lowRes.scene.children[0] as THREE.Mesh).geometry.dispose();
     this.lowRes = null;
@@ -363,11 +438,28 @@ export class RenderPlugin implements Plugin {
     this.world = world;
     const opts = this.options;
 
-    // 繪製器
+    // 繪製器：WebGPURenderer（瀏覽器不支援 WebGPU 時它會自動改用 WebGL2）
     this.ownsRenderer = !opts.renderer;
-    const renderer =
-      opts.renderer ?? new THREE.WebGLRenderer({ canvas: opts.canvas, antialias: opts.antialias ?? true });
+    const renderer: EngineRenderer =
+      opts.renderer ?? new WebGPURenderer({ canvas: opts.canvas, antialias: opts.antialias ?? true });
     this._renderer = renderer;
+    if (isWebGPURenderer(renderer) && !(renderer as { _initialized?: boolean })._initialized) {
+      // WebGPURenderer 要先非同步初始化（取得 GPU）；完成前 draw() 不繪製
+      this.initialized = false;
+      this._ready = renderer.init().then(
+        () => {
+          this.initialized = true;
+          log.info(
+            `繪製方式：WebGPURenderer（${this.gpuApi === 'webgpu' ? 'WebGPU' : '這個瀏覽器不支援 WebGPU，改用 WebGL2'}）`,
+          );
+        },
+        (error: unknown) => {
+          log.error('WebGPURenderer 初始化失敗（瀏覽器不支援 WebGPU，也不支援 WebGL2？）', error);
+          throw error;
+        },
+      );
+      this._ready.catch(() => {}); // 沒人等的時候不要出現「未處理的 Promise 錯誤」：上面已經記錄
+    }
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
     renderer.setPixelRatio(opts.pixelRatio ?? Math.min(dpr, 2));
     if (opts.shadows) {
@@ -495,6 +587,7 @@ export class RenderPlugin implements Plugin {
     this.debug.object.removeFromParent();
     this.debug.clear();
     this.disposeLowRes();
+    this.disposeFrames();
     this.resources.dispose();
     if (this.world?.getResource(RenderKey) === this) {
       this.world.removeResource(RenderKey);
@@ -552,22 +645,45 @@ export class RenderPlugin implements Plugin {
     });
   }
 
-  /** 畫一幀（平常由主迴圈自動呼叫） */
+  /** 畫一幀（平常由主迴圈自動呼叫）；WebGPURenderer 初始化完成前不畫 */
   draw(): void {
+    if (!this.initialized) return;
     const renderer = this.renderer;
     for (const listener of [...this.beforeDrawListeners]) listener();
     const camera = this.activeCameraObject;
     if (this.debug.object.parent !== this.scene) this.scene.add(this.debug.object);
     this.debug._beforeDraw();
+    // 接管繪製的外掛（後製）自己疊介面：介面先畫好，後製最後輸出時一起寫到畫布（不用再多一個全螢幕緩衝區與合成）。
+    // 有額外的畫面（CameraViewport）時不行：它們要畫在 3D 畫面之後、介面之前
+    if (
+      camera &&
+      this.drawHandler &&
+      this.handlerComposites &&
+      this.overlays.length &&
+      isWebGPURenderer(renderer) &&
+      !this.hasViewports()
+    ) {
+      const overlay = this.overlayCompositor(renderer as WebGPURenderer);
+      (renderer as WebGPURenderer).setRenderTarget(null);
+      if (this.drawHandler(this.scene, camera, overlay) === 'composited') {
+        this.debug._afterDraw();
+        return;
+      }
+    }
+    // WebGPU 有介面時：3D 畫面先畫到自己的緩衝區，最後一次寫到畫布（見 drawFrameWebGPU）
+    const frame = this.overlays.length && isWebGPURenderer(renderer) ? this.frameTarget(renderer) : null;
+    if (frame) (renderer as WebGPURenderer).setRenderTarget(frame);
+    let encoded = false;
     if (!camera) renderer.clear();
-    else if (this.drawHandler) this.drawHandler(this.scene, camera);
+    else if (this.drawHandler) encoded = this.drawHandler(this.scene, camera) === 'encoded';
     else if (this._scale < 1) this.drawLowRes(renderer, camera);
     else {
       this.disposeLowRes();
       renderer.render(this.scene, camera);
     }
     this.drawViewports(renderer);
-    if (this.overlays.length) {
+    if (frame) this.drawFrameWebGPU(renderer as WebGPURenderer, frame, encoded);
+    else if (this.overlays.length) {
       // 疊加圖層：不清除畫面，直接畫在上面
       const autoClear = renderer.autoClear;
       renderer.autoClear = false;
@@ -578,8 +694,128 @@ export class RenderPlugin implements Plugin {
     this.debug._afterDraw(); // 只畫一幀的拿掉
   }
 
+  /** 有沒有疊加圖層（介面等） */
+  get hasOverlays(): boolean {
+    return this.overlays.length > 0;
+  }
+
+  /** 把疊加圖層（介面等）畫到 target：透明背景、線性色彩、預乘 alpha（WebGPU 合成介面用） */
+  drawOverlaysInto(target: THREE.RenderTarget): void {
+    const renderer = this.renderer as WebGPURenderer;
+    const prevTarget = renderer.getRenderTarget();
+    const autoClear = renderer.autoClear;
+    const clearColor = renderer.getClearColor(new THREE.Color());
+    const clearAlpha = renderer.getClearAlpha();
+    renderer.setRenderTarget(target);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+    renderer.autoClear = false;
+    for (const o of this.overlays) renderer.render(o.scene, o.camera);
+    renderer.autoClear = autoClear;
+    renderer.setClearColor(clearColor, clearAlpha);
+    renderer.setRenderTarget(prevTarget);
+  }
+
+  private disposeFrames(): void {
+    if (this.frame) {
+      this.frame.target.dispose();
+      this.frame.ui.dispose();
+      for (const q of this.frame.quads.values()) {
+        q.geometry.dispose();
+        (q.material as THREE.Material).dispose();
+      }
+      this.frame = null;
+    }
+    this.overlayFrame?.target.dispose();
+    this.overlayFrame = null;
+  }
+
+  /** 介面先畫到自己的緩衝區，再交給接管繪製的外掛在最後輸出時疊上去 */
+  private overlayCompositor(renderer: WebGPURenderer): OverlayCompositor {
+    const size = renderer.getDrawingBufferSize(_size);
+    let o = this.overlayFrame;
+    if (!o) {
+      const target = new THREE.RenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false });
+      o = this.overlayFrame = {
+        target,
+        compositor: {
+          key: `ui${target.texture.id}`,
+          composite: (color: ShaderNode) => compositeOverlay(color, target.texture),
+        },
+      };
+    }
+    if (o.target.width !== size.x || o.target.height !== size.y) o.target.setSize(size.x, size.y);
+    this.drawOverlaysInto(o.target);
+    return o.compositor;
+  }
+
+  /** 有沒有要畫的額外畫面（CameraViewport） */
+  private hasViewports(): boolean {
+    const world = this.world;
+    if (!world) return false;
+    let found = false;
+    world.query([Camera, CameraViewport]).each((_e, c, v) => {
+      if (c.enabled && v.enabled && v.width > 0 && v.height > 0) found = true;
+    });
+    return found;
+  }
+
+  /** WebGPU 有介面時，3D 畫面先畫到這裡（線性、高動態範圍；反鋸齒時多重取樣） */
+  private frameTarget(renderer: WebGPURenderer): THREE.RenderTarget {
+    const size = renderer.getDrawingBufferSize(_size);
+    const samples = (this.options.antialias ?? true) ? 4 : 0;
+    let f = this.frame;
+    if (!f || f.target.samples !== samples) {
+      f?.target.dispose();
+      const target = new THREE.RenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: true, samples });
+      const ui = new THREE.RenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false });
+      f = this.frame = { target, ui, quads: new Map() };
+    }
+    if (f.target.width !== size.x || f.target.height !== size.y) {
+      f.target.setSize(size.x, size.y);
+      f.ui.setSize(size.x, size.y);
+    }
+    return f.target;
+  }
+
+  /**
+   * WebGPU 有介面時的最後一步：3D 畫面做色調映射、轉成 sRGB，再疊上介面，一次寫到畫布。
+   *
+   * 為什麼不直接把介面畫在畫面上：WebGPURenderer 的色調映射是在最後整個畫面輸出時做的，介面也會被調色
+   * （材質的 toneMapped: false 沒有用）；而反鋸齒時，同一幀第二次畫到畫布會讀到空的多重取樣緩衝區，蓋掉 3D 畫面。
+   * 介面在 sRGB 空間混合（和一般網頁的半透明混合一樣，顏色不變）
+   */
+  private drawFrameWebGPU(renderer: WebGPURenderer, frame: THREE.RenderTarget, encoded: boolean): void {
+    const f = this.frame!;
+    renderer.setRenderTarget(null);
+    this.drawOverlaysInto(f.ui);
+    const toneMapping = renderer.toneMapping;
+    const key = `${encoded ? 'encoded' : toneMapping}`;
+    let quad = f.quads.get(key);
+    if (!quad) {
+      const { renderOutput } = tsl;
+      const material = new MeshBasicNodeMaterial({ depthTest: false, depthWrite: false });
+      material.outputNode = Fn(() => {
+        const sceneColor = textureNode(frame.texture, screenUV);
+        // 3D 畫面：色調映射（曝光由繪製器每幀讀）＋ 轉成 sRGB；後製已經做過的就不再轉
+        const shown = encoded ? sceneColor : renderOutput(sceneColor, toneMapping, THREE.SRGBColorSpace);
+        return compositeOverlay(shown, f.ui.texture);
+      })();
+      quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+      quad.frustumCulled = false;
+      f.quads.set(key, quad);
+    }
+    // 顏色在著色器裡已經轉好：畫的時候不再做色調映射、色彩轉換
+    const colorSpace = renderer.outputColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.outputColorSpace = THREE.ColorManagement.workingColorSpace;
+    renderer.render(quad, _quadCamera);
+    renderer.toneMapping = toneMapping;
+    renderer.outputColorSpace = colorSpace;
+  }
+
   /** 額外的畫面（CameraViewport）：主畫面之後、介面之前，畫在畫面的一塊範圍裡 */
-  private drawViewports(renderer: THREE.WebGLRenderer): void {
+  private drawViewports(renderer: EngineRenderer): void {
     const world = this.world;
     if (!world) return;
     const views: { cam: THREE.Camera; v: import('./Layers').CameraViewportData }[] = [];
@@ -593,11 +829,10 @@ export class RenderPlugin implements Plugin {
     const background = this.scene.background;
     const clearColor = renderer.getClearColor(new THREE.Color());
     const clearAlpha = renderer.getClearAlpha();
-    renderer.setRenderTarget(null);
     renderer.autoClear = false;
     renderer.setScissorTest(true);
     for (const { cam, v } of views) {
-      // 畫面比例 → CSS 像素（WebGL 的原點在左下角）
+      // 畫面比例 → CSS 像素（原點在左下角）
       const x = v.x * this.width;
       const w = v.width * this.width;
       const h = v.height * this.height;

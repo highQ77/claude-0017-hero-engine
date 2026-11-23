@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Engine, Plugin } from '../core/Engine';
 import type { EcsPlugin, Entity } from '../ecs';
 import type { RenderPlugin } from '../render/RenderPlugin';
-import type { UI2D, UIHandler } from '../ui2d';
+import type { UI2D, UIHandler, UITextureCopier } from '../ui2d';
 import { registerSceneCodecs } from '../scene/SceneFile';
 import { UI3DController, UIPanel3D, type PanelState } from './UI3D';
 import { ui3dCodecs } from './sceneCodecs';
@@ -85,9 +85,9 @@ export class UI3DPlugin implements Plugin {
     const render = (this.render = engine.getPlugin<RenderPlugin>('render')!);
     const controller = (this._controller = new UI3DController(ecs.world, {
       handlers: this.handlers,
-      gl: () => render.renderer,
       // 遊戲暫停時主迴圈不會繪製：面板內容變了要補畫一次
       onPanelRendered: () => render.engineState !== 'running' && render.draw(),
+      copier: () => (render.gpuApi ? (render.renderer as unknown as UITextureCopier) : null),
     }));
     ecs.world.setResource(UI3DKey, this);
     // 場景檔可以寫 UIPanel3D（有安裝場景外掛時）

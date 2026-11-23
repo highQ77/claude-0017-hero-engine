@@ -18,10 +18,11 @@ export {
   RENDER_SYNC_PRIORITY,
   RENDER_DRAW_PRIORITY,
   ORBIT_CONTROL_PRIORITY,
+  isWebGPURenderer,
 } from './RenderPlugin';
 export { OrbitControl, OrbitController } from './OrbitControls';
 export type { OrbitControlData } from './OrbitControls';
-export type { RenderOptions, RaycastHit, DrawHandler } from './RenderPlugin';
+export type { RenderOptions, RaycastHit, DrawHandler, EngineRenderer, OverlayCompositor } from './RenderPlugin';
 export { Binding, IGNORE_TRANSFORM } from './Binding';
 export { RenderResources, registerMaterialType } from './descriptors';
 export {

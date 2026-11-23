@@ -5,7 +5,6 @@ import { AssetsKey } from '../assets/keys';
 import type { AssetLoader } from '../assets/AssetManager';
 import { ShadersKey } from '../shaders/keys';
 import type { EffectDefinition, ShaderDefinition } from '../shaders/ShaderLibrary';
-import { registerChunk } from '../shaders/chunks';
 import * as THREE from 'three';
 import { uiComponents } from '../ui2d/registry';
 import type { ComponentConstructor } from '../ui2d/elements';
@@ -170,17 +169,6 @@ export class PluginContext {
     const lib = this.world.requireResource(ShadersKey);
     lib.defineEffect(def);
     this._cleanups.push(() => lib.remove(def.name));
-  }
-
-  /** 註冊著色器共用片段 */
-  registerChunk(name: string, code: string): void {
-    const chunks = THREE.ShaderChunk as Record<string, string>;
-    const previous = chunks[name];
-    registerChunk(name, code);
-    this._cleanups.push(() => {
-      if (previous === undefined) delete chunks[name];
-      else chunks[name] = previous;
-    });
   }
 
   /** 移除套件時要執行的清理 */

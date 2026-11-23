@@ -43,7 +43,9 @@ export const shaders = shaderPlugin.library;
 export const scenePlugin = use(new ScenePlugin());
 export const scenes = scenePlugin.scenes;
 export const hierarchy = scenePlugin.hierarchy;
-/** 繪製。動態解析度：跟不上 60 FPS 時自動降低 3D 的繪製解析度（介面不受影響） */
+/**
+ * 繪製。動態解析度：跟不上 60 FPS 時自動降低 3D 的繪製解析度（介面不受影響）
+ */
 export const render = use(
   new RenderPlugin({
     shadows: true,

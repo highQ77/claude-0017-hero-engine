@@ -186,7 +186,7 @@ describe('RenderPlugin 的 orbitControls', () => {
       render() {},
       clear() {},
       dispose() {},
-    } as unknown as THREE.WebGLRenderer;
+    } as unknown as import('three/webgpu').WebGPURenderer;
   }
 
   const run = (options: ConstructorParameters<typeof RenderPlugin>[0] = {}) => {

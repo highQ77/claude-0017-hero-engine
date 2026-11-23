@@ -1,21 +1,23 @@
 # @engine/shaders 的範例
 
 ## ShaderLibrary
-著色器庫（`shaders`）：`define` 註冊自訂材質，`createMaterial` 建立實例（uniform 各自獨立），`update` 執行中修改程式。用 lil-gui 調整 uniform。
+著色器庫（`shaders`）：`define` 註冊自訂材質，`createMaterial` 建立實例（uniform 各自獨立），`update` 執行中修改。著色器用 TSL 節點寫（`tsl` 裡的函式），WebGPU 與 WebGL2 備援都能跑。用 lil-gui 調整 uniform。
 
 ```ts
 import GUI from 'lil-gui';
 
+const { vec4, mix, step, fract } = tsl;
 spawn.camera(world, { position: [0, 1, 3.5], target: [0, 0, 0] });
 spawn.defaultLights(world);
 shaders.define({
   name: 'stripes',
   base: 'unlit',
   uniforms: { colorA: new Color('#ff6b6b'), colorB: new Color('#4cc9f0'), count: 10, speed: 1 },
-  fragment: `
-    float s = step(0.5, fract(vUv.y * count + uTime * speed));
-    color = vec4(mix(colorA, colorB, s), 1.0);
-  `,
+  color: (c) => {
+    const u = c.uniforms;
+    const s = step(0.5, fract(c.uv.y.mul(u.count).add(c.time.mul(u.speed))));
+    return vec4(mix(u.colorA, u.colorB, s), 1);
+  },
 });
 const mat = shaders.createMaterial('stripes');
 spawn.mesh(world, { geometry: { torusKnot: [0.6, 0.2] }, material: mat });
@@ -23,22 +25,29 @@ const gui = new GUI();
 gui.add(mat.uniforms.count, 'value', 1, 40, 1).name('條紋數');
 gui.add(mat.uniforms.speed, 'value', -3, 3, 0.1).name('速度');
 gui.addColor(mat.uniforms.colorA, 'value').name('顏色 A');
-gui.add({ diag: () => shaders.update('stripes', { fragment: 'float s = step(0.5, fract((vUv.x + vUv.y) * count + uTime * speed)); color = vec4(mix(colorA, colorB, s), 1.0);' }) }, 'diag').name('改成斜線（update）');
+const diagonal = () =>
+  shaders.update('stripes', {
+    color: (c: ShaderContext) => {
+      const u = c.uniforms;
+      const s = step(0.5, fract(c.uv.x.add(c.uv.y).mul(u.count).add(c.time.mul(u.speed))));
+      return vec4(mix(u.colorA, u.colorB, s), 1);
+    },
+  });
+gui.add({ diagonal }, 'diagonal').name('改成斜線（update）');
 console.log('使用中的實例：', shaders.liveCount('stripes'));
 engine.start();
 ```
 
 ## ShaderPlugin
-著色器外掛（`shaderPlugin`）：提供著色器庫，並每幀更新 `uTime`、`uDeltaTime`、`uResolution`。
+著色器外掛（`shaderPlugin`）：提供著色器庫，並讓材質描述可以寫 `{ shaderGraph: '…' }`。時間、畫面大小（`c.time`、`c.resolution`）由 three.js 每幀自動更新。
 
 ```ts
 console.log('外掛：', shaderPlugin.name, '，著色器庫：', shaderPlugin.library === shaders);
-engine.start();
-engine.timers.after(1, () => console.log('uTime =', shaders.builtins.uTime.value.toFixed(2), '，uResolution =', shaders.builtins.uResolution.value.toArray()));
+console.log('已定義：', shaders.names.join('、') || '（還沒有）');
 ```
 
 ## compileShaderGraph
-把節點圖編譯成著色器程式片段（3D 場景編輯器、著色器編輯器內部用）。這裡用程式組一張「UV 漸層」的圖。
+把節點圖編譯成 TSL 節點（3D 場景編輯器、著色器編輯器內部用）。這裡用程式組一張「UV 漸層」的圖，看編譯結果。
 
 ```ts
 const graph: ShaderGraph = {
@@ -57,21 +66,25 @@ const graph: ShaderGraph = {
   nextId: 5,
 };
 const compiled = compileShaderGraph(graph);
-console.log('片段著色器：', compiled.fragment.trim());
-console.log('半透明：', compiled.transparent, '，面：', compiled.side);
+console.log('種類：', compiled.kind, '，半透明：', compiled.transparent, '，面：', compiled.side);
+console.log('有頂點位移：', compiled.position !== null);
 ```
 
 ## defineShaderNode
-新增一種節點（著色器編輯器的節點庫也會出現）。這裡做一個「棋盤格」節點，再用它組一張圖。
+新增一種節點（著色器編輯器的節點庫也會出現）。`tsl` 函式拿到各輸入的節點，回傳各輸出的節點。這裡做一個「棋盤格」節點，再用它組一張圖。
 
 ```ts
+const { floor, mod } = tsl;
 defineShaderNode({
   type: 'checker',
   title: '棋盤格',
   category: 'pattern',
   inputs: [{ name: 'scale', type: 'float', default: 8 }],
   outputs: [{ name: 'out', type: 'float' }],
-  glsl: (i) => ({ out: `mod(floor(vUv.x * ${i.scale}) + floor(vUv.y * ${i.scale}), 2.0)` }),
+  tsl: (i, _params, _T, ctx) => {
+    const p = ctx.builtin('uv').mul(i.scale);
+    return { out: mod(floor(p.x).add(floor(p.y)), 2) };
+  },
 });
 const file: ShaderGraphFile = {
   format: 'hero-shader-graph',
@@ -205,7 +218,7 @@ const graph: ShaderGraph = {
 const def = shaderGraphEffectDefinition({ format: 'hero-shader-graph', version: 1, graph }, 'upsideDown');
 shaders.defineEffect(def);
 postfx.addPass(shaders.createEffect('upsideDown'), 'display');
-console.log(def.fragment.split('\n').slice(-2).join('\n'));
+console.log('效果：', def.name, '，uniform：', Object.keys(def.uniforms ?? {}).join('、'));
 engine.start();
 ```
 
@@ -215,22 +228,6 @@ engine.start();
 ```ts
 const file = parseShaderGraphFile({ format: 'hero-shader-graph', version: 1, graph: { nodes: [], links: [], nextId: 1 }, assets: { 7: 'data:image/png;base64,AAAA' } });
 console.log(stringifyShaderGraphFile(file));
-```
-
-## BUILTIN_CHUNKS
-內建的共用程式片段，在著色器裡用 `#include <名稱>` 引用（雜訊、fresnel…）。
-
-```ts
-console.log('內建片段：', Object.keys(BUILTIN_CHUNKS).join('、'));
-spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
-shaders.define({
-  name: 'noisy',
-  base: 'unlit',
-  fragmentHeader: '#include <engine_noise>',
-  fragment: 'float n = noise2(vUv * 8.0 + uTime); color = vec4(vec3(n), 1.0);',
-});
-spawn.mesh(world, { geometry: { sphere: 0.9 }, material: shaders.createMaterial('noisy') });
-engine.start();
 ```
 
 ## EffectPresets
@@ -251,24 +248,6 @@ addEventListener('pointerdown', () => {
   console.log('效果：', current.shaderName);
 });
 console.log('點畫面套用效果');
-engine.start();
-```
-
-## glsl
-`glsl.typeOf`：JavaScript 值對應的 GLSL 型別（uniform 的宣告就是這樣產生的）。
-
-```ts
-for (const v of [1, true, new Vector2(), new Color(), new Matrix4(), create.texture('textures/checker.png')]) console.log(v.constructor.name, '→', glsl.typeOf(v));
-```
-
-## register
-`register.shaderChunk`：註冊自己的程式片段，所有自訂著色器都能 `#include`。
-
-```ts
-register.shaderChunk('my_palette', 'vec3 palette(float t) { return 0.5 + 0.5 * cos(6.2831 * (t + vec3(0.0, 0.33, 0.67))); }');
-shaders.define({ name: 'rainbow', base: 'unlit', fragmentHeader: '#include <my_palette>', fragment: 'color = vec4(palette(vUv.x + uTime * 0.2), 1.0);' });
-spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
-spawn.mesh(world, { geometry: { torus: [0.7, 0.25] }, material: shaders.createMaterial('rainbow') });
 engine.start();
 ```
 
@@ -294,7 +273,7 @@ spawn.mesh(world, { geometry: { capsule: [0.4, 0.6] }, material: shaders.createM
 spawn.mesh(world, { geometry: { plane: [1.4, 1, 32, 32] }, material: shaders.createMaterial('wave'), position: [1.5, 0.5, 0] });
 const gui = new GUI();
 gui.add(dissolve.uniforms.progress, 'value', 0, 1, 0.01).name('溶解進度');
-console.log('溶解的 uniform：', Object.keys(dissolve.uniforms).filter((k) => !k.startsWith('u')).join('、'));
+console.log('溶解的 uniform：', Object.keys(dissolve.uniforms).join('、'));
 engine.start();
 ```
 
@@ -306,7 +285,7 @@ console.log('和 shaders 同一個：', world.requireResource(ShadersKey) === sh
 ```
 
 ## CompiledShaderGraph
-`compileShaderGraph` 的結果：頂點、片段程式，用到的貼圖、半透明、面。
+`compileShaderGraph` 的結果：材質或效果、用到的貼圖、半透明、面，以及產生顏色（`color`）、頂點位置（`position`）節點的函式。
 
 ```ts
 const result: CompiledShaderGraph = compileShaderGraph({
@@ -314,27 +293,31 @@ const result: CompiledShaderGraph = compileShaderGraph({
   links: [],
   nextId: 2,
 });
-console.log('半透明：', result.transparent, '，用到的貼圖：', result.textures, '，片段：', result.fragment.trim().slice(0, 80));
+console.log('種類：', result.kind, '，半透明：', result.transparent, '，用到的貼圖：', result.textures);
+console.log('顏色節點：', result.color({ uniforms: {} }) ? '有' : '沒有');
 ```
 
 ## EffectDefinition
-全螢幕效果的定義：名稱、uniform、片段程式（`tDiffuse` 是畫面、`uv` 座標、設定 `color`）。用 lil-gui 調整。
+全螢幕效果的定義：名稱、uniform、`color` 函式（`c.color` 是畫面原本的顏色，`c.sample(uv)` 讀畫面任意位置，`c.uv` 左下是 (0, 0)）。用 lil-gui 調整。
 
 ```ts
 import GUI from 'lil-gui';
 
+const { vec2, vec4 } = tsl;
 spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
 spawn.defaultLights(world);
 spawn.mesh(world, { geometry: { torusKnot: [0.6, 0.2] }, material: '#9acd32' });
 const vhs: EffectDefinition = {
   name: 'vhs',
   uniforms: { shift: 0.005, noise: 0.08 },
-  header: 'float rand(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }',
-  fragment: `
-    color.r = texture2D(tDiffuse, uv + vec2(shift, 0.0)).r;
-    color.b = texture2D(tDiffuse, uv - vec2(shift, 0.0)).b;
-    color.rgb += (rand(uv + uTime) - 0.5) * noise;
-  `,
+  color: (c) => {
+    const u = c.uniforms;
+    const offset = vec2(u.shift, 0);
+    const r = c.sample(c.uv.add(offset)).r;
+    const b = c.sample(c.uv.sub(offset)).b;
+    const grain = c.fn.hash12(c.uv.mul(c.resolution).add(c.time.mul(60))).sub(0.5).mul(u.noise);
+    return vec4(r.add(grain), c.color.g.add(grain), b.add(grain), c.color.a);
+  },
 };
 shaders.defineEffect(vhs);
 const fx = shaders.createEffect('vhs');
@@ -346,9 +329,10 @@ engine.start();
 ```
 
 ## ShaderDefinition
-自訂材質的定義。`base: 'standard'` 保留光照與陰影，只改一部分：`vertex` 移動頂點、`fragment` 改 `diffuseColor`、`emissive` 讓表面發光。
+自訂材質的定義。`base: 'standard'` 保留光照與陰影，只改一部分：`position` 移動頂點、`color` 改表面顏色、`emissive` 讓表面發光（都是回傳 TSL 節點的函式）。
 
 ```ts
+const { mix, sin, vec3, vec4 } = tsl;
 spawn.camera(world, { position: [0, 1.5, 3.5], target: [0, 0, 0] });
 spawn.defaultLights(world);
 const def: ShaderDefinition = {
@@ -356,9 +340,9 @@ const def: ShaderDefinition = {
   base: 'standard',
   uniforms: { amount: 0.08, glow: new Color('#ff7a45') },
   options: { roughness: 0.4 },
-  vertex: 'transformed += normal * sin(uTime * 3.0 + position.y * 4.0) * amount;',
-  fragment: 'diffuseColor.rgb = mix(vec3(0.2, 0.6, 0.9), vec3(0.9, 0.9, 1.0), vUv.y);',
-  emissive: 'totalEmissiveRadiance += glow * (0.5 + 0.5 * sin(uTime * 3.0));',
+  position: (c) => c.position.add(c.normal.mul(sin(c.time.mul(3).add(c.position.y.mul(4))).mul(c.uniforms.amount))),
+  color: (c) => vec4(mix(vec3(0.2, 0.6, 0.9), vec3(0.9, 0.9, 1), c.uv.y), 1),
+  emissive: (c) => c.uniforms.glow.mul(sin(c.time.mul(3)).mul(0.5).add(0.5)),
 };
 shaders.define(def);
 spawn.mesh(world, { geometry: { sphere: [0.9, 64, 32] }, material: shaders.createMaterial('breathing') });
@@ -400,7 +384,7 @@ console.log(node.type, '節點，顏色參數', node.params.color);
 ```
 
 ## CustomEffect
-`shaders.createEffect` 建立的全螢幕效果（three.js 的 ShaderPass），交給 `postfx.addPass`。
+`shaders.createEffect` 建立的全螢幕效果（`PostFxPass`），交給 `postfx.addPass`。`uniforms` 可以隨時改。
 
 ```ts
 shaders.defineEffect(EffectPresets.pixelate());
@@ -431,14 +415,15 @@ engine.start();
 ```
 
 ## ShaderBase
-自訂著色器建立在哪種材質上：`unlit` 完全自訂，其他保留光照只改一部分。
+自訂著色器建立在哪種材質上：`unlit` 完全自訂（沒有光影），其他保留光照只改一部分。
 
 ```ts
+const { vec4 } = tsl;
 spawn.camera(world, { position: [0, 1.5, 4], target: [0, 0, 0] });
 spawn.defaultLights(world);
 const bases: ShaderBase[] = ['unlit', 'standard', 'lambert', 'phong'];
 bases.forEach((base, i) => {
-  shaders.define({ name: `tint-${base}`, base, ...(base === 'unlit' ? { fragment: 'color = vec4(vUv, 0.5, 1.0);' } : { fragment: 'diffuseColor.rgb = vec3(vUv, 0.5);' }) });
+  shaders.define({ name: `tint-${base}`, base, color: (c) => vec4(c.uv, 0.5, 1) });
   spawn.mesh(world, { geometry: { sphere: 0.45 }, material: shaders.createMaterial(`tint-${base}`), position: [i * 1.1 - 1.65, 0, 0] });
 });
 console.log('由左到右：', bases.join('、'), '（unlit 沒有光影）');
@@ -446,19 +431,135 @@ engine.start();
 ```
 
 ## UniformInput
-uniform 的值：數字、布林、向量、顏色、矩陣、貼圖；陣列等需要指定型別時用 `{ value, glsl }`。
+uniform 的值：數字、布林、向量、顏色、矩陣、貼圖（`null` 是之後才給的貼圖）。
 
 ```ts
+const { sin, vec4 } = tsl;
 const uniforms: Record<string, UniformInput> = {
   speed: 1.5,
   tint: new Color('#ff0000'),
   offset: new Vector2(0.1, 0.2),
-  points: { value: [new Vector3(), new Vector3(1, 0, 0)], glsl: 'vec3[2]' },
 };
-shaders.define({ name: 'uniformDemo', base: 'unlit', uniforms, fragment: 'color = vec4(tint * (0.5 + 0.5 * sin(uTime * speed + offset.x + points[1].x)), 1.0);' });
+shaders.define({
+  name: 'uniformDemo',
+  base: 'unlit',
+  uniforms,
+  color: (c) => vec4(c.uniforms.tint.mul(sin(c.time.mul(c.uniforms.speed).add(c.uniforms.offset.x)).mul(0.5).add(0.5)), 1),
+});
 const m = shaders.createMaterial('uniformDemo');
-console.log('uniform：', Object.keys(m.uniforms).filter((k) => !k.startsWith('u')));
+console.log('uniform：', Object.keys(m.uniforms));
 spawn.camera(world, { position: [0, 0, 3], target: [0, 0, 0] });
 spawn.mesh(world, { geometry: { box: 1 }, material: m });
+engine.start();
+```
+
+## shaderFns
+共用的著色器函式（雜訊、Voronoi、菲涅耳、HSV、調色盤…），回傳 TSL 節點。自訂著色器裡也可以用 `c.fn`（同一份）。
+
+```ts
+const { vec3, vec4 } = tsl;
+spawn.camera(world, { position: [0, 0, 3], target: [0, 0, 0] });
+shaders.define({
+  name: 'marble',
+  base: 'unlit',
+  color: (c) => {
+    const n = shaderFns.fbm2(c.uv.mul(6).add(c.time.mul(0.2)));
+    const col = shaderFns.palette(n, vec3(0.5), vec3(0.5), vec3(1), vec3(0, 0.33, 0.67));
+    return vec4(col, 1);
+  },
+});
+spawn.mesh(world, { geometry: { sphere: 0.9 }, material: shaders.createMaterial('marble') });
+console.log('函式：', Object.keys(shaderFns).join('、'));
+engine.start();
+```
+
+## tsl
+three.js 的 TSL（著色器節點語言）函式：`vec3`、`mix`、`sin`、`uniform`…。遊戲不要直接 import `three/tsl`，用這一份（型別比較寬鬆，方便鏈式寫法）。
+
+```ts
+const { vec4, sin, abs } = tsl;
+spawn.camera(world, { position: [0, 0, 3], target: [0, 0, 0] });
+shaders.define({
+  name: 'pulse',
+  base: 'unlit',
+  color: (c) => vec4(abs(sin(c.time.add(c.uv.x.mul(6)))), c.uv.y, 0.6, 1),
+});
+spawn.mesh(world, { geometry: { plane: [2, 2] }, material: shaders.createMaterial('pulse') });
+engine.start();
+```
+
+## EffectContext
+效果的 `color` 函式拿到的東西：`color`（畫面原本的顏色）、`uv`（左下 (0, 0)）、`sample(uv)`（讀畫面任意位置）、`time`、`resolution`、`uniforms`、`fn`。
+
+```ts
+const { vec4, length } = tsl;
+spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { torusKnot: [0.6, 0.2] }, material: '#4cc9f0' });
+const spotlight = (c: EffectContext) => {
+  const d = length(c.uv.sub(0.5));
+  return vec4(c.color.rgb.mul(d.mul(-2).add(1.2)), c.color.a);
+};
+shaders.defineEffect({ name: 'spotlight', color: spotlight });
+postfx.addPass(shaders.createEffect('spotlight'), 'display');
+engine.start();
+```
+
+## PostFxPass
+後製的一個效果：`apply` 拿到前一個效果的顏色（節點），回傳新的顏色。自己寫效果時實作這個介面，交給 `postfx.addPass`。`version` 改變時後製會重建。
+
+```ts
+const { vec3, vec4, dot } = tsl;
+spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
+spawn.defaultLights(world);
+spawn.mesh(world, { geometry: { torusKnot: [0.6, 0.2] }, material: '#ff7a45' });
+const grayscale: PostFxPass = {
+  enabled: true,
+  apply: (input) => vec4(vec3(dot(input.rgb, vec3(0.299, 0.587, 0.114))), input.a),
+};
+postfx.addPass(grayscale, 'display');
+addEventListener('pointerdown', () => {
+  grayscale.enabled = !grayscale.enabled;
+  console.log('灰階：', grayscale.enabled);
+});
+console.log('點畫面切換灰階');
+engine.start();
+```
+
+## ShaderContext
+自訂材質的函式拿到的東西（都是 TSL 節點）：`uniforms`、`time`、`uv`、`position`、`normal`、`worldPosition`、`worldNormal`、`cameraPosition`、`viewDir`、`resolution`、`fn`。
+
+```ts
+const { vec3, vec4 } = tsl;
+spawn.camera(world, { position: [0, 1, 3], target: [0, 0, 0] });
+const rim = (c: ShaderContext) => vec4(vec3(0.1, 0.6, 1).mul(c.fn.fresnel(c.viewDir, c.worldNormal, 3)), 1);
+shaders.define({ name: 'rim', base: 'unlit', color: rim });
+spawn.mesh(world, { geometry: { sphere: 0.9 }, material: shaders.createMaterial('rim') });
+engine.start();
+```
+
+## ShaderNode
+TSL 節點的型別（寬鬆的型別：可以直接 `.mul()`、`.add()`、取 `.x`、`.rgb`）。自己寫輔助函式時用。
+
+```ts
+const { vec4, smoothstep } = tsl;
+const circle = (uv: ShaderNode, radius: number): ShaderNode => smoothstep(radius, radius - 0.01, uv.sub(0.5).length());
+spawn.camera(world, { position: [0, 0, 3], target: [0, 0, 0] });
+shaders.define({ name: 'dot', base: 'unlit', color: (c) => vec4(circle(c.uv, 0.3), 0.4, 0.8, 1) });
+spawn.mesh(world, { geometry: { plane: [2, 2] }, material: shaders.createMaterial('dot') });
+engine.start();
+```
+
+## UniformNode
+一個 uniform：可以放進著色器的節點，也可以改 `.value`（下一幀生效）。`material.uniforms`、`effect.uniforms` 裡的都是。
+
+```ts
+const { vec4 } = tsl;
+spawn.camera(world, { position: [0, 0, 3], target: [0, 0, 0] });
+shaders.define({ name: 'fade', base: 'unlit', uniforms: { level: 0 }, color: (c) => vec4(c.uniforms.level, 0.5, 0.2, 1) });
+const m = shaders.createMaterial('fade');
+const level: UniformNode = m.uniforms.level;
+spawn.mesh(world, { geometry: { box: 1 }, material: m });
+engine.on('update', (t) => (level.value = (Math.sin(t.elapsed * 2) + 1) / 2));
 engine.start();
 ```

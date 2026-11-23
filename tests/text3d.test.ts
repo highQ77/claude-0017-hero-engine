@@ -55,7 +55,7 @@ function setup() {
     render() {},
     clear() {},
     dispose() {},
-  } as unknown as THREE.WebGLRenderer;
+  } as unknown as import('three/webgpu').WebGPURenderer;
   const engine = new Engine({ scheduler: clock.scheduler, pauseOnHidden: false });
   engine
     .use(ecs)
