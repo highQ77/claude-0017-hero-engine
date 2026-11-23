@@ -5,12 +5,11 @@
  *   node hero create <專案名稱>   建立空專案（projects/<專案名稱>/）
  *   node hero select [專案名稱]   選擇要預覽、編譯的專案（不給名稱時列出所有專案）
  *   node hero remove <專案名稱>   刪除專案（projects/、dist/、.tauri/ 裡的這個專案；刪除前會要求輸入專案名稱確認）
- *   node hero dev                 預覽目前選擇的專案（開發伺服器；入口頁 /portal 可以切換、新增、刪除專案）
+ *   node hero dev                 預覽目前選擇的專案（開發伺服器；入口頁 /portal 可以切換、新增、刪除專案；/doc 是使用手冊）
  *   node hero build [--web|--mac] 檢查（格式、程式、型別、測試）後發佈目前選擇的專案：
  *                                   --web（預設）網頁版 → dist/<專案名稱>/web/
  *                                   --mac         macOS App（Tauri）→ dist/<專案名稱>/mac/<專案名稱>.app
  *                                   --mac -f      App 打開時就是全螢幕（-f 同 --fullscreen）
- *   node hero doc [build]         開啟使用手冊（doc/）；build 打包到 dist/doc/
  *   node hero api                 產生引擎的 API 列表（tips/api.txt）
  *
  * dev、build 後面的參數會交給 Vite，例如 node hero dev --port 3000
@@ -171,6 +170,7 @@ function dev(args) {
   console.log('    /ui-editor      遊戲 2D 介面編輯器');
   console.log('    /shader-editor  著色器編輯器');
   console.log('    /se-editor      音效編輯器');
+  console.log('    /doc            使用手冊與 API 參考');
   run('', VITE, args, { PROJECT: name });
 }
 
@@ -291,21 +291,6 @@ function buildMac(name, webDir, { fullscreen = false } = {}) {
   return out;
 }
 
-/** 使用手冊：doc/（範例可以編輯、執行） */
-function doc(args) {
-  const config = join(ROOT, 'doc', 'vite.config.ts');
-  if (!existsSync(config)) fail('找不到 doc/vite.config.ts');
-  if (args[0] === 'build') {
-    run('打包使用手冊', VITE, ['build', '--config', config, ...args.slice(1)]);
-    console.log(
-      '\n✓ 打包完成：dist/doc/（直接雙擊 dist/doc/index.html 就能閱讀；TypeScript 範例要執行請用 node hero doc）',
-    );
-    return;
-  }
-  console.log('▶ 使用手冊：/manual/');
-  run('', VITE, ['--config', config, '--open', '/manual/', ...args]);
-}
-
 /** API 列表：從原始碼整理引擎所有可用的 API，寫到 tips/api.txt */
 function api() {
   const script = join(ROOT, 'tools', 'gen-api.mjs');
@@ -319,11 +304,10 @@ function help() {
   node hero create <專案名稱>   建立空專案（projects/<專案名稱>/）
   node hero select [專案名稱]   選擇要預覽、編譯的專案（不給名稱時列出所有專案）
   node hero remove <專案名稱>   刪除專案（刪除前會要求輸入專案名稱確認）
-  node hero dev                 預覽目前選擇的專案（入口頁 /portal 可以切換、新增、刪除專案）
+  node hero dev                 預覽目前選擇的專案（入口頁 /portal 可以切換、新增、刪除專案；/doc 是使用手冊）
   node hero build               發佈網頁版（預設，同 --web）→ dist/<專案名稱>/web/
   node hero build --mac         發佈 macOS App（Tauri，需要 Rust）→ dist/<專案名稱>/mac/
   node hero build --mac -f      同上，App 打開時就是全螢幕（-f 同 --fullscreen）
-  node hero doc [build]         開啟使用手冊；build 打包到 dist/doc/
   node hero api                 產生引擎的 API 列表（tips/api.txt）
 
 目前選擇：${selectedProject()}${existsSync(SELECTION_FILE) ? '' : `（預設 ${DEFAULT_PROJECT}）`}`);
@@ -345,9 +329,6 @@ switch (command) {
     break;
   case 'build':
     build(rest);
-    break;
-  case 'doc':
-    doc(rest);
     break;
   case 'api':
     api();

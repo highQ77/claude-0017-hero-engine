@@ -24,7 +24,7 @@ out.push('='.repeat(60));
 out.push(`由 node hero api（tools/gen-api.mjs）從原始碼自動產生（${date}）。引擎更新後執行 node hero api 重新產生。`);
 out.push("遊戲裡用 import { 名稱 } from '@engine/<模組>' 引用；套件（src/packages）用 PluginManager 安裝。");
 out.push('記號：· 成員　? 可省略　// 說明（取自原始碼註解）　get 唯讀屬性');
-out.push('使用手冊的「API 參考」有同樣的內容，另外有範例與原始碼位置（node hero doc）。');
+out.push('使用手冊的「API 參考」有同樣的內容，另外有範例與原始碼位置（npm run dev 後開 http://localhost:5173/doc）。');
 out.push('');
 
 const toc = [];

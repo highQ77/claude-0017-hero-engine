@@ -2,7 +2,7 @@
  * 範例的執行環境（runner.html，放在範例的預覽框 iframe 裡）。
  *
  * 1. 告訴外層頁面「準備好了」（ready）
- * 2. 收到程式碼後 POST 到開發伺服器（/__doc/run），拿到虛擬模組的網址
+ * 2. 收到程式碼後 POST 到開發伺服器（文件網站根目錄的 __doc/run），拿到虛擬模組的網址
  * 3. import 那個網址：Vite 會編譯 TypeScript、處理 '@engine/...' 和 'three'
  * 範例的 RenderPlugin 預設開啟攝影機繞轉控制（RenderPlugin.defaults）。
  * console 的輸出與錯誤都轉給外層頁面顯示。每次執行都是一個新的預覽框（狀態不會互相干擾）。
@@ -73,11 +73,14 @@ function cleanStack(error: unknown): unknown {
 async function run(code: string): Promise<void> {
   let url: string;
   try {
-    const res = await fetch('/__doc/run', { method: 'POST', body: code });
+    // 相對於上面的 <base>（文件網站的根目錄：npm run dev 時是 /doc/，範例檢查另開伺服器時是 /）
+    const res = await fetch('__doc/run', { method: 'POST', body: code });
     if (!res.ok) throw new Error(res.status === 404 ? '' : await res.text());
     url = ((await res.json()) as { url: string }).url;
   } catch {
-    send('error', ['TypeScript 範例需要文件的開發伺服器才能執行：在引擎目錄執行 node hero doc']);
+    send('error', [
+      'TypeScript 範例需要文件的開發伺服器才能執行：在引擎目錄執行 npm run dev，再打開 http://localhost:5173/doc',
+    ]);
     return;
   }
   try {

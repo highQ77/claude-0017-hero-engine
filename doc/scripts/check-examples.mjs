@@ -5,6 +5,7 @@
  *   node doc/scripts/check-examples.mjs          型別檢查所有可以執行的 TypeScript 範例（tsc）
  *   node doc/scripts/check-examples.mjs --run    另外用 Chrome（無畫面模式）實際執行每個範例，
  *                                                收集錯誤訊息（需要安裝 Google Chrome）
+ *   --url=http://localhost:5173/doc              --run 時改用已經開著的伺服器（npm run dev 的 /doc），不另開文件伺服器
  *
  * 只檢查完整的範例；data-run="false" 的程式片段不檢查。
  *
@@ -168,22 +169,29 @@ async function runInBrowser(list) {
     console.log('✗ 找不到 Chrome，略過實際執行');
     return false;
   }
+  // --url=…：用已經開著的文件網站（例如 npm run dev 的 /doc），否則另開一個文件伺服器
+  const external = process.argv
+    .find((a) => a.startsWith('--url='))
+    ?.slice(6)
+    .replace(/\/+$/, '');
   const port = 5900 + Math.floor(Math.random() * 90);
-  const vite = spawn(
-    process.execPath,
-    [
-      join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js'),
-      '--config',
-      join(DOC, 'vite.config.ts'),
-      '--port',
-      String(port),
-      '--strictPort',
-    ],
-    { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
+  const vite = external
+    ? null
+    : spawn(
+        process.execPath,
+        [
+          join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js'),
+          '--config',
+          join(DOC, 'vite.config.ts'),
+          '--port',
+          String(port),
+          '--strictPort',
+        ],
+        { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
+      );
   let viteLog = '';
-  vite.stdout.on('data', (d) => (viteLog += d));
-  vite.stderr.on('data', (d) => (viteLog += d));
+  vite?.stdout.on('data', (d) => (viteLog += d));
+  vite?.stderr.on('data', (d) => (viteLog += d));
   const debugPort = 9300 + Math.floor(Math.random() * 90);
   const profile = join(DOC, '.check-chrome');
   const chrome = spawn(
@@ -202,7 +210,7 @@ async function runInBrowser(list) {
   );
   let failed = 0;
   try {
-    const base = `http://localhost:${port}`;
+    const base = external ?? `http://localhost:${port}`;
     await waitFor(`${base}/manual/`);
     const version = await (await waitFor(`http://127.0.0.1:${debugPort}/json/version`)).json();
     const cdp = await Cdp.connect(version.webSocketDebuggerUrl);
@@ -380,7 +388,7 @@ async function runInBrowser(list) {
     console.log(viteLog);
   } finally {
     chrome.kill();
-    vite.kill();
+    vite?.kill();
     await sleep(300);
     rmSync(profile, { recursive: true, force: true });
   }

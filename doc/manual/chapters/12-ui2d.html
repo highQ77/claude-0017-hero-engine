@@ -417,10 +417,10 @@ const hud = (text: string) => `
     <UILabel padding="6 14" radius="999" background="rgba(0,0,0,0.55)" color="#ffffff">${text}</UILabel>
   </UI>`;
 uiXml.register({
-  '/ui/forest/loading.xml': async () => loading('迷霧森林', '#9acd32'),
-  '/ui/forest/hud.xml': async () => hud('🌲 迷霧森林'),
-  '/ui/desert/loading.xml': async () => loading('沙漠', '#ffb347'),
-  '/ui/desert/hud.xml': async () => hud('🏜️ 沙漠'),
+  'ui/forest/loading.xml': async () => loading('迷霧森林', '#9acd32'),
+  'ui/forest/hud.xml': async () => hud('🌲 迷霧森林'),
+  'ui/desert/loading.xml': async () => loading('沙漠', '#ffb347'),
+  'ui/desert/hud.xml': async () => hud('🏜️ 沙漠'),
 });
 
 // 3D 場景

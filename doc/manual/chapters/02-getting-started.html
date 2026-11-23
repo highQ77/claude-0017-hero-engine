@@ -18,24 +18,23 @@ node hero remove my-game    # 刪除專案（projects/my-game/、dist/my-game/�
 node hero dev               # 預覽遊戲，並提供專案入口頁與 3D 場景、介面、著色器、音效編輯器（網址見下方「開發網址」）
 node hero build             # 格式與程式檢查 + 型別檢查 + 測試 + 打包 → dist/my-game/web/
 node hero build --mac       # 再包成 macOS App → dist/my-game/mac/my-game.app（需要 Rust）
-node hero doc               # 開啟這本使用手冊
 node hero api               # 產生引擎所有可用的 API 列表 → tips/api.txt
 </script>
 <div class="tip">
   <p>開發伺服器開著時，也可以在入口頁 <code>/portal</code> 用滑鼠做同樣的事：點專案就是 <code>node hero select</code>（開發伺服器會自動換成那個專案），「＋ 新增專案」是 <code>node hero create</code>，垃圾桶是 <code>node hero remove</code>（一樣要輸入專案名稱確認；預設專案 <code>official-demo-000-start</code> 不能刪）。鉛筆可以編輯專案說明（存在專案 <code>src/main.ts</code> 開頭註解的第一行）。每個編輯器頁首的「專案」會回到入口頁。</p>
 </div>
 <h2>開發網址</h2>
-<p>執行指令後，在瀏覽器打開下面的網址。<code>node hero dev</code> 開的是目前選擇的專案（<code>node hero select</code>），入口頁與四個編輯器只在開發時提供，不會打包到遊戲裡：</p>
+<p>執行指令後，在瀏覽器打開下面的網址。<code>node hero dev</code> 開的是目前選擇的專案（<code>node hero select</code>），入口頁、四個編輯器與使用手冊只在開發時提供，不會打包到遊戲裡：</p>
 <table>
   <thead><tr><th>指令</th><th>網址</th><th>內容</th></tr></thead>
   <tbody>
-    <tr><td rowspan="6"><code>node hero dev</code></td><td><code>http://localhost:5173</code></td><td>遊戲進行畫面</td></tr>
+    <tr><td rowspan="7"><code>node hero dev</code><br>（<code>npm run dev</code>）</td><td><code>http://localhost:5173</code></td><td>遊戲進行畫面</td></tr>
     <tr><td><code>http://localhost:5173/portal</code></td><td>專案選擇的入口頁：點一下切換專案（同 <code>node hero select</code>，開發伺服器會自動換成那個專案），也可以新增、刪除專案（同 <code>node hero create</code>／<code>remove</code>）與編輯專案說明</td></tr>
     <tr><td><code>http://localhost:5173/s3d-editor</code></td><td><a href="#/scene-editor">遊戲 3D 編輯器</a>（3D 場景編輯器）：編輯場景檔與預製物件</td></tr>
     <tr><td><code>http://localhost:5173/ui-editor</code></td><td><a href="#/ui-editor">遊戲 2D 介面編輯器</a>（UI 編輯器）：編輯 2D 介面檔</td></tr>
     <tr><td><code>http://localhost:5173/shader-editor</code></td><td><a href="#/shader-editor">著色器編輯器</a>：用節點組合自訂著色器</td></tr>
     <tr><td><code>http://localhost:5173/se-editor</code></td><td><a href="#/se-editor">音效編輯器</a>：合成遊戲音效</td></tr>
-    <tr><td><code>node hero doc</code></td><td><code>http://localhost:5174</code></td><td>引擎的手冊與 API（就是這本使用手冊與 API 參考）</td></tr>
+    <tr><td><code>http://localhost:5173/doc</code></td><td>引擎的手冊與 API（就是這本使用手冊與 API 參考）：和遊戲同一個開發伺服器，所有範例都能執行；入口頁的「文件」也會打開這裡</td></tr>
   </tbody>
 </table>
 <div class="tip">

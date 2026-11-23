@@ -1,17 +1,18 @@
 /**
- * 文件網站的 Vite 設定（node hero doc 啟動）。
+ * 文件網站的 Vite 設定。
+ *
+ *   npm run dev（node hero dev）時掛在遊戲開發伺服器的 /doc/ 底下（tools/project.ts 的 docServerPlugin）：
+ *   http://localhost:5173/doc。手冊只在開發伺服器上提供（不另外打包）。
+ *   範例檢查（doc/scripts/check-examples.mjs）會用這份設定另開一個伺服器（網址從根目錄起算）。
  *
  *   doc/index.html           入口（轉到使用手冊）
  *   doc/manual/              使用手冊：章節在 manual/chapters/*.html
  *   doc/manual/runner.html   範例的執行環境（放在預覽框 iframe 裡）
  *   doc/public/              範例用的圖片、音效（網址從根目錄起算，例如 ui/coin.png）
  *
- * TypeScript 範例：頁面把程式碼 POST 到 /__doc/run，伺服器暫存成虛擬模組 /__run/<編號>.ts，
+ * TypeScript 範例：頁面把程式碼 POST 到 <base>__doc/run，伺服器暫存成虛擬模組 <base>__run/<編號>.ts（<base> 是 /doc/；範例檢查另開時是 /），
  * 預覽框再 import 它。這樣範例和真正的遊戲專案一樣經過 Vite 編譯，可以 import '@engine/...'、'three'。
  * 範例裡的 import … from './engine' 對應到手冊共用的 doc/manual/engine.ts（和遊戲專案的 engine.ts 一樣的寫法）。
- * 打包後（node hero doc build）沒有伺服器：XML 範例照常執行，TypeScript 範例只能閱讀、編輯。
- * 打包結果可以放到任何網站的任何路徑，也可以直接在檔案總管雙擊 dist/doc/index.html 打開（file://）：
- * 網址用相對路徑（base './'），程式打包成一般的 <script>（classicScriptPlugin；瀏覽器不允許 file:// 載入 module）。
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -46,46 +47,8 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 /**
- * 打包時把每個頁面的程式改成一般的 <script defer>（不是 type="module"）：
- * 瀏覽器不允許從 file:// 載入 module，直接雙擊打開 HTML 時頁面會是空的。
- * 每個頁面只有一個入口檔（沒有共用的分塊），所以不需要 import／export；
- * 程式包在 async 函式裡（保留嚴格模式與頂層 await），import.meta.url 換成目前 script 的網址。
- */
-function classicScriptPlugin(): Plugin {
-  return {
-    name: 'doc-classic-script',
-    apply: 'build',
-    renderChunk(code, chunk) {
-      if (chunk.imports.length || chunk.exports.length || !chunk.isEntry)
-        this.error(
-          `${chunk.fileName}：使用手冊的程式要打包成單一檔案（不能有共用分塊、import 或 export），才能用一般的 <script> 載入`,
-        );
-      const out = code.replace(/\bimport\.meta\.url\b/g, '(__docScript ? __docScript.src : location.href)');
-      if (/\bimport\.meta\b/.test(out)) this.error(`${chunk.fileName}：一般的 <script> 不能用 import.meta`);
-      // document.currentScript 只有在同步執行的期間有值：先記下來
-      return {
-        code: `(async () => {\n'use strict';\nconst __docScript = document.currentScript;\n${out}\n})();\n`,
-        map: null,
-      };
-    },
-    transformIndexHtml: {
-      order: 'post',
-      handler(html) {
-        return html
-          .replace(/<script\b([^>]*?)\btype="module"([^>]*)>/g, (_m, a: string, b: string) => {
-            const attrs = `${a}${b}`.replace(/\s*\b(?:crossorigin|async|defer)\b/g, '');
-            return `<script defer${attrs}>`;
-          })
-          .replace(/<link rel="modulepreload"[^>]*>\s*/g, '')
-          .replace(/ crossorigin(?=[ >])/g, '');
-      },
-    },
-  };
-}
-
-/**
  * API 參考：虛擬模組 virtual:engine-api 是分析引擎原始碼的結果（tools/api-model.mjs）。
- * 開發時引擎的原始碼改了就重新分析、重新整理頁面，API 參考永遠和程式碼一致；打包時分析一次放進手冊。
+ * 引擎的原始碼改了就重新分析、重新整理頁面，API 參考永遠和程式碼一致。
  */
 function apiDocPlugin(): Plugin {
   const ID = 'virtual:engine-api';
@@ -148,7 +111,10 @@ function docUiXmlPlugin(): Plugin {
   };
 }
 
-/** 執行 TypeScript 範例：POST /__doc/run（內容為程式碼）→ { url } */
+/**
+ * 執行 TypeScript 範例：POST <base>__doc/run（內容為程式碼）→ { url }。
+ * <base> 是網站的根目錄：掛在遊戲開發伺服器時是 /doc/，範例檢查另開伺服器時是 /。
+ */
 function docRunPlugin(): Plugin {
   const modules = new Map<string, string>();
   let counter = 0;
@@ -156,7 +122,9 @@ function docRunPlugin(): Plugin {
     name: 'doc-run',
     apply: 'serve',
     resolveId(id, importer) {
-      if (id.startsWith(RUN_URL)) return RUN_DIR + id.slice(RUN_URL.length).split('?')[0];
+      // 瀏覽器要的是 <base>__run/…；Vite 去掉 <base> 後是 /__run/…（兩種都接受）
+      const at = id.indexOf(RUN_URL);
+      if (at >= 0 && !id.slice(0, at).includes('?')) return RUN_DIR + id.slice(at + RUN_URL.length).split('?')[0];
       // 範例的 './engine' → 手冊共用的 engine.ts
       if (importer?.startsWith(RUN_DIR) && /^\.\/engine(\.ts)?$/.test(id)) return EXAMPLE_ENGINE;
       return null;
@@ -168,7 +136,11 @@ function docRunPlugin(): Plugin {
       return code;
     },
     configureServer(server) {
-      server.middlewares.use('/__doc/run', async (req, res) => {
+      // 外掛的中介層排在 Vite 去掉 base 之前：比對完整的網址
+      const base = server.config.base;
+      const endpoint = `${base}__doc/run`;
+      server.middlewares.use(async (req, res, next) => {
+        if ((req.url ?? '').split('?')[0] !== endpoint) return next();
         if (req.method !== 'POST') {
           res.statusCode = 405;
           return res.end();
@@ -179,7 +151,7 @@ function docRunPlugin(): Plugin {
           modules.set(name, code);
           while (modules.size > MAX_MODULES) modules.delete(modules.keys().next().value!);
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ url: RUN_URL + name }));
+          res.end(JSON.stringify({ url: `${base}${RUN_URL.slice(1)}${name}` }));
         } catch (error) {
           res.statusCode = 400;
           res.end(String((error as Error).message));
@@ -191,9 +163,9 @@ function docRunPlugin(): Plugin {
 
 export default defineConfig({
   root: DOC_ROOT,
-  // 相對路徑：打包結果放在任何路徑（或直接用 file:// 打開）都能找到 assets/
-  base: './',
   publicDir: join(DOC_ROOT, 'public'),
+  // 預先打包套件的快取和遊戲專案分開（都放 node_modules/.vite 會互相覆蓋；node hero dev 時兩個在同一個程序裡）
+  cacheDir: join(ENGINE_ROOT, 'node_modules', '.vite-doc'),
   // '@engine' 是總入口（src/index.ts），'@engine/模組' 是各模組
   resolve: {
     alias: [
@@ -201,10 +173,8 @@ export default defineConfig({
       { find: '@engine', replacement: join(ENGINE_ROOT, 'src') },
     ],
   },
-  plugins: [apiDocPlugin(), docUiXmlPlugin(), docRunPlugin(), classicScriptPlugin()],
+  plugins: [apiDocPlugin(), docUiXmlPlugin(), docRunPlugin()],
   server: {
-    // 手冊固定用 5174（遊戲的 node hero dev 用 5173），兩個可以同時開；被占用時 Vite 會自動往後找
-    port: 5174,
     fs: { allow: [ENGINE_ROOT] },
     // 範例檢查的暫存資料夾（型別檢查、Chrome 設定檔）：變動時不要重新整理頁面
     watch: { ignored: ['**/.check-*/**'] },
@@ -241,19 +211,5 @@ export default defineConfig({
       ].map((p) => `three/examples/jsm/${p}`),
     ],
     esbuildOptions: { target: 'es2022' },
-  },
-  build: {
-    target: 'es2022',
-    outDir: join(ENGINE_ROOT, 'dist', 'doc'),
-    emptyOutDir: true,
-    // 一般的 <script> 用不到 modulepreload（也不要多一個共用的 polyfill 檔）
-    modulePreload: false,
-    rollupOptions: {
-      input: {
-        index: join(DOC_ROOT, 'index.html'),
-        manual: join(DOC_ROOT, 'manual', 'index.html'),
-        runner: join(DOC_ROOT, 'manual', 'runner.html'),
-      },
-    },
   },
 });

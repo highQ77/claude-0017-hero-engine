@@ -53,10 +53,11 @@ PROJECT=my-game npx vite preview --outDir dist/my-game/web   # 在本機預覽�
 
 <h2>使用手冊本身</h2>
 <script type="text/plain" class="example" data-lang="sh" data-readonly data-title="手冊指令">
-node hero doc            # 開啟使用手冊（開發伺服器，所有範例都能執行）
-node hero doc build      # 打包成靜態網站 → dist/doc/（XML 範例可以執行；TypeScript 範例只能閱讀、編輯）
+npm run dev              # 開發伺服器的 http://localhost:5173/doc 就是使用手冊（所有範例都能執行）
+node doc/scripts/check-examples.mjs --run   # 檢查手冊的所有範例（用 Chrome 實際執行）
 </script>
-<p>打包結果用相對路徑，可以放在網站的任何路徑，也可以不用伺服器、直接雙擊 <code>dist/doc/index.html</code>（<code>file://</code>）閱讀。</p>
+<p>使用手冊只在開發伺服器上提供，不另外打包。</p>
+<p><code>npm run dev</code> 時手冊掛在 <code>/doc/</code> 底下，所以手冊裡的網址（範例的素材、<code>uiXml.register</code> 的鍵）都要用相對路徑：寫 <code>models/robot.gltf</code>，不要寫 <code>/models/robot.gltf</code>。</p>
 <p>新增章節：在 <code>doc/manual/chapters/</code> 加一個 HTML 檔（檔名開頭的數字決定順序），範例寫在 <code>&lt;script type="text/plain" class="example" data-lang="ts"&gt;</code> 裡。詳細說明見 <code>doc/README.md</code>。</p>
 
 <h2>常見問題</h2>

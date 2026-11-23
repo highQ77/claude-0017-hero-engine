@@ -57,6 +57,7 @@ node hero dev          # 預覽目前選擇的專案（預設 official-demo-000-
 | `/ui-editor`     | 2D 介面編輯器                |
 | `/shader-editor` | 著色器編輯器                 |
 | `/se-editor`     | 音效編輯器                   |
+| `/doc`           | 使用手冊與 API 參考          |
 
 ## 專案指令（`node hero`）
 
@@ -66,7 +67,6 @@ node hero select [專案名稱]   # 選擇要預覽、編譯的專案（不給�
 node hero remove <專案名稱>   # 刪除專案（需輸入名稱確認，無法復原）
 node hero dev                 # 預覽目前選擇的專案
 node hero build [--web|--mac] # 檢查後發佈：網頁版（預設）或 macOS App（--mac -f：打開時全螢幕）
-node hero doc [build]         # 開啟使用手冊；build 打包到 dist/doc/
 node hero api                 # 產生引擎的 API 列表（tips/api.txt）
 ```
 
@@ -98,7 +98,6 @@ npm run format     # 格式化
 npm run fix        # 自動修正格式與可修正的問題
 npm run check      # CI 用的完整檢查
 npm run relay      # 啟動多人連線的轉送伺服器（預設連接埠 8787，可用 PORT 改）
-npm run doc        # 同 node hero doc
 ```
 
 ## 撰寫遊戲
@@ -161,8 +160,7 @@ engine.use(new RenderPlugin({ shadows: true }));
 ## 使用手冊
 
 ```sh
-node hero doc          # 開啟使用手冊（/manual/）
-node hero doc build    # 打包成靜態網站 dist/doc/
+npm run dev            # 使用手冊在 http://localhost:5173/doc（和遊戲同一個開發伺服器；入口頁的「文件」也能打開）
 ```
 
 手冊分成「說明文件」與「API」兩個分頁。API 參考是從引擎原始碼自動產生的，每個 API 都有可以編輯、執行的範例。詳見 [`doc/README.md`](doc/README.md)。

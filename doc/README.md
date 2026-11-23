@@ -3,7 +3,7 @@
 ```
 doc/
 ├── index.html              入口（轉到使用手冊）
-├── vite.config.ts          文件網站的設定（含執行 TypeScript 範例的伺服器外掛、API 參考的資料）
+├── vite.config.ts          文件網站的設定（含執行 TypeScript 範例的伺服器外掛、API 參考的資料；npm run dev 時掛在 /doc）
 ├── public/                 範例用的圖片、音效（網址從根目錄起算：ui/coin.png、sounds/pop.wav）
 ├── manual/                 使用手冊
 │   ├── index.html
@@ -28,10 +28,10 @@ doc/
 ## 指令
 
 ```sh
-node hero doc                              # 開啟使用手冊（所有範例都能執行）
-node hero doc build                        # 打包到 dist/doc/
+npm run dev                                # 使用手冊在 http://localhost:5173/doc（所有範例都能執行；入口頁 /portal 的「文件」也能打開）
 node doc/scripts/check-examples.mjs        # 型別檢查所有 TypeScript 範例
 node doc/scripts/check-examples.mjs --run  # 另外用 Chrome（無畫面模式）實際執行每個範例
+node doc/scripts/check-examples.mjs --run --url=http://localhost:5173/doc  # 改用開著的 npm run dev 執行
 node doc/scripts/check-examples.mjs --api-only           # 只檢查 API 參考（略過章節的範例）
 node doc/scripts/check-examples.mjs --api-only --run-api # 另外用 Chrome 實際執行每個 API 的範例
 node doc/scripts/check-examples.mjs --run-api --api-module=core,scene  # 只執行這些模組的 API 範例
@@ -64,9 +64,17 @@ node doc/scripts/check-examples.mjs --api-todo           # 列出所有還沒有
 - 範例檢查（`check-examples.mjs`）很嚴格：**有 API 沒有範例、或範例沒通過型別檢查就算失敗**。新增 API 時記得在 `api-examples/` 補上範例，再用 `--run-api --api-module=模組` 在 Chrome 裡確認能執行。
 - 範例用的素材放在 `doc/public/`（例如 `models/robot.gltf`：三個方塊零件與 Idle、Wave、Spin 三段動畫）。
 
-打包後的靜態網站沒有開發伺服器：XML 範例照常即時預覽，TypeScript 範例只能閱讀、編輯（執行時會提示要用 `node hero doc`）。
+## 開發伺服器上的 /doc
 
-打包結果用相對路徑、一般的 `<script>`（不是 module），可以放在網站的任何路徑，也可以直接雙擊 `dist/doc/index.html` 用 `file://` 打開。範例用到的 `public/ui/*.xml` 會打包進手冊（`file://` 不能讀取其他檔案；圖片可以）。
+`npm run dev`（`node hero dev`）時，`tools/project.ts` 的 `docServerPlugin` 用中介層模式建立手冊自己的 Vite 伺服器（設定就是這裡的 `vite.config.ts`，`base` 改成 `/doc/`），`/doc/` 底下的請求都交給它；熱更新共用同一個連接埠（WebSocket 路徑 `/doc/`）。第一次打開 `/doc` 才建立，切換專案（開發伺服器重新啟動）時一起重建。`/doc` 會轉到 `/doc/manual/`。
+
+所以手冊裡的網址要用**相對路徑**，不要從 `/` 開始：
+
+- 範例的素材寫 `models/robot.gltf`、`ui/coin.png`（預覽框有 `<base>` 指到文件網站的根目錄），不要寫 `/models/…`；`uiXml.register` 的鍵也一樣（`'ui/forest/hud.xml'`）。
+- 手冊程式裡的伺服器網址也是相對的（例如 `runner.ts` 的 `fetch('__doc/run')`），`vite.config.ts` 的外掛用 `server.config.base` 組出完整網址。
+- 預先打包套件的快取放在 `node_modules/.vite-doc`（和遊戲專案的 `node_modules/.vite` 分開，否則會互相覆蓋）。
+
+手冊只在開發伺服器上提供，不另外打包。範例檢查（`check-examples.mjs --run`）沒給 `--url` 時，會用同一份 `vite.config.ts` 另開一個暫時的伺服器（網址從根目錄起算），檢查完就關掉。
 
 ## 新增章節
 

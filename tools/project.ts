@@ -8,6 +8,7 @@
  *     shader-editor/     著色器編輯器（節點式）：/shader-editor.html，編輯的是專案的 public/shaders
  *     se-editor/         音效編輯器（Tone.js 合成）：/se-editor.html，編輯的是專案的 public/sounds（.sfx.json + .wav）
  *     portal/            入口頁：/portal.html，專案列表：切換（同 node hero select）、新增、刪除專案，編輯專案說明
+ *   doc/                 使用手冊：開發時在 /doc（docServerPlugin：手冊自己的 Vite 伺服器掛在這個伺服器底下）
  *   projects/<名稱>/      遊戲專案：index.html、src/、public/（介面檔、音效、模型…）
  *
  * 指令：node hero create／select／remove／dev／build／doc（見根目錄的 hero.js）
@@ -17,7 +18,7 @@
  */
 import { promises as fs } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
-import type { Plugin, UserConfig } from 'vite';
+import type { Plugin, UserConfig, ViteDevServer } from 'vite';
 import { DEFAULT_PROJECT, PROJECTS_DIR, ROOT, SELECTION_FILE } from './current-project.js';
 import { createProject, listProjects, removeError, removeProject, removeTargets } from './project-files.js';
 import { readBody, sendError, sendJson } from './dev-http';
@@ -57,6 +58,7 @@ export function defineProject(projectDir: string): UserConfig {
       soundFilesPlugin(),
       uiXmlBundlePlugin(),
       engineEditorPlugin(),
+      docServerPlugin(),
       projectSwitchPlugin(root),
     ],
     server: { fs: { allow: [ENGINE_ROOT] } },
@@ -273,6 +275,72 @@ function engineEditorPlugin(): Plugin {
           res.statusCode = 200;
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
           res.end(html);
+        } catch (error) {
+          next(error);
+        }
+      });
+    },
+  };
+}
+
+/** 使用手冊在開發伺服器上的網址 */
+const DOC_BASE = '/doc/';
+const DOC_CONFIG = join(ENGINE_ROOT, 'doc', 'vite.config.ts');
+
+/**
+ * 使用手冊（doc/）：node hero dev 時在 /doc 提供，不用另開伺服器。
+ * 手冊有自己的 Vite 設定（doc/vite.config.ts：根目錄、public/、執行範例的外掛、API 參考），
+ * 所以用中介層模式另建一個 Vite 伺服器（base /doc/），/doc/ 底下的請求都交給它；
+ * 熱更新的 WebSocket 共用這個伺服器的連接埠（路徑 /doc/，和遊戲的 / 分開）。
+ * 第一次打開 /doc 才建立（不看手冊時不花時間）；開發伺服器關閉、重新啟動（切換專案）時一起關掉。
+ */
+function docServerPlugin(): Plugin {
+  return {
+    name: 'engine-doc',
+    apply: 'serve',
+    configureServer(server) {
+      let doc: Promise<ViteDevServer> | undefined;
+      // 關閉後（重新啟動的過程中）不要再建立手冊的伺服器，否則會留下一個沒人關的
+      let closed = false;
+      const start = async () => {
+        const { createServer } = await import('vite');
+        return createServer({
+          configFile: DOC_CONFIG,
+          base: DOC_BASE,
+          appType: 'mpa',
+          clearScreen: false,
+          server: { middlewareMode: true, hmr: server.httpServer ? { server: server.httpServer } : false },
+        });
+      };
+      const close = server.close.bind(server);
+      server.close = async () => {
+        closed = true;
+        const running = doc;
+        doc = undefined;
+        if (running) await (await running).close().catch(() => {});
+        return close();
+      };
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url ?? '';
+        const path = url.split('?')[0];
+        if (path === '/doc' || path === DOC_BASE) {
+          // 入口直接轉到使用手冊
+          res.statusCode = 302;
+          res.setHeader('Location', `${DOC_BASE}manual/${url.slice(path.length)}`);
+          return res.end();
+        }
+        if (!path.startsWith(DOC_BASE)) return next();
+        if (closed) {
+          res.statusCode = 503;
+          return res.end('開發伺服器正在重新啟動，請稍後重新整理');
+        }
+        try {
+          doc ??= start().catch((error) => {
+            doc = undefined;
+            throw error;
+          });
+          const docServer = await doc;
+          docServer.middlewares(req, res, next);
         } catch (error) {
           next(error);
         }

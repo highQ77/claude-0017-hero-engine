@@ -30,12 +30,12 @@ import exampleXml from 'virtual:doc-ui-xml';
 
 /**
  * 範例的圖片、內嵌 XML 的位置（doc/public/ui）：相對於手冊頁面算出的路徑（不含網域；引擎的路徑合併只處理路徑），
- * 打包後放在網站的任何路徑、或直接用 file:// 打開都找得到。
+ * 手冊在 /doc/ 底下或根目錄都找得到。
  */
 const XML_BASE = new URL('../ui/', location.href).pathname;
 
-// 範例內嵌、匯入的 XML（<UIImport src="theme.xml">、<UIComponent src="coin-badge.xml">）直接打包進手冊：
-// 用 file:// 打開時瀏覽器不允許讀取其他檔案（圖片可以），先登記內容就不用讀檔
+// 範例內嵌、匯入的 XML（<UIImport src="theme.xml">、<UIComponent src="coin-badge.xml">）先登記內容，
+// 排版時不用再讀檔（邊打邊更新時不會等網路）
 // （內容由 doc/vite.config.ts 的虛擬模組提供：Vite 不允許直接 import public/ 裡的檔案）
 uiXml.register(
   Object.fromEntries(Object.entries(exampleXml).map(([name, text]) => [`${XML_BASE}${name}`, async () => text])),
