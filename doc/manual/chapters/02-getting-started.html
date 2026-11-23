@@ -148,11 +148,12 @@ export const minimap = use(new MinimapPlugin({ minimap: 'minimap', follow: () =>
 </script>
 
 <h2>第一個遊戲</h2>
-<p>這是 <code>node hero create</code> 產生的範本內容：一個會旋轉的方塊，加上一個 2D 按鈕。按 <kbd>▶ 執行</kbd> 看看，再試著修改：</p>
+<p>這是 <code>node hero create</code> 產生的範本內容：地面格線上一個會旋轉的方塊，加上一個 2D 按鈕；攝影機可以用滑鼠拖曳轉動、滾輪縮放（<code>OrbitControl</code>）。按 <kbd>▶ 執行</kbd> 看看，再試著修改：</p>
 <ul>
   <li>把 <code>speed: 0.8</code> 改成 <code>3</code>，方塊轉得更快</li>
   <li>把 <code>'#9acd32'</code> 改成 <code>'#ff6b6b'</code>，方塊變成紅色</li>
   <li>把 <code>{ box: 1 }</code> 換成 <code>{ torusKnot: [0.5, 0.18] }</code></li>
+  <li>把 <code>autoRotate</code> 那一行的 <code>//</code> 拿掉，攝影機會自己繞著方塊轉</li>
 </ul>
 <div class="note">
   <p>和範本只差一個地方：範本把介面寫成檔案 <code>public/ui/scene.xml</code>，這裡用 <code>ui.loadString()</code> 直接載入 XML 字串。<code>'./engine'</code> 是手冊準備好的（見下面的「手冊範例的 engine.ts」）。</p>
@@ -160,6 +161,7 @@ export const minimap = use(new MinimapPlugin({ minimap: 'minimap', follow: () =>
 <script type="text/plain" class="example" data-lang="ts" data-title="第一個遊戲" data-height="340">
 import { define } from '@engine/ecs';
 import { Transform, math } from '@engine/scene';
+import { Vector3 } from '@engine/math';
 import { OrbitControl, spawn } from '@engine/render';
 import type { UILabel } from '@engine/ui2d';
 import { ecs, engine, ui, world } from './engine';
@@ -179,12 +181,27 @@ ui.loadString(`
 let clicks = 0;
 ui.setHandlers({ hello: () => ui.get<UILabel>('clicks')?.setText(`點了 ${++clicks} 次`) });
 
-// 場景：攝影機、燈光、一個旋轉的方塊（幾何、材質用描述，不用自己建立 three.js 物件）
-const camera = spawn.camera(world, { position: [0, 1.5, 4], target: [0, 0, 0], fov: 55 });
-world.add(camera, OrbitControl, { minDistance: 2, maxDistance: 12 }); // 用滑鼠拖曳轉動、滾輪縮放
+// 場景：攝影機、燈光、地面格線、一個旋轉的方塊（幾何、材質用描述，不用自己建立 three.js 物件）
+const camera = spawn.camera(world, { position: [2.5, 2.2, 4], target: [0, 0.5, 0], fov: 55 });
 spawn.defaultLights(world);
-const box = spawn.mesh(world, { geometry: { box: 1 }, material: { standard: { color: '#9acd32', roughness: 0.4 } } });
+// 地面格線：10 × 10 公尺、每格 1 公尺，放在 y = 0（方塊就擺在上面）
+spawn.grid(world, { size: 10, divisions: 10, color: '#3a4232', centerColor: '#5a6a48' });
+const box = spawn.mesh(world, {
+  position: [0, 0.5, 0],
+  geometry: { box: 1 },
+  material: { standard: { color: '#9acd32', roughness: 0.4 } },
+});
 world.add(box, Spin, { speed: 0.8 });
+
+// 攝影機的滑鼠控制：左鍵拖曳轉動、滾輪縮放、右鍵（或 Shift＋左鍵）平移
+world.add(camera, OrbitControl, {
+  target: new Vector3(0, 0.5, 0), // 繞著轉的點（方塊的中心）
+  minDistance: 2, // 最近能拉到幾公尺
+  maxDistance: 12, // 最遠能拉到幾公尺
+  maxPolarAngle: Math.PI / 2 - 0.05, // 最低只能轉到接近水平（不會鑽到地面下）
+  damping: 0.08, // 慣性（秒）：放開後慢慢停下；0 為沒有慣性
+  // autoRotate: 0.3, // 沒操作時自動繞著轉（弧度／秒）
+});
 
 engine.start();
 </script>

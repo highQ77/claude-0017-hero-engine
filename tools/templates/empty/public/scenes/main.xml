@@ -1,7 +1,7 @@
 <Scene format="hero-scene" version="1">
   <SceneUI src="ui/scene.xml"/>
   <Entity id="camera" name="攝影機">
-    <Transform position="0 1.5 4" rotation="-20.556045 0 0"/>
+    <Transform position="2.5 2.2 4" rotation="-23.025492 29.907807 11.964414"/>
     <Camera fov="55"/>
   </Entity>
   <Entity id="sky-light" name="天空光">
@@ -13,7 +13,7 @@
     <Light intensity="2"/>
   </Entity>
   <Entity id="box" name="方塊">
-    <Transform/>
+    <Transform position="0 0.5 0"/>
     <MeshRenderer>
       <geometry box="1"/>
       <material>
