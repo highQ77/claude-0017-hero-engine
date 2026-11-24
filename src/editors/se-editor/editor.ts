@@ -3,7 +3,7 @@
  *
  * - 左：範本（每次點都有一點隨機）、圖層（1～4 層）
  * - 中：波形（點一下播放）、選取圖層的音量包絡與音高／濾波曲線（可以拖曳圓點調整）
- * - 右：選取圖層的參數、整體效果（失真、位元壓縮、回音、殘響）
+ * - 右：選取圖層的參數、整體後製（音高、等化、音色、調變、空間、動態；順序見 synth.ts）
  * - 每次修改都重新離線合成，播放的就是會存成 .wav 的那份聲音
  */
 import { showConfirm, showPrompt } from '../shared/dialog';
@@ -20,6 +20,7 @@ import {
   type SfxFileInfo,
 } from './files';
 import {
+  COMPRESSORS,
   FILTERS,
   LAYER_PARAMS,
   MASTER_PARAMS,
@@ -27,6 +28,7 @@ import {
   NOISES,
   type NumberParam,
   PRESETS,
+  REVERBS,
   SOURCES,
   type SfxData,
   type SfxLayer,
@@ -581,6 +583,7 @@ function renderParams(): void {
           sfx[p(key).key] = v;
         },
       );
+    const nums = (...keys: string[]) => keys.map(num);
     const norm = h('div', 'p-row select');
     const check = h('input');
     check.type = 'checkbox';
@@ -593,10 +596,41 @@ function renderParams(): void {
     wrap.style.cssText = 'display:flex;align-items:center;gap:6px;color:var(--text2);font-size:12px';
     wrap.append(check, '調到接近滿格');
     norm.append(lab, wrap);
+    // 依訊號經過的順序排列（synth.ts 的 buildMaster）；每個處理器都有「關」的值（見欄位說明）
     box.append(
-      section('失真與位元', num('distortion'), num('bits')),
-      section('回音', num('echoWet'), num('echoTime'), num('echoFeedback')),
-      section('殘響', num('reverbWet'), num('reverbDecay')),
+      section('音高', ...nums('pitchShift', 'freqShift')),
+      section('等化', ...nums('eqLow', 'eqMid', 'eqHigh')),
+      section('音色', ...nums('distortion', 'chebyWet', 'chebyOrder', 'bits', 'downsample')),
+      section('音量顫抖', ...nums('tremoloDepth', 'tremoloRate')),
+      section('顫音', ...nums('vibratoDepth', 'vibratoRate')),
+      section('自動濾波', ...nums('autoFilterDepth', 'autoFilterRate', 'autoFilterBase')),
+      section('自動哇音', ...nums('autoWahWet', 'autoWahBase')),
+      section('移相', ...nums('phaserWet', 'phaserRate', 'phaserOctaves')),
+      section('梳狀濾波', ...nums('combWet', 'combFreq', 'combFeedback')),
+      section('噪音閘門', num('gateThreshold')),
+      section('回音', ...nums('echoWet', 'echoTime', 'echoFeedback')),
+      section(
+        '殘響',
+        num('reverbWet'),
+        num('reverbDecay'),
+        selectRow(
+          '算法',
+          REVERBS,
+          () => sfx.reverbType,
+          (v) => (sfx.reverbType = v),
+        ),
+      ),
+      section(
+        '壓縮與限制',
+        selectRow(
+          '壓縮',
+          COMPRESSORS,
+          () => sfx.compressor,
+          (v) => (sfx.compressor = v),
+        ),
+        ...(sfx.compressor === 'off' ? [] : nums('compThreshold', 'compRatio')),
+        num('limiterThreshold'),
+      ),
       section('音量', num('volume'), norm),
     );
     return;

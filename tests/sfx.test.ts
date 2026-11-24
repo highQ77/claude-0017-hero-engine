@@ -5,6 +5,7 @@ import {
   MAX_DURATION,
   PRESETS,
   defaultSfx,
+  downsample,
   fromPreset,
   mutateSfx,
   parseSfx,
@@ -67,6 +68,47 @@ describe('音效檔（se-editor）', () => {
     expect(sfxDuration({ ...s, reverbWet: 1, reverbDecay: 5, echoWet: 1, echoFeedback: 0.9, echoTime: 1 })).toBe(
       MAX_DURATION,
     );
+  });
+
+  test('後製處理器：預設全部關著；舊的音效檔讀進來也是關著（聲音不變）', () => {
+    const d = defaultSfx();
+    for (const p of MASTER_PARAMS) if (p.off !== undefined) expect(d[p.key], p.key).toBe(p.off);
+    expect([d.reverbType, d.compressor]).toEqual(['convolution', 'off']);
+    // 舊格式：只有原本的欄位
+    const old = parseSfx({ layers: [{}], distortion: 0.2, echoWet: 0.3, reverbWet: 0.4 });
+    for (const p of MASTER_PARAMS)
+      if (p.off !== undefined && !['distortion', 'echoWet', 'reverbWet'].includes(p.key))
+        expect(old[p.key], p.key).toBe(p.off);
+    expect(old.compressor).toBe('off');
+    // 選單的值：不認識的用預設值
+    const s = parseSfx({ layers: [{}], reverbType: 'jc', compressor: 'multiband' });
+    expect([s.reverbType, s.compressor]).toEqual(['jc', 'multiband']);
+    const bad = parseSfx({ layers: [{}], reverbType: 'hall', compressor: 'max' });
+    expect([bad.reverbType, bad.compressor]).toEqual(['convolution', 'off']);
+    // 存讀一樣
+    expect(parseSfx(stringifySfx(s))).toEqual(s);
+  });
+
+  test('後製處理器：微調變化時關著的保持關著，開著的會變；梳狀濾波的尾巴算進長度', () => {
+    for (let i = 0; i < 20; i++) {
+      const m = mutateSfx(defaultSfx(), 0.5, seededRng(i));
+      for (const p of MASTER_PARAMS) if (p.off !== undefined) expect(m[p.key], p.key).toBe(p.off);
+    }
+    const on = { ...defaultSfx(), tremoloDepth: 0.5, phaserWet: 0.5 };
+    const m = mutateSfx(on, 0.3, seededRng(7));
+    expect(m.tremoloDepth).not.toBe(0.5);
+    expect(m.phaserWet).not.toBe(0.5);
+    const base = defaultSfx();
+    expect(sfxDuration({ ...base, combWet: 1, combFreq: 100, combFeedback: 0.9 })).toBeGreaterThan(sfxDuration(base));
+  });
+
+  test('降低取樣率：每 N 個樣本只留第一個；1 不變', () => {
+    const a = Float32Array.from([1, 2, 3, 4, 5, 6, 7]);
+    downsample(a, 3);
+    expect([...a]).toEqual([1, 1, 1, 4, 4, 4, 7]);
+    const b = Float32Array.from([1, 2, 3]);
+    downsample(b, 1);
+    expect([...b]).toEqual([1, 2, 3]);
   });
 
   test('.wav：16 位元單聲道，樣本數、取樣率正確，超過範圍的被截掉', () => {

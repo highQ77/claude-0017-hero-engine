@@ -4,10 +4,12 @@
  *
  *   { "format": "hero-sfx", "version": 1,
  *     "layers": [ { "source": "osc", "wave": "square", "freq": 880, "freqEnd": 1760, … } ],
- *     "distortion": 0, "bits": 16, "echoWet": 0, "reverbWet": 0, "volume": -6, "normalize": true }
+ *     "distortion": 0, "bits": 16, "echoWet": 0, "reverbWet": 0, "volume": -6, "normalize": true, … }
  *
  * 一個音效由 1～4 層疊起來：每層是一個聲音來源（振盪器／雜訊／FM），經過濾波器與音量包絡；
- * 最後整體經過失真、位元壓縮、回音、殘響。
+ * 最後整體經過後製（順序見 synth.ts）：音高 → 等化 → 音色（失真、切比雪夫、位元）→ 調變（音量顫抖、顫音、
+ * 自動濾波、自動哇音、移相、梳狀濾波）→ 噪音閘門 → 回音 → 殘響 → 壓縮 → 限制 → 音量，最後降低取樣率。
+ * 每個後製都有「關」的值（MASTER_PARAMS 的 off）：舊的音效檔沒有這些欄位時用預設值，也就是關著，聲音不變。
  * 這個檔案不使用 Tone.js（開發伺服器檢查檔案、測試也用它）；合成在 synth.ts。
  */
 
@@ -16,6 +18,10 @@ export type SourceKind = 'osc' | 'noise' | 'fm';
 export type Wave = 'sine' | 'square' | 'triangle' | 'sawtooth';
 export type NoiseKind = 'white' | 'pink' | 'brown';
 export type FilterKind = 'none' | 'lowpass' | 'highpass' | 'bandpass';
+/** 殘響的算法：卷積（預設，最自然）、Freeverb（明亮）、JCReverb（復古、金屬感） */
+export type ReverbKind = 'convolution' | 'freeverb' | 'jc';
+/** 壓縮：關、一般、多頻段（低、中、高頻分開壓縮） */
+export type CompressorKind = 'off' | 'single' | 'multiband';
 
 /** 一層聲音 */
 export interface SfxLayer {
@@ -66,10 +72,58 @@ export interface SfxData {
   format: 'hero-sfx';
   version: 1;
   layers: SfxLayer[];
+  /** 移調（半音，0 = 關）：整體升降音高，長度不變 */
+  pitchShift: number;
+  /** 頻率位移（Hz，0 = 關）：所有頻率平移，不和諧的機械、外星感 */
+  freqShift: number;
+  /** 等化：低頻（dB，0 = 不變） */
+  eqLow: number;
+  /** 等化：中頻（dB） */
+  eqMid: number;
+  /** 等化：高頻（dB） */
+  eqHigh: number;
   /** 失真（0..1） */
   distortion: number;
+  /** 切比雪夫波形塑形的份量（0 = 關）：加上特定諧波 */
+  chebyWet: number;
+  /** 切比雪夫的階數（越大諧波越高、越刺耳） */
+  chebyOrder: number;
   /** 位元數（16 = 不壓縮；越小越粗糙、越復古） */
   bits: number;
+  /** 降低取樣率（1 = 關；N = 每 N 個樣本只留一個，高頻變得粗糙） */
+  downsample: number;
+  /** 音量顫抖的深度（0 = 關） */
+  tremoloDepth: number;
+  /** 音量顫抖的速度（Hz） */
+  tremoloRate: number;
+  /** 整體顫音的深度（0 = 關）：連雜訊也會晃 */
+  vibratoDepth: number;
+  /** 整體顫音的速度（Hz） */
+  vibratoRate: number;
+  /** 自動濾波的深度（0 = 關）：濾波器週期掃動 */
+  autoFilterDepth: number;
+  /** 自動濾波的速度（Hz） */
+  autoFilterRate: number;
+  /** 自動濾波的最低頻率（Hz） */
+  autoFilterBase: number;
+  /** 自動哇音的份量（0 = 關）：依音量大小掃動濾波器 */
+  autoWahWet: number;
+  /** 自動哇音的最低頻率（Hz） */
+  autoWahBase: number;
+  /** 移相的份量（0 = 關） */
+  phaserWet: number;
+  /** 移相的速度（Hz） */
+  phaserRate: number;
+  /** 移相掃過的範圍（八度） */
+  phaserOctaves: number;
+  /** 梳狀濾波的份量（0 = 關）：金屬感、管狀的共鳴 */
+  combWet: number;
+  /** 梳狀濾波的共鳴音高（Hz） */
+  combFreq: number;
+  /** 梳狀濾波的回饋（越大共鳴越久） */
+  combFeedback: number;
+  /** 噪音閘門的門檻（dB，-100 = 關）：小於門檻的聲音直接關掉 */
+  gateThreshold: number;
   /** 回音間隔（秒） */
   echoTime: number;
   /** 回音回饋（0..0.9） */
@@ -80,6 +134,16 @@ export interface SfxData {
   reverbDecay: number;
   /** 殘響份量（0 = 關） */
   reverbWet: number;
+  /** 殘響的算法 */
+  reverbType: ReverbKind;
+  /** 壓縮：關、一般、多頻段 */
+  compressor: CompressorKind;
+  /** 壓縮門檻（dB）：超過的部分被壓下來 */
+  compThreshold: number;
+  /** 壓縮比（越大壓得越多） */
+  compRatio: number;
+  /** 限制器的上限（dB，0 = 關）：超過的部分直接壓住，防止爆音 */
+  limiterThreshold: number;
   /** 整體音量（dB） */
   volume: number;
   /** 把最大音量調到接近滿格（不同音效的音量比較一致） */
@@ -103,12 +167,18 @@ export interface NumberParam<K extends string> {
   log?: boolean;
   /** 說明（滑鼠移上去顯示） */
   hint?: string;
+  /** 這個值代表「關」（後製處理器）：隨機微調時，關著的保持關著 */
+  off?: number;
 }
 
 type LayerNumberKey = {
   [K in keyof SfxLayer]: SfxLayer[K] extends number ? K : never;
 }[keyof SfxLayer];
-type SfxNumberKey = Exclude<{ [K in keyof SfxData]: SfxData[K] extends number ? K : never }[keyof SfxData], 'version'>;
+/** 整體的數字參數的鍵 */
+export type SfxNumberKey = Exclude<
+  { [K in keyof SfxData]: SfxData[K] extends number ? K : never }[keyof SfxData],
+  'version'
+>;
 
 /** 每一層的數字參數（編輯器的欄位、微調變化、檢查都用這份） */
 export const LAYER_PARAMS: readonly NumberParam<LayerNumberKey>[] = [
@@ -141,13 +211,99 @@ export const LAYER_PARAMS: readonly NumberParam<LayerNumberKey>[] = [
 
 /** 整體的數字參數 */
 export const MASTER_PARAMS: readonly NumberParam<SfxNumberKey>[] = [
-  { key: 'distortion', label: '失真', min: 0, max: 1, step: 0.01 },
-  { key: 'bits', label: '位元數', min: 1, max: 16, step: 1, hint: '16 = 不壓縮；越小越粗糙、越復古' },
+  // 音高
+  {
+    key: 'pitchShift',
+    label: '移調',
+    min: -24,
+    max: 24,
+    step: 1,
+    unit: '半音',
+    off: 0,
+    hint: '整體升降音高、長度不變（大怪物、小怪物）；0 = 關',
+  },
+  {
+    key: 'freqShift',
+    label: '頻率位移',
+    min: -1000,
+    max: 1000,
+    step: 1,
+    unit: 'Hz',
+    off: 0,
+    hint: '所有頻率平移，不和諧的機械、外星感；0 = 關',
+  },
+  // 等化
+  { key: 'eqLow', label: '低頻', min: -24, max: 12, step: 0.5, unit: 'dB', off: 0, hint: '400 Hz 以下；0 = 不變' },
+  { key: 'eqMid', label: '中頻', min: -24, max: 12, step: 0.5, unit: 'dB', off: 0, hint: '400～2500 Hz；0 = 不變' },
+  { key: 'eqHigh', label: '高頻', min: -24, max: 12, step: 0.5, unit: 'dB', off: 0, hint: '2500 Hz 以上；0 = 不變' },
+  // 音色
+  { key: 'distortion', label: '失真', min: 0, max: 1, step: 0.01, off: 0 },
+  { key: 'chebyWet', label: '諧波份量', min: 0, max: 1, step: 0.01, off: 0, hint: '切比雪夫波形塑形；0 = 關' },
+  { key: 'chebyOrder', label: '諧波階數', min: 2, max: 40, step: 1, hint: '越大諧波越高、越刺耳' },
+  { key: 'bits', label: '位元數', min: 1, max: 16, step: 1, off: 16, hint: '16 = 不壓縮；越小越粗糙、越復古' },
+  {
+    key: 'downsample',
+    label: '降低取樣率',
+    min: 1,
+    max: 32,
+    step: 1,
+    unit: '倍',
+    off: 1,
+    hint: '每 N 個樣本只留一個，高頻變得粗糙；1 = 關（套用在最後）',
+  },
+  // 調變
+  { key: 'tremoloDepth', label: '顫抖深度', min: 0, max: 1, step: 0.01, off: 0, hint: '音量週期起伏；0 = 關' },
+  { key: 'tremoloRate', label: '顫抖速度', min: 0.1, max: 40, step: 0.1, unit: 'Hz' },
+  {
+    key: 'vibratoDepth',
+    label: '顫音深度',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    off: 0,
+    hint: '整體音高起伏（連雜訊也會晃）；0 = 關',
+  },
+  { key: 'vibratoRate', label: '顫音速度', min: 0.1, max: 40, step: 0.1, unit: 'Hz' },
+  { key: 'autoFilterDepth', label: '濾波深度', min: 0, max: 1, step: 0.01, off: 0, hint: '濾波器週期掃動；0 = 關' },
+  { key: 'autoFilterRate', label: '濾波速度', min: 0.1, max: 20, step: 0.1, unit: 'Hz' },
+  { key: 'autoFilterBase', label: '最低頻率', min: 50, max: 5000, step: 1, unit: 'Hz', log: true },
+  { key: 'autoWahWet', label: '哇音份量', min: 0, max: 1, step: 0.01, off: 0, hint: '依音量大小掃動濾波器；0 = 關' },
+  { key: 'autoWahBase', label: '最低頻率', min: 50, max: 2000, step: 1, unit: 'Hz', log: true },
+  { key: 'phaserWet', label: '移相份量', min: 0, max: 1, step: 0.01, off: 0, hint: '旋轉、太空感的掃動；0 = 關' },
+  { key: 'phaserRate', label: '移相速度', min: 0.05, max: 20, step: 0.05, unit: 'Hz' },
+  { key: 'phaserOctaves', label: '移相範圍', min: 0.5, max: 6, step: 0.1, unit: '八度' },
+  { key: 'combWet', label: '梳狀份量', min: 0, max: 1, step: 0.01, off: 0, hint: '金屬感、管狀的共鳴；0 = 關' },
+  { key: 'combFreq', label: '梳狀音高', min: 40, max: 4000, step: 1, unit: 'Hz', log: true },
+  { key: 'combFeedback', label: '梳狀回饋', min: 0, max: 0.95, step: 0.01, hint: '越大共鳴越久' },
+  // 空間
+  {
+    key: 'gateThreshold',
+    label: '閘門門檻',
+    min: -100,
+    max: 0,
+    step: 1,
+    unit: 'dB',
+    off: -100,
+    hint: '小於門檻的聲音直接關掉，尾巴收得乾淨；-100 = 關',
+  },
   { key: 'echoTime', label: '回音間隔', min: 0.01, max: 1, step: 0.005, unit: '秒' },
   { key: 'echoFeedback', label: '回音回饋', min: 0, max: 0.9, step: 0.01 },
-  { key: 'echoWet', label: '回音份量', min: 0, max: 1, step: 0.01, hint: '0 = 關' },
+  { key: 'echoWet', label: '回音份量', min: 0, max: 1, step: 0.01, off: 0, hint: '0 = 關' },
   { key: 'reverbDecay', label: '殘響長度', min: 0.1, max: 5, step: 0.05, unit: '秒' },
-  { key: 'reverbWet', label: '殘響份量', min: 0, max: 1, step: 0.01, hint: '0 = 關' },
+  { key: 'reverbWet', label: '殘響份量', min: 0, max: 1, step: 0.01, off: 0, hint: '0 = 關' },
+  // 動態
+  { key: 'compThreshold', label: '壓縮門檻', min: -60, max: 0, step: 0.5, unit: 'dB', hint: '超過的部分被壓下來' },
+  { key: 'compRatio', label: '壓縮比', min: 1, max: 20, step: 0.1, hint: '越大壓得越多；4 左右是常見的值' },
+  {
+    key: 'limiterThreshold',
+    label: '限制上限',
+    min: -24,
+    max: 0,
+    step: 0.5,
+    unit: 'dB',
+    off: 0,
+    hint: '超過的部分直接壓住，防止爆音；0 = 關',
+  },
   { key: 'volume', label: '整體音量', min: -40, max: 6, step: 0.5, unit: 'dB' },
 ];
 
@@ -166,6 +322,16 @@ export const NOISES: readonly [NoiseKind, string][] = [
   ['white', '白雜訊'],
   ['pink', '粉紅雜訊'],
   ['brown', '棕雜訊'],
+];
+export const REVERBS: readonly [ReverbKind, string][] = [
+  ['convolution', '自然（卷積）'],
+  ['freeverb', '明亮（Freeverb）'],
+  ['jc', '復古金屬（JCReverb）'],
+];
+export const COMPRESSORS: readonly [CompressorKind, string][] = [
+  ['off', '關'],
+  ['single', '一般'],
+  ['multiband', '多頻段'],
 ];
 export const FILTERS: readonly [FilterKind, string][] = [
   ['none', '不過濾'],
@@ -207,13 +373,42 @@ export function defaultSfx(): SfxData {
     format: SFX_FORMAT,
     version: 1,
     layers: [defaultLayer()],
+    pitchShift: 0,
+    freqShift: 0,
+    eqLow: 0,
+    eqMid: 0,
+    eqHigh: 0,
     distortion: 0,
+    chebyWet: 0,
+    chebyOrder: 3,
     bits: 16,
+    downsample: 1,
+    tremoloDepth: 0,
+    tremoloRate: 8,
+    vibratoDepth: 0,
+    vibratoRate: 6,
+    autoFilterDepth: 0,
+    autoFilterRate: 2,
+    autoFilterBase: 300,
+    autoWahWet: 0,
+    autoWahBase: 150,
+    phaserWet: 0,
+    phaserRate: 0.5,
+    phaserOctaves: 3,
+    combWet: 0,
+    combFreq: 220,
+    combFeedback: 0.7,
+    gateThreshold: -100,
     echoTime: 0.12,
     echoFeedback: 0.3,
     echoWet: 0,
     reverbDecay: 1.2,
     reverbWet: 0,
+    reverbType: 'convolution',
+    compressor: 'off',
+    compThreshold: -18,
+    compRatio: 4,
+    limiterThreshold: 0,
     volume: -3,
     normalize: true,
   };
@@ -259,6 +454,8 @@ export function parseSfx(input: string | unknown): SfxData {
     const v = Number(data[p.key]);
     if (Number.isFinite(v)) out[p.key] = clamp(v, p.min, p.max);
   }
+  out.reverbType = pick(data.reverbType, REVERBS, out.reverbType);
+  out.compressor = pick(data.compressor, COMPRESSORS, out.compressor);
   out.normalize = data.normalize !== false;
   return out;
 }
@@ -275,8 +472,17 @@ export function sfxDuration(sfx: SfxData): number {
   let len = layers.length ? Math.max(...layers.map(layerLength)) : 0.1;
   if (sfx.echoWet > 0)
     len += sfx.echoTime * Math.min(12, 1 + Math.log(0.01) / Math.log(Math.max(0.05, sfx.echoFeedback)));
+  if (sfx.combWet > 0)
+    len += Math.min(2, (1 / sfx.combFreq) * (Math.log(0.001) / Math.log(Math.max(0.05, sfx.combFeedback))));
   if (sfx.reverbWet > 0) len += sfx.reverbDecay;
   return clamp(len, 0.02, MAX_DURATION);
+}
+
+/** 降低取樣率：每 factor 個樣本只留第一個（取樣保持），高頻變得粗糙 */
+export function downsample(samples: Float32Array, factor: number): void {
+  const n = Math.max(1, Math.round(factor));
+  if (n <= 1) return;
+  for (let i = 0; i < samples.length; i++) samples[i] = samples[i - (i % n)];
 }
 
 // ───────── 隨機 ─────────
@@ -863,6 +1069,217 @@ export const PRESETS: readonly { id: string; label: string; make(rng: Rng): SfxD
       );
     },
   },
+  // ───────── 介面 ─────────
+  // 介面音效不開自動音量：用整體音量對齊「點擊」（最大音量約 -12 dB），常出現的懸停更輕、通知稍微突出
+  {
+    id: 'hover',
+    label: '懸停',
+    make: (r) => {
+      // 滑鼠移到按鈕上：極短、很輕的高音（常常連續出現，要不搶耳）
+      const f = logRange(r, 2200, 3200);
+      return sfx(
+        [
+          layer({
+            wave: 'sine',
+            freq: f,
+            freqEnd: f * 1.05,
+            attack: 0.001,
+            decay: 0.015,
+            sustain: 0,
+            hold: 0,
+            release: 0.015,
+            volume: -6,
+          }),
+        ],
+        { normalize: false, volume: -16 },
+      );
+    },
+  },
+  {
+    id: 'confirm',
+    label: '確認',
+    make: (r) => {
+      // 兩個音往上跳五度：「好」的感覺
+      const f = logRange(r, 620, 880);
+      const note = (k: number, i: number) =>
+        layer({
+          wave: 'triangle',
+          freq: f * k,
+          freqEnd: f * k,
+          delay: i * 0.06,
+          attack: 0.002,
+          decay: 0.05,
+          sustain: 0.4,
+          hold: i === 1 ? 0.05 : 0.02,
+          release: i === 1 ? 0.15 : 0.05,
+        });
+      return sfx([note(1, 0), note(1.5, 1)], { reverbWet: 0.1, reverbDecay: 0.6, normalize: false, volume: -8 });
+    },
+  },
+  {
+    id: 'cancel',
+    label: '取消',
+    make: (r) => {
+      // 兩個音往下走：「返回、算了」（低通讓它柔和，不像錯誤那麼刺耳）
+      const f = logRange(r, 520, 700);
+      const note = (k: number, i: number) =>
+        layer({
+          wave: 'square',
+          freq: f * k,
+          freqEnd: f * k,
+          filter: 'lowpass',
+          cutoff: 1800,
+          cutoffEnd: 1800,
+          delay: i * 0.07,
+          attack: 0.002,
+          decay: 0.05,
+          sustain: 0.3,
+          hold: 0.02,
+          release: i === 1 ? 0.1 : 0.04,
+          volume: -8,
+        });
+      return sfx([note(1, 0), note(0.75, 1)], { normalize: false, volume: -6 });
+    },
+  },
+  {
+    id: 'openPanel',
+    label: '開啟視窗',
+    make: (r) => {
+      // 往上掃：空氣聲（帶通掃頻的雜訊）＋ 往上滑的音
+      const f = logRange(r, 260, 360);
+      return sfx(
+        [
+          layer({
+            source: 'noise',
+            noise: 'pink',
+            filter: 'bandpass',
+            cutoff: 500,
+            cutoffEnd: logRange(r, 3000, 4500),
+            q: 1.5,
+            attack: 0.03,
+            decay: 0.1,
+            sustain: 0.3,
+            hold: 0.02,
+            release: 0.08,
+            volume: -10,
+          }),
+          layer({
+            wave: 'sine',
+            freq: f,
+            freqEnd: f * 2.2,
+            attack: 0.01,
+            decay: 0.1,
+            sustain: 0.3,
+            hold: 0.02,
+            release: 0.08,
+            volume: -8,
+          }),
+        ],
+        { reverbWet: 0.12, reverbDecay: 0.5, normalize: false, volume: -4 },
+      );
+    },
+  },
+  {
+    id: 'closePanel',
+    label: '關閉視窗',
+    make: (r) => {
+      // 和開啟相反：往下掃，比較短
+      const f = logRange(r, 600, 800);
+      return sfx(
+        [
+          layer({
+            source: 'noise',
+            noise: 'pink',
+            filter: 'bandpass',
+            cutoff: logRange(r, 3000, 4000),
+            cutoffEnd: 450,
+            q: 1.5,
+            attack: 0.01,
+            decay: 0.09,
+            sustain: 0.2,
+            hold: 0.01,
+            release: 0.06,
+            volume: -10,
+          }),
+          layer({
+            wave: 'sine',
+            freq: f,
+            freqEnd: f * 0.45,
+            attack: 0.005,
+            decay: 0.09,
+            sustain: 0.2,
+            hold: 0.01,
+            release: 0.06,
+            volume: -8,
+          }),
+        ],
+        { reverbWet: 0.1, reverbDecay: 0.4, normalize: false, volume: -4 },
+      );
+    },
+  },
+  {
+    id: 'toggle',
+    label: '切換開關',
+    make: (r) =>
+      // 機械的「咔嗒」：很短的雜訊 ＋ 短音，梳狀濾波做出塑膠外殼的共鳴
+      sfx(
+        [
+          layer({
+            source: 'noise',
+            noise: 'white',
+            filter: 'highpass',
+            cutoff: 2500,
+            cutoffEnd: 2500,
+            attack: 0.001,
+            decay: 0.012,
+            sustain: 0,
+            hold: 0,
+            release: 0.01,
+            volume: -4,
+          }),
+          layer({
+            wave: 'square',
+            freq: logRange(r, 900, 1300),
+            freqEnd: 700,
+            filter: 'lowpass',
+            cutoff: 3000,
+            cutoffEnd: 3000,
+            attack: 0.001,
+            decay: 0.025,
+            sustain: 0,
+            hold: 0,
+            release: 0.015,
+            volume: -10,
+          }),
+        ],
+        { combWet: 0.35, combFreq: logRange(r, 1400, 2200), combFeedback: 0.5, normalize: false, volume: -8 },
+      ),
+  },
+  {
+    id: 'notify',
+    label: '通知',
+    make: (r) => {
+      // FM 鈴聲「叮咚」：第二個音低四度
+      const f = logRange(r, 880, 1180);
+      const bell = (k: number, i: number) =>
+        layer({
+          source: 'fm',
+          wave: 'sine',
+          freq: f * k,
+          freqEnd: f * k,
+          fmHarmonicity: 3.5,
+          fmIndex: range(r, 4, 7),
+          delay: i * 0.14,
+          attack: 0.002,
+          decay: 0.25,
+          sustain: 0.05,
+          hold: 0,
+          release: 0.35,
+          volume: i === 0 ? -6 : -8,
+        });
+      return sfx([bell(1, 0), bell(0.75, 1)], { reverbWet: 0.2, reverbDecay: 1, normalize: false, volume: -4 });
+    },
+  },
 ];
 
 /** 每個數字參數依間隔取整（範本用亂數產生的值，例如 338.123 → 338） */
@@ -901,9 +1318,9 @@ export function mutateSfx(src: SfxData, amount = 0.1, rng: Rng = Math.random): S
       l[p.key] = roundTo(jitter(l[p.key], p), p.step);
     }
   for (const p of MASTER_PARAMS) {
-    if (p.key === 'volume' || p.key === 'bits') continue;
-    // 關著的效果（份量 0）保持關著
-    if ((p.key === 'echoWet' || p.key === 'reverbWet' || p.key === 'distortion') && out[p.key] === 0) continue;
+    if (p.key === 'volume' || p.key === 'bits' || p.key === 'downsample') continue;
+    // 關著的後製保持關著
+    if (p.off !== undefined && out[p.key] === p.off) continue;
     out[p.key] = roundTo(jitter(out[p.key], p), p.step);
   }
   return out;
