@@ -6,13 +6,12 @@ import {
   attribute,
   cameraProjectionMatrix,
   cos,
+  float,
   length,
+  materialReference,
   modelViewMatrix,
   positionGeometry,
   sin,
-  texture,
-  uniform,
-  uv,
   vec2,
   vec4,
 } from 'three/tsl';
@@ -55,16 +54,19 @@ export function createParticleMaterial(): ParticleMaterial {
   return createParticleNodeMaterial();
 }
 
-/** 面向攝影機、可依速度拉長；色調映射與顏色轉換由節點材質自動處理 */
-function createParticleNodeMaterial(): ParticleMaterial {
-  const map = texture(defaultParticleTexture());
-  const stretch = uniform(0);
-  const material = new MeshBasicNodeMaterial({
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  material.vertexNode = Fn(() => {
+/**
+ * 所有粒子材質共用同一份節點圖（模組層級只建一次）。
+ * 效能：每個發射器各自建節點的話，著色器程式的快取鍵都不同，每次放特效（例如爆炸）都要重新產生、編譯一次著色器，畫面會卡一下。
+ * 共用節點圖之後快取鍵相同，只編譯一次；每個材質不同的值（貼圖、拉長程度）用材質參照，繪製時才從各自的材質讀。
+ */
+let sharedNodes: { vertex: unknown; color: unknown } | null = null;
+
+function particleNodes() {
+  if (sharedNodes) return sharedNodes;
+  // 型別定義把材質參照當成一般節點，實際上可以照 float、貼圖使用
+  const map = materialReference('particleMap', 'texture') as unknown as ReturnType<typeof vec4>; // 用預設的 uv 取樣
+  const stretch = materialReference('particleStretch', 'float') as unknown as ReturnType<typeof float>;
+  const vertex = Fn(() => {
     const offset = attribute('offset', 'vec3');
     const velocity = attribute('velocity', 'vec3');
     const sizeRotation = attribute('sizeRotation', 'vec2');
@@ -93,10 +95,43 @@ function createParticleNodeMaterial(): ParticleMaterial {
     });
     return cameraProjectionMatrix.mul(vec4(mv.xy.add(corner), mv.z, mv.w));
   })();
-  material.colorNode = map.sample(uv()).mul(attribute('color', 'vec4'));
+  const color = map.mul(attribute('color', 'vec4'));
+  sharedNodes = { vertex, color };
+  return sharedNodes;
+}
+
+/** 面向攝影機、可依速度拉長；色調映射與顏色轉換由節點材質自動處理 */
+function createParticleNodeMaterial(): ParticleMaterial {
+  const material = new MeshBasicNodeMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  }) as MeshBasicNodeMaterial & { particleMap: THREE.Texture; particleStretch: number };
+  material.particleMap = defaultParticleTexture();
+  material.particleStretch = 0;
+  const nodes = particleNodes();
+  material.vertexNode = nodes.vertex as never;
+  material.colorNode = nodes.color as never;
   material.alphaTest = 0.003;
-  // 和 ShaderMaterial 一樣的介面：uniforms.map.value、uniforms.stretch.value
-  (material as unknown as ParticleMaterial).uniforms = { map, stretch } as unknown as ParticleMaterial['uniforms'];
+  // 和 ShaderMaterial 一樣的介面：uniforms.map.value、uniforms.stretch.value（實際存在材質的 particleMap、particleStretch）
+  (material as unknown as ParticleMaterial).uniforms = {
+    map: {
+      get value() {
+        return material.particleMap;
+      },
+      set value(v: THREE.Texture) {
+        material.particleMap = v;
+      },
+    },
+    stretch: {
+      get value() {
+        return material.particleStretch;
+      },
+      set value(v: number) {
+        material.particleStretch = v;
+      },
+    },
+  };
   return material as unknown as ParticleMaterial;
 }
 

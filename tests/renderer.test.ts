@@ -162,4 +162,13 @@ describe('粒子材質', () => {
     expect([m.uniforms.map.value, m.uniforms.stretch.value]).toEqual([tex, 0.5]);
     expect([m.transparent, m.depthWrite, m.blending]).toEqual([true, false, THREE.AdditiveBlending]);
   });
+  test('每個發射器的材質共用同一份著色器（快取鍵相同：放特效時不用重新編譯，不會卡一下）', () => {
+    const key = (m: object) => (m as { customProgramCacheKey(): string }).customProgramCacheKey();
+    const a = createParticleMaterial();
+    const b = createParticleMaterial();
+    b.uniforms.map.value = new THREE.Texture();
+    b.uniforms.stretch.value = 0.3;
+    expect(key(a)).toBe(key(b));
+    expect(a.uniforms.stretch.value).toBe(0); // 值還是各自獨立
+  });
 });

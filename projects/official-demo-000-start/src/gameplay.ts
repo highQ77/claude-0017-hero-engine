@@ -6,7 +6,7 @@ import { AnimationStateMachine, play } from '@engine/animation';
 import type { Entity, World } from '@engine/ecs';
 import { MathUtils, Vector3 } from '@engine/math';
 import { RigidBody } from '@engine/physics';
-import { CameraFollow, shakeCamera } from '@engine/render';
+import { CameraFollow, Light, shakeCamera } from '@engine/render';
 import { Transform, math } from '@engine/scene';
 import type { UICheckBox, UIJoystick } from '@engine/ui2d';
 import { Orbit, Player, Spin, Toy } from './components';
@@ -163,6 +163,29 @@ export function jumpAll(): void {
   });
 }
 
+const _lightPos = new Vector3();
+
+/**
+ * 方塊底下的燈光不跟著刪掉：脫離方塊、留在原地，爆炸時閃一下再慢慢熄滅（亮度 0，但燈還在）。
+ * 效能：場景裡的燈數一改變，所有受光照的材質都要重新編譯著色器，爆炸那一刻畫面會卡住。
+ * 燈留著、只把亮度降到 0 就不會重新編譯（換場景時跟著場景一起移除）。
+ */
+function keepLights(target: Entity): void {
+  const lights: Entity[] = [];
+  hierarchy.forEachDescendant(target, (e) => {
+    if (world.has(e, Light)) lights.push(e);
+  });
+  for (const e of lights) {
+    const light = world.require(e, Light);
+    const t = world.require(e, Transform);
+    t.worldMatrix.decompose(_lightPos, t.rotation, t.scale);
+    hierarchy.setParent(e, null);
+    t.position.copy(_lightPos);
+    light.intensity *= 4; // 爆炸的閃光
+    tweens.to(light, { intensity: 0 }, { duration: 1.2, easing: 'quadOut', entity: e });
+  }
+}
+
 /** 方塊先溶解（補間溶解著色器的 progress 0 → 1），再爆炸 */
 export function explodePlayer(): boolean {
   const target = state.player;
@@ -177,6 +200,7 @@ export function explodePlayer(): boolean {
       entity: target,
       onComplete: () => {
         const p = world.require(target, Transform).position;
+        keepLights(target);
         burst(world, p, explosion());
         if (state.camera !== null) shakeCamera(world, state.camera, 0.8);
         audio.play('sounds/bounce.wav', { volume: 1, pitch: 0.4 });
