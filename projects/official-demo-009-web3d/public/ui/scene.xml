@@ -1,0 +1,146 @@
+<!--
+  official-demo-009-web3d 的介面：左邊是說明面板（四個分頁），右邊是放了網頁的 3D 場景。
+  網頁面板（WebPanel3D）在 src/main.ts 建立。
+-->
+<UI width="auto" height="auto" dir="h">
+  <UISkin for="UIButton" radius="8" padding="7 12" background="#2a3124" hoverBackground="#37402f" color="#e9f6d2" fontSize="13"/>
+  <UIStyle name="tab" flex="1" padding="8 4" activeBackground="#9acd32" activeColor="#141a07" fontWeight="bold"/>
+  <UIStyle name="title" fontSize="17" fontWeight="bold" color="#c8f07a"/>
+  <UIStyle name="text" fontSize="13" color="#c6cdbb" lineHeight="1.5"/>
+  <UIStyle name="hint" fontSize="12" color="#8f9884" lineHeight="1.5"/>
+  <UIStyle name="field" fontSize="12" color="#e9f6d2"/>
+  <UIStyle name="codeBox" gap="3" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+  <UIStyle name="codeLine" fontSize="12" color="#ffd166" fontFamily="monospace"/>
+  <UIStyle name="box" gap="4" padding="10" background="rgba(255,255,255,0.04)" radius="8"/>
+  <UIStyle name="stat" fontSize="18" fontWeight="bold" color="#ffd166"/>
+  <UIStyle name="hudCard" gap="2" padding="10 14" background="rgba(10,12,9,0.82)" radius="12" border="1 rgba(154,205,50,0.25)"/>
+
+  <!-- ───────── 左：說明面板 ───────── -->
+  <UILayout id="panel" width="340" padding="16" gap="12" background="rgba(14,17,12,0.92)">
+    <UILayout gap="2">
+      <UILabel fontSize="11" color="#8f9884">OFFICIAL DEMO 009</UILabel>
+      <UILabel fontSize="22" fontWeight="bold" color="#ffffff">3D 網頁面板</UILabel>
+    </UILayout>
+
+    <UILayout dir="h" gap="4">
+      <UIButton text="網頁" style="tab" select="pages:pageWeb"/>
+      <UIButton text="HTML" style="tab" select="pages:pageHtml"/>
+      <UIButton text="遮擋" style="tab" select="pages:pageDepth"/>
+      <UIButton text="2D" style="tab" select="pages:page2d"/>
+      <UIButton text="影片" style="tab" select="pages:pageVideo"/>
+      <UIButton text="限制" style="tab" select="pages:pageLimits"/>
+    </UILayout>
+
+    <UIStackView id="pages" flex="1" transition="fade" onChange="tab">
+      <!-- ① iframe 網頁 -->
+      <UIScrollView id="pageWeb" gap="10">
+        <UILabel style="title">放一個網頁（iframe）</UILabel>
+        <UILabel style="text">左邊的看板是真正的網頁（public/pages/news.html）：可以捲動、選取文字、點連結，網頁裡的程式照常執行。和 UIPanel3D 一樣用實體與 Transform 擺放。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">world.spawn(Transform.at(x, y, z),</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">WebPanel3D.with({</UILabel>
+          <UILabel style="codeLine" paddingLeft="28">src: 'pages/news.html',</UILabel>
+          <UILabel style="codeLine" paddingLeft="28">width: 1024, height: 720,</UILabel>
+          <UILabel style="codeLine" paddingLeft="28">worldWidth: 2.4 }))</UILabel>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="hint">滑鼠目前在（web3d.activePanel）</UILabel>
+          <UILabel id="active" style="stat">遊戲畫面</UILabel>
+        </UILayout>
+        <UILabel style="hint">width、height 是網頁排版用的 CSS 像素，worldWidth 是面板在世界中的寬度。要在 engine.ts 安裝 Web3DPlugin。</UILabel>
+      </UIScrollView>
+
+      <!-- ② HTML 與遊戲互動 -->
+      <UIScrollView id="pageHtml" gap="10">
+        <UILabel style="title">直接給 HTML，和遊戲互動</UILabel>
+        <UILabel style="text">右邊的表單是一段 HTML（不是 iframe），和遊戲在同一份文件裡，可以直接拿元素加事件：點顏色會改變球的顏色，送出留言會在遊戲裡跳出通知。輸入框可以打中文（輸入法）。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">WebPanel3D.with({ html: '&lt;form&gt;…' })</UILabel>
+          <UILabel style="codeLine">data.element.querySelector('button')</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">.addEventListener('click', …)</UILabel>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="hint">最後一則留言</UILabel>
+          <UILabel id="lastMessage" style="field" lineHeight="1.6">（還沒有）</UILabel>
+        </UILayout>
+        <UILabel style="hint">面板的元素（data.element）在第一幀之後才建立：main.ts 用一個系統等它出現再加事件。</UILabel>
+      </UIScrollView>
+
+      <!-- ③ 遮擋與層次 -->
+      <UIScrollView id="pageDepth" gap="10">
+        <UILabel style="title">遮擋與層次</UILabel>
+        <UILabel style="text">網頁層在畫布下面，畫布在網頁的位置挖了透明的洞。所以：繞圈的球飛到網頁前面時會蓋住網頁，飛到後面時被網頁擋住；左邊這個 2D 介面也蓋在網頁上面。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">洞的材質：opacity 0、NoBlending</UILabel>
+          <UILabel style="codeLine">（畫布的顏色與 alpha 直接寫成 0）</UILabel>
+        </UILayout>
+        <UILabel style="hint">滑鼠移到露出來的網頁上時，畫布暫時不接收滑鼠；被球或 2D 介面蓋住的地方，滑鼠照樣給遊戲和介面。</UILabel>
+      </UIScrollView>
+
+      <!-- ④ 2D 介面裡的網頁（UIWeb） -->
+      <UIScrollView id="page2d" gap="10">
+        <UILabel style="title">2D 介面裡的網頁（UIWeb）</UILabel>
+        <UILabel style="text">下面這塊是真正的網頁（public/pages/mini.html），像一般元件一樣放在 XML 的排版裡；可以打中文搜尋。展開上面的下拉選單：選單會蓋在網頁上面。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">&lt;UIWeb src="../pages/mini.html"</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">width="100%" height="230" radius="8"/&gt;</UILabel>
+        </UILayout>
+        <UISelect id="sort" value="all" width="100%">
+          <UIOption value="all">下拉選單：展開會蓋住下面的網頁</UIOption>
+          <UIOption value="a">選項一</UIOption>
+          <UIOption value="b">選項二</UIOption>
+          <UIOption value="c">選項三</UIOption>
+          <UIOption value="d">選項四</UIOption>
+        </UISelect>
+        <UIWeb id="mini" src="../pages/mini.html" width="100%" height="230" radius="8"/>
+        <UILabel style="hint">網頁在畫布下面，介面在它的位置挖洞：之後畫的元件（選單、通知、對話框）照樣蓋在上面；放在可以捲動的區域裡時，超出的部分會被裁掉。</UILabel>
+      </UIScrollView>
+
+      <!-- ⑤ YouTube 影片（2D 與 3D） -->
+      <UIScrollView id="pageVideo" gap="10">
+        <UILabel style="title">YouTube 影片（2D 與 3D）</UILabel>
+        <UILabel style="text">2D：下面的播放器是 &lt;UIWeb&gt;，放在介面的排版裡。3D：場景後面的電視是 WebPanel3D，前面的球飛過時會蓋住影片。兩個都可以點播放、全螢幕。</UILabel>
+        <UIWeb id="video2d" src="https://www.youtube.com/embed/aqz-KE-bpKQ?enablejsapi=1&amp;rel=0" width="100%" height="174" radius="8" background="#000000"/>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">&lt;UIWeb src="https://www.youtube.com/</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">embed/影片ID?enablejsapi=1"/&gt;</UILabel>
+          <UILabel style="codeLine">WebPanel3D.with({ src: '…/embed/ID' })</UILabel>
+        </UILayout>
+        <UILayout dir="h" gap="8">
+          <UIButton text="2D 播放" onClick="play2d" flex="1"/>
+          <UIButton text="2D 暫停" onClick="pause2d" flex="1"/>
+        </UILayout>
+        <UILayout dir="h" gap="8">
+          <UIButton text="3D 播放" onClick="play3d" flex="1"/>
+          <UIButton text="3D 暫停" onClick="pause3d" flex="1"/>
+        </UILayout>
+        <UILabel style="hint">網址要用嵌入用的 /embed/影片ID（一般的觀看網址不允許嵌入）；影片作者關閉「允許嵌入」時不能播。加上 enablejsapi=1 就能從遊戲用 postMessage 控制播放（按鈕、切換分頁時自動暫停 2D 影片）。</UILabel>
+      </UIScrollView>
+
+      <!-- ⑥ 限制 -->
+      <UIScrollView id="pageLimits" gap="10">
+        <UILabel style="title">什麼時候用、限制</UILabel>
+        <UILayout style="box">
+          <UILabel style="hint">適合</UILabel>
+          <UILabel style="field" lineHeight="1.6">需要真正網頁功能的地方：文字輸入、長文章、影片、嵌入的網頁、說明文件</UILabel>
+          <UILabel style="hint">限制</UILabel>
+          <UILabel style="field" lineHeight="1.6">網頁不受燈光、陰影、後製影響；網頁透明的地方看不到後面的 3D 物體；洞的邊緣沒有反鋸齒；別的網站要允許被嵌入</UILabel>
+          <UILabel style="hint">要和場景融為一體</UILabel>
+          <UILabel style="field" lineHeight="1.6">用 UIPanel3D：介面畫成貼圖，會受光照、可以加光暈</UILabel>
+        </UILayout>
+      </UIScrollView>
+    </UIStackView>
+
+    <UILabel style="hint">拖曳網頁以外的地方轉動視角，滾輪縮放。</UILabel>
+  </UILayout>
+
+  <!-- ───────── 右：提示 ───────── -->
+  <UILayout flex="1" padding="16" align="start">
+    <UILayout style="hudCard">
+      <UILabel fontSize="14" fontWeight="bold" color="#ffffff">網頁在 3D 場景裡</UILabel>
+      <UILabel fontSize="12" color="#8f9884">在網頁上捲動、點按鈕、打字；球會從網頁前後飛過</UILabel>
+    </UILayout>
+  </UILayout>
+
+  <UIToast placement="top"/>
+</UI>

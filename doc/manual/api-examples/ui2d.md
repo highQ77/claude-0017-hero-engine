@@ -1520,3 +1520,20 @@ ctx.drawImage(layer.canvas, 80, 50, 160, 100);
 console.log('離屏圖層 backing store：', layer.canvas.width, '×', layer.canvas.height);
 engine.start();
 ```
+
+## UIWeb
+網頁元件：在介面的排版位置顯示真正的網頁（`src` 用 iframe，或 `html` 直接給一段 HTML）。可以打中文、選取文字；之後畫的元件（下拉選單、通知）會蓋在網頁上面。`element` 是外層的 HTML 元素。
+
+```ts
+ui.loadString(`<UI padding="20" gap="10">
+  <UIButton text="跳出通知（會蓋在網頁上面）" onClick="note"/>
+  <UIWeb id="web" html="&lt;div style='padding:12px;font:16px sans-serif'&gt;&lt;b&gt;網頁&lt;/b&gt;：&lt;input placeholder='打字試試看'&gt;&lt;/div&gt;" width="360" height="120" radius="8"/>
+  <UIToast placement="top"/>
+</UI>`);
+ui.setHandlers({ note: () => ui.toast('通知蓋在網頁上面') });
+engine.start();
+engine.timers.after(0.3, () => {
+  const web = ui.require<UIWeb>('web');
+  console.log('網頁元素：', web.element?.tagName, '，輸入框：', web.element?.querySelector('input') !== null);
+});
+```

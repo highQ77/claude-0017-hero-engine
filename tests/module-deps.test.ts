@@ -51,6 +51,7 @@ const RULES: Record<string, { deps: string[]; keys?: string[]; files?: string[] 
   text3d: { deps: ['core', 'ecs', 'scene', 'render', 'assets'] },
   // 第 5 層
   ui3d: { deps: ['core', 'ecs', 'scene', 'render', 'ui2d'] },
+  web3d: { deps: ['core', 'ecs', 'scene', 'render', 'ui2d'] },
   ai: { deps: ['core', 'ecs', 'scene', 'physics'] },
   scripts: { deps: ['core', 'ecs', 'scene'], keys: ['render', 'input', 'audio', 'physics', 'animation', 'assets'] },
   // 最上層：套件管理只需要資源鍵與註冊用的小檔案（完整的引擎 API 在 api.ts，由遊戲決定要不要用）

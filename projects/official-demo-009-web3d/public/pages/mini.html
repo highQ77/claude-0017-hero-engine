@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px; font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size: 14px; color: #222; background: #fff; }
+  h3 { margin: 0 0 8px; font-size: 16px; }
+  input { width: 100%; font: inherit; padding: 6px 10px; border: 1px solid #bbb; border-radius: 6px; }
+  ul { list-style: none; padding: 0; margin: 8px 0 0; }
+  li { padding: 6px 8px; border-radius: 6px; }
+  li:nth-child(odd) { background: #f1f4ea; }
+  .empty { color: #999; padding: 6px 8px; }
+</style>
+</head>
+<body>
+  <h3>道具搜尋（2D 介面裡的網頁）</h3>
+  <input id="q" placeholder="輸入中文試試：劍、藥水…">
+  <ul id="list"></ul>
+<script>
+  const items = ['鐵劍', '銀劍', '火焰劍', '回復藥水', '魔力藥水', '解毒藥水', '木盾', '鐵盾', '皮甲', '鎖子甲', '傳送卷軸', '火球卷軸', '冰霜法杖', '雷電法杖'];
+  const q = document.getElementById('q');
+  const list = document.getElementById('list');
+  const show = () => {
+    const hits = items.filter((name) => name.includes(q.value.trim()));
+    list.innerHTML = hits.length ? hits.map((name) => `<li>${name}</li>`).join('') : '<li class="empty">找不到</li>';
+  };
+  q.addEventListener('input', show);
+  show();
+</script>
+</body>
+</html>

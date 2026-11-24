@@ -44,6 +44,7 @@ export function isContainer(node: XmlNode): boolean {
     'UIJoystick',
     'UIMinimap',
     'UICanvas',
+    'UIWeb',
     'UITable',
     'UIColumn',
     'UIRow',
@@ -253,6 +254,13 @@ export const PALETTE: PaletteItem[] = [
     tag: 'UICanvas',
     desc: '用 Canvas 2D 的寫法自己畫（底層是 WebGL）：程式裡 ui.require<UICanvas>(id).getContext() 取得 ctx。width、height 是繪圖座標大小，background 預設 #333333FF；尺寸改變會清空並觸發 onResize；滑鼠拖曳觸發 onPointerdown／onPointermove／onPointerup（value 是繪圖座標）。',
     xml: '<UICanvas id="canvas" width="320" height="200" background="#333333FF"/>',
+  },
+  {
+    group: '基本',
+    label: '網頁',
+    tag: 'UIWeb',
+    desc: '真正的網頁（瀏覽器畫的 HTML）：src 用 iframe 開網址（以介面檔的資料夾為準），或 html 直接給一段 HTML。可以打中文、選取文字、捲動；之後畫的元件（選單、通知）會蓋在網頁上面。程式裡 ui.require<UIWeb>(id).element 是外層的 HTML 元素。',
+    xml: '<UIWeb id="web" html="&lt;p style=&quot;margin:12px&quot;&gt;網頁內容&lt;/p&gt;" width="320" height="160" radius="8"/>',
   },
   {
     group: '基本',
@@ -676,6 +684,7 @@ export const ATTRIBUTE_HINTS: Record<string, string[]> = {
   UISkin: ['for'],
   UIImport: ['src'],
   UIFpsMeter: ['format', 'interval', 'color', 'fontSize'],
+  UIWeb: ['id', 'src', 'html', 'width', 'height', 'radius', 'background', 'pointerEvents'],
   UICanvas: [
     'id',
     'width',

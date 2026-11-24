@@ -22,6 +22,8 @@ export const ENGINE_DEPS = [
   ...[
     'controls/OrbitControls.js',
     'controls/TransformControls.js',
+    // 3D 網頁面板（@engine/web3d）
+    'renderers/CSS3DRenderer.js',
     'geometries/TextGeometry.js',
     'loaders/FontLoader.js',
     'loaders/GLTFLoader.js',

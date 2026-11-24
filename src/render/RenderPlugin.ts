@@ -1,6 +1,20 @@
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
-import { Fn, max, screenUV, texture as textureNode, vec4 } from 'three/tsl';
+import {
+  Fn,
+  Loop,
+  abs,
+  clamp,
+  float,
+  length,
+  max,
+  min,
+  screenUV,
+  texture as textureNode,
+  uniform,
+  uniformArray,
+  vec4,
+} from 'three/tsl';
 import { type ShaderNode, tsl } from './tsl';
 import type { Engine, Plugin } from '../core/Engine';
 import { createLogger } from '../core/Logger';
@@ -28,12 +42,93 @@ const _quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
  * 把介面疊到畫面的顏色上。shown：畫面上的顏色（已經轉成 sRGB）；ui：介面的緩衝區（線性、預乘 alpha）。
  * 介面先還原顏色、轉成 sRGB、再乘回 alpha，在 sRGB 空間混合（和一般網頁的半透明混合一樣）
  */
-function compositeOverlay(shown: ShaderNode, ui: THREE.Texture): ShaderNode {
+function compositeOverlay(shown: ShaderNode, ui: THREE.Texture, holes?: ScreenHoleUniforms): ShaderNode {
   const { sRGBTransferOETF } = tsl;
   const u = textureNode(ui, screenUV);
   const uiRgb = sRGBTransferOETF(u.rgb.div(max(u.a, 1e-5))).mul(u.a);
   const inv = u.a.oneMinus();
-  return vec4(uiRgb.add(shown.rgb.mul(inv)), u.a.add(shown.a.mul(inv)));
+  // 畫面上的洞（setScreenHoles）：3D 畫面在洞裡變透明（預乘 alpha：顏色和 alpha 一起乘），露出畫布下面的網頁元素；
+  // 介面照常疊在上面（介面自己在洞的範圍裡清掉了它下面的東西，之後畫的元件仍會蓋住網頁）
+  const s = holes ? shown.mul(holeMask(holes).oneMinus()) : shown;
+  return vec4(uiRgb.add(s.rgb.mul(inv)), u.a.add(s.a.mul(inv)));
+}
+
+/** 最多幾個畫面上的洞 */
+export const MAX_SCREEN_HOLES = 8;
+
+/**
+ * 畫面上的洞（CSS 像素，畫布左上角為原點）：介面合成時 3D 畫面在這裡變透明，露出畫布下面的 HTML 元素
+ * （2D 介面的 <UIWeb> 用；見 RenderPlugin.setScreenHoles）
+ */
+export interface ScreenHole {
+  /** 左上角 X（CSS 像素） */
+  x: number;
+  /** 左上角 Y（CSS 像素） */
+  y: number;
+  /** 寬（CSS 像素） */
+  width: number;
+  /** 高（CSS 像素） */
+  height: number;
+  /** 圓角半徑（CSS 像素，預設 0） */
+  radius?: number;
+  /** 透明的程度（0～1，預設 1：完全透明；淡入淡出時用） */
+  strength?: number;
+}
+
+/** 洞的著色器參數（節點）與它們的數值（每幀改數值，不用重建著色器） */
+interface ScreenHoleUniforms {
+  /** 每個洞：中心 x、y 與半寬、半高（CSS 像素） */
+  rects: ShaderNode;
+  /** 每個洞：圓角半徑、強度 */
+  params: ShaderNode;
+  /** 洞的數量 */
+  count: ShaderNode;
+  /** 畫面大小（CSS 像素） */
+  size: ShaderNode;
+  /** rects 的數值 */
+  rectValues: THREE.Vector4[];
+  /** params 的數值 */
+  paramValues: THREE.Vector4[];
+  /** count 的數值 */
+  countValue: { value: number };
+  /** size 的數值 */
+  sizeValue: THREE.Vector2;
+}
+
+/** 建立洞的著色器參數 */
+function createHoleUniforms(): ScreenHoleUniforms {
+  const rectValues = Array.from({ length: MAX_SCREEN_HOLES }, () => new THREE.Vector4());
+  const paramValues = Array.from({ length: MAX_SCREEN_HOLES }, () => new THREE.Vector4());
+  const sizeValue = new THREE.Vector2(1, 1);
+  const count = uniform(0, 'int');
+  return {
+    rects: uniformArray(rectValues, 'vec4') as unknown as ShaderNode,
+    params: uniformArray(paramValues, 'vec4') as unknown as ShaderNode,
+    count: count as unknown as ShaderNode,
+    size: uniform(sizeValue) as unknown as ShaderNode,
+    rectValues,
+    paramValues,
+    countValue: count as unknown as { value: number },
+    sizeValue,
+  };
+}
+
+/** 這個像素在洞裡的程度（0～1；圓角矩形的距離場，邊緣有一個像素的反鋸齒） */
+function holeMask(h: ScreenHoleUniforms): ShaderNode {
+  return Fn(() => {
+    const p = screenUV.mul(h.size);
+    const m = float(0).toVar();
+    Loop(h.count, ({ i }: { i: ShaderNode }) => {
+      const r = h.rects.element(i) as ShaderNode;
+      const k = h.params.element(i) as ShaderNode;
+      const q = abs(p.sub(r.xy)).sub(r.zw).add(k.x);
+      const d = length(max(q, 0))
+        .add(min(max(q.x, q.y), 0))
+        .sub(k.x);
+      m.assign(max(m, clamp(float(0.5).sub(d), 0, 1).mul(k.y)));
+    });
+    return m;
+  })() as ShaderNode;
 }
 const log = createLogger('render');
 
@@ -176,6 +271,8 @@ export class RenderPlugin implements Plugin {
   private handlerComposites = false;
   /** 接管繪製的外掛自己疊介面時，介面先畫到這裡 */
   private overlayFrame: { target: THREE.RenderTarget; compositor: OverlayCompositor } | null = null;
+  /** 畫面上的洞（setScreenHoles）：介面合成時 3D 畫面變透明的地方 */
+  private readonly holes: ScreenHoleUniforms = createHoleUniforms();
   private adaptive: AdaptiveResolution | null = null;
   /** MeshRenderer 用描述建立的幾何、材質（共用、自動釋放） */
   readonly resources = new RenderResources();
@@ -699,6 +796,7 @@ export class RenderPlugin implements Plugin {
     if (!this.initialized) return;
     const renderer = this.renderer;
     for (const listener of [...this.beforeDrawListeners]) listener();
+    this.holes.sizeValue.set(this.width, this.height);
     const camera = this.activeCameraObject;
     if (this.debug.object.parent !== this.scene) this.scene.add(this.debug.object);
     this.debug._beforeDraw();
@@ -741,6 +839,26 @@ export class RenderPlugin implements Plugin {
       renderer.autoClear = autoClear;
     }
     this.debug._afterDraw(); // 只畫一幀的拿掉
+  }
+
+  /**
+   * 設定畫面上的洞：介面（疊加圖層）合成時，3D 畫面在這些範圍裡變透明，露出畫布下面的 HTML 元素；
+   * 介面照常疊在上面。2D 介面的 <UIWeb>（網頁元件）用它；最多 MAX_SCREEN_HOLES 個，多的忽略。
+   * 只在有疊加圖層（介面）時有效；下一次繪製時生效。
+   * @param holes 洞的範圍（CSS 像素，畫布左上角為原點）；空陣列表示沒有洞
+   */
+  setScreenHoles(holes: readonly ScreenHole[]): void {
+    const n = Math.min(holes.length, MAX_SCREEN_HOLES);
+    const rects = this.holes.rectValues;
+    const params = this.holes.paramValues;
+    for (let i = 0; i < n; i++) {
+      const h = holes[i];
+      const hw = Math.max(0, h.width) / 2;
+      const hh = Math.max(0, h.height) / 2;
+      rects[i].set(h.x + hw, h.y + hh, hw, hh);
+      params[i].set(Math.min(h.radius ?? 0, hw, hh), Math.min(1, Math.max(0, h.strength ?? 1)), 0, 0);
+    }
+    this.holes.countValue.value = n;
   }
 
   /** 有沒有疊加圖層（介面等） */
@@ -792,7 +910,7 @@ export class RenderPlugin implements Plugin {
         target,
         compositor: {
           key: `ui${target.texture.id}`,
-          composite: (color: ShaderNode) => compositeOverlay(color, target.texture),
+          composite: (color: ShaderNode) => compositeOverlay(color, target.texture, this.holes),
         },
       };
     }
@@ -851,7 +969,7 @@ export class RenderPlugin implements Plugin {
         const sceneColor = textureNode(frame.texture, screenUV);
         // 3D 畫面：色調映射（曝光由繪製器每幀讀）＋ 轉成 sRGB；後製已經做過的就不再轉
         const shown = encoded ? sceneColor : renderOutput(sceneColor, toneMapping, THREE.SRGBColorSpace);
-        return compositeOverlay(shown, f.ui.texture);
+        return compositeOverlay(shown, f.ui.texture, this.holes);
       })();
       quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
       quad.frustumCulled = false;

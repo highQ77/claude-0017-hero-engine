@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>Hero 日報</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; background: #f6f4ee; color: #222; }
+  header { position: sticky; top: 0; background: #1d2416; color: #e9f6d2; padding: 18px 28px; display: flex; align-items: center; gap: 16px; }
+  header h1 { margin: 0; font-size: 28px; }
+  header span { color: #9acd32; font-size: 14px; }
+  main { padding: 24px 28px 60px; display: grid; grid-template-columns: 2fr 1fr; gap: 28px; }
+  article h2 { font-size: 26px; margin: 0 0 8px; }
+  article p { line-height: 1.8; font-size: 17px; }
+  .tag { display: inline-block; background: #9acd32; color: #141a07; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: bold; }
+  aside { background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 2px 10px rgba(0,0,0,.08); align-self: start; }
+  aside h3 { margin: 0 0 10px; }
+  button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 0; background: #1d2416; color: #e9f6d2; cursor: pointer; }
+  button:hover { background: #37402f; }
+  .count { font-size: 40px; font-weight: bold; color: #4a7d12; margin: 8px 0; }
+  label { display: block; padding: 6px 0; cursor: pointer; }
+  a { color: #4a7d12; }
+</style>
+</head>
+<body>
+<header><h1>Hero 日報</h1><span>這是一個真正的網頁（iframe），放在 3D 場景裡</span></header>
+<main>
+  <article>
+    <span class="tag">技術</span>
+    <h2>網頁也能放進 3D 場景了</h2>
+    <p>這一頁是瀏覽器自己畫的網頁：文字可以選取、複製，連結可以點，往下捲動試試看。頁面裡的程式（右邊的按鈕）也照常執行。</p>
+    <p>它放在遊戲畫布的「下面」，畫布在這個位置挖了一個透明的洞，所以前面飛過的球會蓋住網頁，而跑到網頁後面時又會被網頁擋住。</p>
+    <p><a href="#more">跳到下面的段落</a></p>
+    <p>滑鼠移到網頁上時，遊戲畫布暫時不接收滑鼠，事件直接交給網頁；移出網頁就還給遊戲（拖曳空白處可以轉動視角）。</p>
+    <p>網頁不受場景的燈光、陰影影響，也不會套用後製效果：它永遠是原本的樣子。需要和 3D 場景融為一體的介面，請用 UIPanel3D（介面畫成貼圖）。</p>
+    <h2 id="more">更多段落</h2>
+    <p>捲動、選取文字、點連結、表單輸入：這些都是網頁原本就有的功能，引擎不用另外處理。</p>
+    <p>同一個網域的網頁（例如放在專案 public/pages/ 的網頁）最穩定；別的網站要允許被嵌入，很多網站不允許。</p>
+    <p>（頁尾）</p>
+  </article>
+  <aside>
+    <h3>網頁裡的程式</h3>
+    <div>按了幾次：</div>
+    <div class="count" id="count">0</div>
+    <button id="add">按我 +1</button>
+    <h3 style="margin-top:20px">待辦</h3>
+    <label><input type="checkbox" checked> 放一個網頁到 3D 場景</label>
+    <label><input type="checkbox"> 讓球從網頁前面飛過</label>
+    <label><input type="checkbox"> 在表單裡打中文</label>
+  </aside>
+</main>
+<script>
+  let n = 0;
+  document.getElementById('add').addEventListener('click', () => {
+    document.getElementById('count').textContent = String(++n);
+  });
+</script>
+</body>
+</html>

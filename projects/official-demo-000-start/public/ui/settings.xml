@@ -74,6 +74,11 @@
           </UILayout>
         </UILayout>
       </UITab>
+
+      <UITab title="關於" gap="12">
+        <!-- 網頁元件：真正的 HTML（about.html，網址以這個介面檔的資料夾為準） -->
+        <UIWeb src="about.html" width="100%" height="150" radius="10" background="#1d2416"/>
+      </UITab>
     </UITabs>
     <UIButton style="primary" text="完成" onClick="screen.close"/>
   </UIWindow>

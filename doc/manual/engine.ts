@@ -23,6 +23,7 @@ import { ParticlePlugin } from '@engine/particles';
 import { ScriptPlugin } from '@engine/scripts';
 import { AIPlugin } from '@engine/ai';
 import { UI3DPlugin } from '@engine/ui3d';
+import { Web3DPlugin } from '@engine/web3d';
 import { UIPlugin } from '@engine/ui2d';
 import { InputPlugin } from '@engine/input';
 
@@ -78,6 +79,8 @@ export const scripts = scriptPlugin.runner;
 export const ai = use(new AIPlugin());
 /** 3D 介面面板（UIPanel3D 元件；ui3d.setHandlers(…)） */
 export const ui3d = use(new UI3DPlugin());
+/** 3D 網頁面板（WebPanel3D 元件：iframe 或 HTML） */
+export const web3d = use(new Web3DPlugin());
 /** 2D 介面 */
 export const uiPlugin = use(await UIPlugin.create());
 /** 介面：ui.loadString(…)、ui.setHandlers({ … })、ui.get<UILabel>('id') */

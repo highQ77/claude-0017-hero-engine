@@ -66,6 +66,7 @@ export {
   UIJoystick,
   UIMinimap,
   UICanvas,
+  UIWeb,
   WIDGET_COMPONENTS,
   RARITY_COLORS,
 } from './widgets';

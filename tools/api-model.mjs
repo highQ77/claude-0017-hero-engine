@@ -40,6 +40,7 @@ export const MODULES = [
   ['assets', '資源載入'],
   ['ui2d', '2D 介面（XML、Yoga 排版、元件、畫面管理、場景轉場）'],
   ['ui3d', '3D 介面面板'],
+  ['web3d', '3D 網頁面板'],
   ['text3d', '3D 文字'],
   ['postfx', '後製效果'],
   ['shaders', '著色器'],

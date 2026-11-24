@@ -10,8 +10,10 @@ import { UIPainter, type Context2D } from './UIPainter';
 import { UIScrollView, type UICanvasLayers, type UIElement } from './elements';
 import { num } from './draw';
 import { UICanvas } from './widgets/canvas';
+import type { UIWeb } from './widgets/web';
 import { type UITextureCopier, UITextureRenderer } from './UITexture';
 import { UIKey } from './keys';
+import { UIWebLayer } from './web2d';
 export { UIKey } from './keys';
 
 /** 介面疊加圖層的順序（越大越上面） */
@@ -301,6 +303,7 @@ export class UIPlugin implements Plugin {
    * 點擊全部穿透到下面的遊戲（例如 3D 場景編輯器預覽介面時）。
    */
   interactive = true;
+  private web: UIWebLayer | null = null;
 
   private constructor(/** 介面（也可以用 world.requireResource(UIKey) 取得） */ readonly ui: UI2D) {}
 
@@ -331,6 +334,19 @@ export class UIPlugin implements Plugin {
       ecs.world.setResource(UIKey, ui);
     }
     if (typeof window !== 'undefined') this.attachInput(render.renderer.domElement);
+    // 網頁元件（<UIWeb>）：HTML 元素在畫布下面，每次繪製前跟著元件的位置
+    if (typeof document !== 'undefined') {
+      const web = (this.web = new UIWebLayer(ui, render));
+      this.cleanup.push(
+        render.onBeforeDraw(() => web.update()),
+        () => web.dispose(),
+      );
+    }
+  }
+
+  /** 滑鼠目前所在的網頁元件（<UIWeb>；沒有時是 null） */
+  get activeWeb(): UIWeb | null {
+    return this.web?.activeElement ?? null;
   }
 
   uninstall(): void {

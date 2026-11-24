@@ -10,6 +10,7 @@ import { UIBadge, UICooldown, UISlot } from './game';
 import { UIJoystick } from './joystick';
 import { UIMinimap } from './minimap';
 import { UICanvas } from './canvas';
+import { UIWeb } from './web';
 import { UIToast } from './toast';
 import { UIWindow } from './window';
 
@@ -19,6 +20,7 @@ export * from './game';
 export * from './joystick';
 export * from './minimap';
 export * from './canvas';
+export * from './web';
 export * from './toast';
 export * from './window';
 
@@ -53,4 +55,6 @@ export const WIDGET_COMPONENTS = {
   UIMinimap,
   /** 畫布：用 Canvas 2D 的 API 自由繪圖 */
   UICanvas,
+  /** 網頁：真正的 HTML（iframe 或一段 HTML），放在介面的排版裡 */
+  UIWeb,
 } as const;

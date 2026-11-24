@@ -46,6 +46,7 @@ export * from './audio';
 export * from './assets';
 export * from './ui2d';
 export * from './ui3d';
+export * from './web3d';
 export * from './text3d';
 export * from './postfx';
 export * from './shaders';

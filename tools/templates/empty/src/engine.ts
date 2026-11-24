@@ -25,6 +25,7 @@ import { InputPlugin } from '@engine/input';
 // import { Text3DPlugin } from '@engine/text3d';
 // import { PhysicsPlugin } from '@engine/physics';
 // import { UI3DPlugin } from '@engine/ui3d';
+// import { Web3DPlugin } from '@engine/web3d';
 
 export const engine = new Engine();
 
@@ -82,6 +83,8 @@ export const scripts = scriptPlugin.runner;
 export const ai = use(new AIPlugin());
 /** 3D 空間裡的介面面板（UIPanel3D 元件；ui3d.setHandlers(…)；要放在 2D 介面之前，2D 介面在最上層、先處理滑鼠） */
 // export const ui3d = use(new UI3DPlugin());
+/** 3D 空間裡的網頁（WebPanel3D 元件：iframe 或 HTML；網頁層在畫布下面，畫布挖洞露出網頁） */
+// export const web3d = use(new Web3DPlugin());
 /** 2D 介面（public/ui 的介面檔） */
 export const uiPlugin = use(await UIPlugin.create({ scene: 'ui/scene.xml' }));
 /** 介面：ui.setHandlers({ … })、ui.get<UILabel>('id')、ui.toast(…) */

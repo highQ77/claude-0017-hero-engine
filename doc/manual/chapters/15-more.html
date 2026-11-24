@@ -132,6 +132,44 @@ const panel = world.spawn(Transform, UIPanel3D.with({
 }));
 </script>
 
+<h2>3D 網頁面板</h2>
+<p><code>Web3DPlugin</code> 把<b>真正的網頁</b>放進 3D 場景：<code>WebPanel3D</code> 的 <code>src</code> 用 iframe 開網址，或用 <code>html</code> 直接給一段 HTML。和 <code>UIPanel3D</code>（介面畫成貼圖）不同，這是瀏覽器自己畫的網頁：文字可以選取、輸入框可以打中文、可以捲動、播影片。</p>
+<ul>
+  <li><b>做法</b>：網頁層在畫布<b>下面</b>（three.js 的 CSS3DRenderer，用 CSS 3D 變換跟著攝影機），畫布在網頁的位置挖一個透明的洞讓網頁露出來。所以前面的物體、2D 介面會蓋在網頁上，網頁也會擋住它後面的物體。</li>
+  <li><b>滑鼠</b>：移到露出的網頁上時畫布暫時不接收滑鼠，事件直接給網頁；移出網頁就還給遊戲。被物體或 2D 介面蓋住的地方照常給遊戲。<code>web3d.activePanel</code> 是滑鼠目前所在的面板。</li>
+  <li><b>和遊戲互動</b>：<code>html</code> 的內容和遊戲在同一份文件，面板建立後（<code>WebPanel3D</code> 的 <code>element</code> 不是 null）就能 <code>querySelector</code> 加事件。iframe 裡的網頁用 <code>postMessage</code> 溝通。</li>
+  <li><b>限制</b>：網頁不受燈光、陰影、後製影響；網頁透明的地方看不到後面的 3D 物體；洞的邊緣沒有反鋸齒；面板有一部分跑到攝影機後面時會暫時隱藏（CSS 沒有近平面裁切）。別的網站要允許被嵌入（很多網站不允許），同網域的網頁（放在專案的 <code>public/</code>）最穩定。</li>
+</ul>
+<script type="text/plain" class="example" data-lang="ts" data-title="網頁面板與從前面飛過的球" data-height="320">
+import { Transform } from '@engine/scene';
+import { spawn } from '@engine/render';
+import { WebPanel3D } from '@engine/web3d';
+import { engine, world } from './engine';
+
+spawn.camera(world, { position: [0, 1.4, 3], target: [0, 1.2, 0] });
+spawn.defaultLights(world);
+spawn.grid(world);
+world.spawn(
+  Transform.at(0, 1.2, 0),
+  WebPanel3D.with({
+    html: `<div style="padding:24px;font:20px sans-serif">
+      <h2 style="margin:0 0 12px">網頁面板</h2>
+      <p>可以選取文字、打中文：</p>
+      <input placeholder="打字試試看" style="font-size:20px;padding:8px">
+    </div>`,
+    width: 640,
+    height: 360,
+    worldWidth: 2,
+  }),
+);
+const ball = spawn.mesh(world, { geometry: { sphere: 0.2 }, material: '#ffb35c', position: [0, 1.2, 0.5] });
+engine.timers.every(0, () => {
+  world.require(ball, Transform).position.x = Math.sin(engine.time.elapsed) * 1.4;
+});
+engine.start();
+</script>
+<div class="tip">完整的範例在 <code>projects/official-demo-009-web3d</code>：iframe 網頁（捲動、網頁裡的程式）、HTML 表單（打中文、按鈕改變 3D 物件的顏色、送出留言跳出通知）、從網頁前後飛過的球。</div>
+
 <h2>套件管理</h2>
 <p><code>PluginManager</code> 用來安裝第三方套件：檢查版本相容（semver）、依賴，也能從網址安裝並驗證完整性（integrity）。套件用 <code>define.plugin</code> 定義，透過 <code>ctx.api</code> 使用引擎的模組（不用自己打包一份引擎）。內建的效能監視器（<code>src/packages/perf-monitor.ts</code>）就是一個套件的範例：</p>
 <script type="text/plain" class="example" data-lang="ts" data-run="false" data-title="安裝套件">

@@ -1,0 +1,34 @@
+<Scene format="hero-scene" version="1">
+  <SceneUI src="ui/scene.xml"/>
+  <Settings background="#0b0e14"/>
+  <Entity id="camera" name="攝影機">
+    <Transform position="-0.55 1.6 4.6" rotation="-4 0 0"/>
+    <Camera fov="50"/>
+  </Entity>
+  <Entity id="sky-light" name="天空光">
+    <Transform position="0 1 0"/>
+    <Light kind="hemisphere" color="#cfe0ff" intensity="1.2" groundColor="#40342a"/>
+  </Entity>
+  <Entity id="sun" name="太陽">
+    <Transform position="3 6 4" rotation="-56.309932 22.588539 29.949082"/>
+    <Light intensity="2"/>
+  </Entity>
+  <Entity id="floor" name="地板">
+    <Transform/>
+    <MeshRenderer>
+      <geometry plane="14" rotation="-1.5707963 0 0"/>
+      <material>
+        <standard color="#1c222c" roughness="0.9"/>
+      </material>
+    </MeshRenderer>
+  </Entity>
+  <Entity id="orb" name="繞圈的球">
+    <Transform position="0 1.4 2"/>
+    <MeshRenderer>
+      <geometry sphere="0.28"/>
+      <material>
+        <standard color="#ffd166" roughness="0.3" emissive="#5a4410"/>
+      </material>
+    </MeshRenderer>
+  </Entity>
+</Scene>
