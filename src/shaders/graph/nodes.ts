@@ -15,7 +15,8 @@
  *     tsl: (i) => ({ out: sin(i.x) }),
  *   });
  */
-import { hsv2rgb, rotate2, sdBox } from '../functions';
+import { fbm3, hsv2rgb, rotate2, sdBox } from '../functions';
+import { rainHeight } from '../presets';
 import { type ShaderNode, tsl } from '../tsl';
 
 const {
@@ -35,6 +36,7 @@ const {
   mod,
   normalize,
   pow,
+  sRGBTransferOETF,
   sin,
   smoothstep,
   sqrt,
@@ -103,7 +105,7 @@ export interface NodeOutput {
 export interface NodeParam {
   name: string;
   label?: string;
-  kind: 'number' | 'color' | 'select' | 'image';
+  kind: 'number' | 'color' | 'select' | 'image' | 'text';
   default: string | number;
   /** 數字的間隔 */
   step?: number;
@@ -123,6 +125,8 @@ export interface NodeContext {
   texture(uv: ShaderNode): ShaderNode;
   /** 畫面原本的顏色（vec4）；只有全螢幕效果有，材質裡呼叫會丟出錯誤 */
   screen(uv: ShaderNode): ShaderNode;
+  /** 參數節點（Parameter、Color Parameter）的 uniform */
+  param(name: string): ShaderNode;
 }
 
 /** 一種節點 */
@@ -438,6 +442,75 @@ N({
   outputs: [{ name: 'dir', type: 'vec3' }],
   tsl: (_i, _p, _T, ctx) => ({ dir: ctx.builtin('light') }),
 });
+N({
+  type: 'floatParam',
+  title: 'Parameter',
+  category: 'input',
+  desc: '可以在遊戲裡調整的數值：變成材質或效果的 uniform（material.uniforms.名稱.value、effect.uniforms.名稱.value，或後製設定的 uniforms）。名稱相同的參數節點是同一個值',
+  keywords: '參數 uniform 變數 可調 屬性 property',
+  params: [
+    { name: 'name', label: '名稱', kind: 'text', default: 'amount' },
+    { name: 'value', label: '預設值', kind: 'number', default: 1, step: 0.1 },
+  ],
+  outputs: [{ name: 'value', type: 'float' }],
+  tsl: (_i, p, _T, ctx) => ({ value: ctx.param(String(p.name)) }),
+});
+N({
+  type: 'colorParam',
+  title: 'Color Parameter',
+  category: 'input',
+  desc: '可以在遊戲裡調整的顏色：變成 uniform（THREE.Color，例如 material.uniforms.名稱.value.set("#ff0000")）。名稱相同的參數節點是同一個值',
+  keywords: '參數 uniform 顏色 可調 屬性 property color',
+  params: [
+    { name: 'name', label: '名稱', kind: 'text', default: 'tint' },
+    { name: 'color', label: '預設值', kind: 'color', default: '#ffffff' },
+  ],
+  outputs: [{ name: 'rgb', type: 'vec3' }],
+  // uniform 是線性的 THREE.Color（和 three.js 一樣）；節點圖用畫面上的顏色，轉回 sRGB
+  tsl: (_i, p, _T, ctx) => ({ rgb: sRGBTransferOETF(ctx.param(String(p.name))) }),
+});
+N({
+  type: 'screenBlur',
+  title: 'Screen Blur',
+  category: 'input',
+  desc: '全螢幕效果：畫面模糊後的顏色（圓盤狀取樣，亮的地方散成光斑）。半徑是像素，取樣數越多越平滑也越耗效能',
+  keywords: '模糊 blur 起霧 散景 bokeh 畫面',
+  params: [
+    {
+      name: 'samples',
+      label: '取樣數',
+      kind: 'select',
+      default: '16',
+      options: [
+        ['8', '8'],
+        ['16', '16'],
+        ['32', '32'],
+      ],
+    },
+  ],
+  inputs: [uvIn('uv'), { name: 'radius', type: 'float', default: 5 }],
+  outputs: [
+    { name: 'rgba', type: 'vec4' },
+    { name: 'rgb', type: 'vec3' },
+    { name: 'a', type: 'float' },
+  ],
+  tsl: (i, p, _T, ctx) => {
+    const n = Math.max(1, Math.round(num(p.samples)) || 16);
+    const res = ctx.builtin('resolution');
+    let sum: ShaderNode = vec4(0);
+    // 黃金角螺旋：取樣點平均分布在圓盤裡
+    for (let k = 0; k < n; k++) {
+      const ang = k * 2.39996;
+      const rad = Math.sqrt((k + 0.5) / n);
+      const off = vec2(Math.cos(ang) * rad, Math.sin(ang) * rad)
+        .mul(i.radius)
+        .div(res);
+      sum = sum.add(ctx.screen(i.uv.add(off)));
+    }
+    const rgba = sum.div(n);
+    return { rgba, rgb: rgba.rgb, a: rgba.a };
+  },
+});
 
 // ───────── 數學 ─────────
 for (const [type, title, desc, op, b] of [
@@ -728,6 +801,48 @@ N({
   outputs: [{ name: 'd', type: 'float' }],
   tsl: (i) => ({ d: sgVoronoi(i.p.mul(i.scale), i.time) }),
 });
+N({
+  type: 'fbm3',
+  title: '3D FBM',
+  category: 'pattern',
+  desc: '3D 的多層雜訊（輸入是 3D 座標，例如物件或世界座標）：花紋貼在物件表面上不會因為 UV 接縫斷開。結果約 0..1',
+  keywords: '雜訊 noise 3d 溶解 dissolve 雲',
+  inputs: [
+    { name: 'p', type: 'vec3', expr: 'objectPos', exprType: 'vec3', exprLabel: '物件座標' },
+    { name: 'scale', type: 'float', default: 2.5 },
+  ],
+  outputs: [{ name: 'out', type: 'float' }],
+  tsl: (i) => ({ out: fbm3(i.p.mul(i.scale)) }),
+});
+N({
+  type: 'rainDrops',
+  title: 'Rain Drops',
+  category: 'pattern',
+  desc: '玻璃上的雨滴：往下滑的大水滴（留下一串小水珠）、隨機出現又蒸發的小水滴。height 是水的高度（0 = 乾的），slope 是水面斜率（拿來偏移畫面做折射），normal 是水面法線',
+  keywords: '雨 水滴 玻璃 rain 窗戶 折射',
+  inputs: [
+    uvIn('uv'),
+    { name: 'time', type: 'float', expr: 'time', exprType: 'float', exprLabel: 'Time' },
+    { name: 'amount', type: 'float', default: 0.7 },
+    { name: 'scale', type: 'float', default: 5 },
+  ],
+  outputs: [
+    { name: 'height', type: 'float' },
+    { name: 'slope', type: 'vec2' },
+    { name: 'normal', type: 'vec3' },
+  ],
+  tsl: (i, _p, _T, ctx) => {
+    const res = ctx.builtin('resolution');
+    const effect = ctx.mode === 'effect';
+    const aspect = effect ? res.x.div(res.y) : float(1);
+    const ex = effect ? float(1).div(res.y) : float(1 / 512);
+    const h = rainHeight(i.uv, i.time, aspect, i.scale, i.amount);
+    const hx = rainHeight(i.uv.add(vec2(ex, 0)), i.time, aspect, i.scale, i.amount);
+    const hy = rainHeight(i.uv.add(vec2(0, ex)), i.time, aspect, i.scale, i.amount);
+    const slope = vec2(hx.sub(h), hy.sub(h)).div(ex);
+    return { height: h, slope, normal: normalize(vec3(slope.mul(-0.0025), 1)) };
+  },
+});
 
 // ───────── 光照 ─────────
 N({
@@ -816,8 +931,10 @@ N({
   title: 'Fragment Output',
   category: 'output',
   unique: true,
-  desc: '最終輸出顏色（每張圖只能有一個）。alpha 小於 1 或有連接時材質會是半透明',
-  keywords: '輸出 fragment',
+  desc:
+    '最終輸出顏色（每張圖只能有一個）。光照選「標準」時 color 是基本色，會受場景的燈光、陰影影響，emissive 是自己發的光（超過 1 的部分當成亮度倍數）。' +
+    '透明：「自動」在 alpha 小於 1 或有連接時半透明；「裁切」把 alpha 小於 0.5 的像素丟掉（溶解、鏤空，仍然是不透明材質）',
+  keywords: '輸出 fragment 光照 lit 透明 混合 blending emissive 發光',
   params: [
     {
       name: 'side',
@@ -830,10 +947,43 @@ N({
         ['back', '背面'],
       ],
     },
+    {
+      name: 'lighting',
+      label: '光照',
+      kind: 'select',
+      default: 'unlit',
+      options: [
+        ['unlit', '不受光（顏色就是最後的顏色）'],
+        ['standard', '標準（受燈光、陰影影響）'],
+      ],
+    },
+    {
+      name: 'alphaMode',
+      label: '透明',
+      kind: 'select',
+      default: 'auto',
+      options: [
+        ['auto', '自動（半透明）'],
+        ['clip', '裁切（alpha < 0.5 丟掉）'],
+      ],
+    },
+    {
+      name: 'blending',
+      label: '混合',
+      kind: 'select',
+      default: 'normal',
+      options: [
+        ['normal', '一般'],
+        ['additive', '疊加（發光、全像）'],
+      ],
+    },
+    { name: 'roughness', label: '粗糙度', kind: 'number', default: 0.5, step: 0.05 },
+    { name: 'metalness', label: '金屬度', kind: 'number', default: 0, step: 0.05 },
   ],
   inputs: [
     { name: 'color', type: 'vec3', default: 0 },
     { name: 'alpha', type: 'float', default: 1 },
+    { name: 'emissive', type: 'vec3', default: 0 },
   ],
 });
 N({

@@ -188,13 +188,18 @@ export interface ShaderGraphDefinitionOptions {
   time?: ShaderNode;
 }
 
-/** 節點圖的 uniform：uMouse、uLightDir（全螢幕效果的 uAspect 由畫面大小算出）、每個貼圖節點的 uTex<編號> */
+type GraphUniform = THREE.Vector2 | THREE.Vector3 | THREE.Color | number | THREE.Texture;
+
+/**
+ * 節點圖的 uniform：uMouse、uLightDir（全螢幕效果的 uAspect 由畫面大小算出）、每個貼圖節點的 uTex<編號>、
+ * 參數節點（數值是數字；顏色是 THREE.Color，和 three.js 一樣是線性的值）
+ */
 function graphUniforms(
   file: ShaderGraphFile,
   compiled: CompiledShaderGraph,
   textures: ShaderGraphTextures,
-): Record<string, THREE.Vector2 | THREE.Vector3 | number | THREE.Texture> {
-  const uniforms: Record<string, THREE.Vector2 | THREE.Vector3 | number | THREE.Texture> = {
+): Record<string, GraphUniform> {
+  const uniforms: Record<string, GraphUniform> = {
     uMouse: new THREE.Vector2(0.5, 0.5),
     uLightDir: new THREE.Vector3(0.45, 0.75, 0.5).normalize(),
   };
@@ -203,13 +208,17 @@ function graphUniforms(
     const image = String(n?.params.image ?? '');
     uniforms[`uTex${id}`] = textures.get(image ? (file.assets?.[image] ?? '') : '', String(n?.params.wrap ?? 'repeat'));
   }
+  for (const p of compiled.params)
+    uniforms[p.name] = p.kind === 'color' ? new THREE.Color(String(p.value)) : Number(p.value);
   return uniforms;
 }
 
 /**
- * 節點圖檔轉成自訂著色器的定義（base: 'unlit'），交給 shaders.define 註冊。
- * uniform：uMouse（vec2，預設 0.5, 0.5）、uAspect（float，預設 1）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>；
- * 建立材質後可以修改，例如 material.uniforms.uLightDir.value.copy(sun.direction)。
+ * 節點圖檔轉成自訂著色器的定義，交給 shaders.define 註冊。
+ * Fragment Output 的光照是「不受光」時 base 是 'unlit'，「標準」時是 'standard'（color 是基本色、emissive 是發光）。
+ * uniform：uMouse（vec2，預設 0.5, 0.5）、uAspect（float，預設 1）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>、
+ * 每個參數節點（Parameter、Color Parameter）的名稱；
+ * 建立材質後可以修改，例如 material.uniforms.uLightDir.value.copy(sun.direction)、material.uniforms.progress.value = 0.5。
  * @example
  * shaders.define(shaderGraphDefinition(parseShaderGraphFile(json), 'lava'));
  */
@@ -226,17 +235,23 @@ export function shaderGraphDefinition(
   };
   const effect = compiled.kind === 'effect';
   if (effect) uniforms.uScreen = options.screen ?? textures.get('', 'clamp');
+  const lit = compiled.lighting === 'standard';
   return {
     name,
-    base: 'unlit',
+    base: lit ? 'standard' : 'unlit',
     uniforms,
     options: {
-      toneMapped: false, // 節點圖的顏色就是最後的顏色，不套用色調映射
+      // 不受光：節點圖的顏色就是最後的顏色，不套用色調映射；受光：和場景其他物件一樣
+      toneMapped: lit,
       transparent: compiled.transparent,
       depthWrite: !compiled.transparent,
       side: compiled.side,
+      blending: compiled.blending,
+      ...(compiled.alphaClip ? { alphaTest: 0.5 } : {}),
+      ...(lit ? { roughness: compiled.roughness, metalness: compiled.metalness } : {}),
     },
     position: compiled.position ? (c) => compiled.position!({ uniforms: c.uniforms, time: options.time }) : undefined,
+    emissive: compiled.emissive ? (c) => compiled.emissive!({ uniforms: c.uniforms, time: options.time }) : undefined,
     color: (c) => {
       // 全螢幕效果當成平面材質預覽：畫面 = screen 這張圖（畫面上的顏色）
       const env = effect
@@ -257,7 +272,8 @@ export function shaderGraphDefinition(
 /**
  * 全螢幕效果的節點圖（有 Effect Output）轉成效果的定義，交給 shaders.defineEffect 註冊，
  * 再用 shaders.createEffect 建立、postfx.addPass(effect, 'display') 加進後製（或寫在 postfx.settings.effects）。
- * uniform：uMouse（vec2）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>；寬高比由畫面大小算出。
+ * uniform：uMouse（vec2）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>、每個參數節點的名稱
+ * （effect.uniforms.名稱.value，或寫在後製設定 effects 的 uniforms）；寬高比由畫面大小算出。
  * @example
  * shaders.defineEffect(shaderGraphEffectDefinition(parseShaderGraphFile(json), 'crt'));
  * postfx.addPass(shaders.createEffect('crt'), 'display');

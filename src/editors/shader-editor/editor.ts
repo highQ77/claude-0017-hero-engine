@@ -242,7 +242,8 @@ function paramControl(n: ShaderGraphNode, p: NodeParam): HTMLElement {
     for (const [v, l] of p.options ?? []) ctl.append(new Option(l, v));
   } else {
     ctl = h('input');
-    ctl.type = p.kind === 'color' ? 'color' : 'number';
+    ctl.type = p.kind === 'color' ? 'color' : p.kind === 'text' ? 'text' : 'number';
+    if (p.kind === 'text') ctl.spellcheck = false;
     if (p.kind === 'number') ctl.step = String(p.step ?? 0.1);
   }
   ctl.value = String(n.params[p.name]);

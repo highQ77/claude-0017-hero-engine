@@ -213,8 +213,8 @@ function rainStatic(p: ShaderNode, t: ShaderNode, amount: ShaderNode): ShaderNod
   return cap(st.sub(pos), r).mul(step(n, amount));
 }
 
-/** 整片玻璃上的水（兩層大水滴 + 小水滴；大水滴滑過的地方小水滴被擦掉） */
-function rainHeight(uv: ShaderNode, t: ShaderNode, aspect: ShaderNode, scale: ShaderNode, amount: ShaderNode) {
+/** 整片玻璃上水的高度（兩層大水滴 + 小水滴；大水滴滑過的地方小水滴被擦掉）。節點圖的 Rain Drops 節點也用 */
+export function rainHeight(uv: ShaderNode, t: ShaderNode, aspect: ShaderNode, scale: ShaderNode, amount: ShaderNode) {
   const p = vec2(uv.x.mul(aspect), uv.y).mul(scale);
   const a = rainSliding(p, t, amount);
   const b = rainSliding(p.mul(1.45).add(vec2(0.37, 5)), t.mul(1.1).add(3), amount.mul(0.7));

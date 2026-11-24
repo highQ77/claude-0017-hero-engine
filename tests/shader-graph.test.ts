@@ -9,11 +9,12 @@ import {
   shaderGraphDefinition,
   shaderGraphEffectDefinition,
   shaderGraphKind,
+  shaderGraphParams,
   stringifyShaderGraphFile,
   upstreamHas,
   type ShaderGraph,
 } from '../src/shaders/graph';
-import { Texture } from 'three';
+import { Color, Texture } from 'three';
 import { ShaderLibrary, tsl } from '../src/shaders';
 import { EXAMPLES, buildExample, createNode } from '../src/editors/shader-editor/examples';
 
@@ -134,10 +135,10 @@ describe('節點圖檔', () => {
 
 describe('節點式著色器：全螢幕效果（Effect Output）', () => {
   const fileOf = (graph: ShaderGraph) => ({ format: 'hero-shader-graph' as const, version: 1 as const, graph });
-  const effectExamples = EXAMPLES.filter((e) => e.group === '全螢幕效果' || e.id === 'blankEffect');
+  const effectExamples = EXAMPLES.filter((e) => e.group.endsWith('全螢幕效果') || e.id === 'blankEffect');
 
   test('有 Effect Output 的圖是全螢幕效果', () => {
-    expect(effectExamples.length).toBeGreaterThanOrEqual(5);
+    expect(effectExamples.length).toBeGreaterThanOrEqual(9);
     for (const ex of effectExamples) expect(shaderGraphKind(buildExample(ex.id))).toBe('effect');
     expect(shaderGraphKind(buildExample('blank'))).toBe('material');
   });
@@ -198,5 +199,111 @@ describe('節點式著色器：全螢幕效果（Effect Output）', () => {
     expect(def.uniforms?.uScreen).toBe(screen);
     expect(def.base).toBe('unlit');
     expect(lib.createFromDefinition(def)).toBeTruthy();
+  });
+});
+
+describe('節點式著色器：參數、光照、混合（對照程式版的內建效果）', () => {
+  const fileOf = (graph: ShaderGraph) => ({ format: 'hero-shader-graph' as const, version: 1 as const, graph });
+
+  test('參數節點變成 uniform：數值是數字，顏色是線性的 THREE.Color；同名的只有一個', () => {
+    const g: ShaderGraph = { nodes: [], links: [], nextId: 1 };
+    const a = createNode(g, 'floatParam', 0, 0, { params: { name: 'progress', value: 0.25 } });
+    createNode(g, 'floatParam', 0, 100, { params: { name: 'progress', value: 9 } });
+    const c = createNode(g, 'colorParam', 0, 200, { params: { name: 'tint', color: '#ff8000' } });
+    const mul = createNode(g, 'multiply', 200, 0);
+    const out = createNode(g, 'output', 400, 0);
+    g.links.push(
+      { from: c.id, fromPort: 'rgb', to: mul.id, toPort: 'a' },
+      { from: a.id, fromPort: 'value', to: mul.id, toPort: 'b' },
+      { from: mul.id, fromPort: 'out', to: out.id, toPort: 'color' },
+    );
+    expect(shaderGraphParams(g)).toEqual([
+      { name: 'progress', kind: 'float', value: 0.25 },
+      { name: 'tint', kind: 'color', value: '#ff8000' },
+    ]);
+    const def = shaderGraphDefinition(fileOf(g), 'p', { textures: { get: () => null } as never });
+    expect(def.uniforms?.progress).toBe(0.25);
+    expect(def.uniforms?.tint).toBeInstanceOf(Color);
+    expect((def.uniforms!.tint as Color).getHexString()).toBe('ff8000');
+    const m = new ShaderLibrary().createFromDefinition(def, { progress: 0.5 });
+    expect(m.uniforms.progress.value).toBe(0.5);
+  });
+
+  test('參數名稱不能用時給出清楚的錯誤', () => {
+    const bad = (name: string, extra?: (g: ShaderGraph) => void) => {
+      const g: ShaderGraph = { nodes: [], links: [], nextId: 1 };
+      createNode(g, 'floatParam', 0, 0, { params: { name } });
+      extra?.(g);
+      createNode(g, 'output', 200, 0);
+      return () => compileShaderGraph(g);
+    };
+    expect(bad('')).toThrow(/英文字母開頭/);
+    expect(bad('1abc')).toThrow(/英文字母開頭/);
+    expect(bad('uMouse')).toThrow(/節點圖自己用的/);
+    expect(bad('uTex3')).toThrow(/節點圖自己用的/);
+    expect(bad('a', (g) => createNode(g, 'colorParam', 0, 100, { params: { name: 'a' } }))).toThrow(/同名的參數/);
+    expect(bad('ok')).not.toThrow();
+  });
+
+  test('效果的參數：effect.uniforms 拿得到，也能在建立時覆蓋', () => {
+    const def = shaderGraphEffectDefinition(fileOf(buildExample('presetRain')), 'rain');
+    expect(Object.keys(def.uniforms ?? {})).toEqual(
+      expect.arrayContaining(['amount', 'speed', 'scale', 'distortion', 'fog', 'darken']),
+    );
+    const lib = new ShaderLibrary().defineEffect(def);
+    const fx = lib.createEffect('rain', { amount: 0.3 });
+    expect(fx.uniforms.amount.value).toBe(0.3);
+    expect(fx.apply(tsl.vec4(0, 0, 0, 1))).toBeTruthy();
+  });
+
+  test('光照選標準：建立在標準材質上，有發光、裁切、粗糙度', () => {
+    const c = compileShaderGraph(buildExample('presetDissolve'));
+    expect(c.lighting).toBe('standard');
+    expect(c.alphaClip).toBe(true);
+    expect(c.transparent).toBe(false); // 裁切是不透明材質
+    expect(c.emissive).toBeTypeOf('function');
+    const def = shaderGraphDefinition(fileOf(buildExample('presetDissolve')), 'd', {
+      textures: { get: () => null } as never,
+    });
+    expect(def.base).toBe('standard');
+    expect(def.options).toMatchObject({ alphaTest: 0.5, roughness: 0.35, toneMapped: true });
+    const m = new ShaderLibrary().createFromDefinition(def) as unknown as {
+      type: string;
+      emissiveNode: unknown;
+      alphaTest: number;
+      uniforms: Record<string, unknown>;
+    };
+    expect(m.type).toBe('MeshStandardNodeMaterial');
+    expect(m.emissiveNode).toBeTruthy();
+    expect(m.alphaTest).toBe(0.5);
+    expect(Object.keys(m.uniforms)).toEqual(expect.arrayContaining(['progress', 'edgeWidth', 'edgeColor']));
+  });
+
+  test('疊加混合：半透明、不寫深度；沒有選光照時和以前一樣是 unlit', () => {
+    const def = shaderGraphDefinition(fileOf(buildExample('presetHologram')), 'h', {
+      textures: { get: () => null } as never,
+    });
+    expect(def.base).toBe('unlit');
+    expect(def.emissive).toBeUndefined();
+    expect(def.options).toMatchObject({ blending: 'additive', transparent: true, depthWrite: false, side: 'double' });
+    const m = new ShaderLibrary().createFromDefinition(def);
+    expect(m.blending).toBe(2); // THREE.AdditiveBlending
+    // 舊的圖（沒有新參數）：補上預設值，結果不變
+    const old = parseShaderGraphFile({ graph: { nodes: [{ id: 1, type: 'output', x: 0, y: 0 }], links: [] } });
+    const c = compileShaderGraph(old.graph);
+    expect([c.lighting, c.blending, c.alphaClip, c.transparent]).toEqual(['unlit', 'normal', false, false]);
+  });
+
+  test('Screen Blur、Rain Drops：材質裡用 Screen Blur 會給出清楚的錯誤；Rain Drops 材質也能用', () => {
+    const g: ShaderGraph = { nodes: [], links: [], nextId: 1 };
+    const blur = createNode(g, 'screenBlur', 0, 0);
+    const out = createNode(g, 'output', 200, 0);
+    g.links.push({ from: blur.id, fromPort: 'rgb', to: out.id, toPort: 'color' });
+    expect(() => compileShaderGraph(g)).toThrow(/Screen Blur 只能用在全螢幕效果/);
+    const r: ShaderGraph = { nodes: [], links: [], nextId: 1 };
+    const rain = createNode(r, 'rainDrops', 0, 0);
+    const o = createNode(r, 'output', 200, 0);
+    r.links.push({ from: rain.id, fromPort: 'height', to: o.id, toPort: 'color' });
+    expect(() => compileShaderGraph(r)).not.toThrow();
   });
 });

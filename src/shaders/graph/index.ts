@@ -22,7 +22,14 @@ export type {
   NodeBuiltin,
   CategoryId,
 } from './nodes';
-export { compileShaderGraph, analyzeShaderGraphTypes, upstreamHas, shaderGraphKind, GRAPH_UNIFORMS } from './compile';
+export {
+  compileShaderGraph,
+  analyzeShaderGraphTypes,
+  upstreamHas,
+  shaderGraphKind,
+  shaderGraphParams,
+  GRAPH_UNIFORMS,
+} from './compile';
 export type {
   ShaderGraph,
   ShaderGraphNode,
@@ -30,6 +37,8 @@ export type {
   CompiledShaderGraph,
   CompileOptions,
   ShaderGraphKind,
+  ShaderGraphParam,
+  ShaderGraphLighting,
   GraphEnv,
 } from './compile';
 export {

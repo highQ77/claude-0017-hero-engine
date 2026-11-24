@@ -671,31 +671,6 @@ export const EXAMPLES: ShaderExample[] = [
     },
   },
   {
-    id: 'fxPixelate',
-    group: '全螢幕效果',
-    label: '像素化',
-    desc: '把 UV 切成格子：floor(UV × 格數) ÷ 格數，再讀畫面（格數 = 畫面大小 ÷ 像素大小）',
-    mesh: 'quad',
-    build(N, L) {
-      const size = N('screenSize', 40, 220);
-      const cells = N('divide', 260, 220, { values: { b: 8 } });
-      L(size, 'size', cells, 'a');
-      const uv = N('uv', 260, 40);
-      const mul = N('multiply', 480, 80);
-      L(uv, 'uv', mul, 'a');
-      L(cells, 'out', mul, 'b');
-      const fl = N('floor', 700, 80);
-      L(mul, 'out', fl, 'x');
-      const div = N('divide', 920, 120);
-      L(fl, 'out', div, 'a');
-      L(cells, 'out', div, 'b');
-      const scr = N('screenColor', 1140, 120);
-      L(div, 'out', scr, 'uv');
-      const out = N('effectOutput', 1360, 120);
-      L(scr, 'rgb', out, 'color');
-    },
-  },
-  {
     id: 'fxScanlines',
     group: '全螢幕效果',
     label: 'CRT 掃描線',
@@ -723,6 +698,477 @@ export const EXAMPLES: ShaderExample[] = [
       L(remap, 'out', mul, 'b');
       const out = N('effectOutput', 1580, 200);
       L(mul, 'out', out, 'color');
+    },
+  },
+
+  /* ----------------------------- 內建材質（和程式版 ShaderPresets 一樣） ----------------------------- */
+  {
+    id: 'presetDissolve',
+    group: '內建材質',
+    label: '溶解',
+    mesh: 'torus',
+    desc:
+      '同 ShaderPresets.dissolve：3D 雜訊小於 progress 的地方丟掉（透明：裁切），邊緣發光（emissive）。標準光照，有陰影。' +
+      '遊戲裡改 material.uniforms.progress.value（0 完整、1 完全消失）',
+    build(N, L) {
+      const wp = N('worldPos', 40, 40);
+      const ns = N('floatParam', 40, 240, { params: { name: 'noiseScale', value: 2.5 } });
+      const scaled = N('multiply', 280, 80);
+      L(wp, 'pos', scaled, 'a');
+      L(ns, 'value', scaled, 'b');
+      const n = N('fbm3', 500, 80, { values: { scale: 1 } });
+      L(scaled, 'out', n, 'p');
+      const prog = N('floatParam', 40, 460, { params: { name: 'progress', value: 0.35 } });
+      const width = N('floatParam', 40, 680, { params: { name: 'edgeWidth', value: 0.08 } });
+      // 雜訊 ≥ progress 才留下
+      const keep = N('step', 760, 40);
+      L(prog, 'value', keep, 'edge');
+      L(n, 'out', keep, 'x');
+      // 邊緣：1 − smoothstep(progress, progress + edgeWidth, 雜訊)，progress 為 0 時沒有
+      const pw = N('add', 280, 600);
+      L(prog, 'value', pw, 'a');
+      L(width, 'value', pw, 'b');
+      const ss = N('smoothstep', 760, 300);
+      L(prog, 'value', ss, 'edge0');
+      L(pw, 'out', ss, 'edge1');
+      L(n, 'out', ss, 'x');
+      const inv = N('oneMinus', 980, 300);
+      L(ss, 'out', inv, 'x');
+      const on = N('step', 760, 600, { values: { edge: 0.001 } });
+      L(prog, 'value', on, 'x');
+      const glow = N('multiply', 1200, 380);
+      L(inv, 'out', glow, 'a');
+      L(on, 'out', glow, 'b');
+      const ec = N('colorParam', 1200, 640, { params: { name: 'edgeColor', color: '#ffb359' } });
+      const e1 = N('multiply', 1420, 440);
+      L(ec, 'rgb', e1, 'a');
+      L(glow, 'out', e1, 'b');
+      const e2 = N('multiply', 1640, 440, { values: { b: 6 } });
+      L(e1, 'out', e2, 'a');
+      const base = N('colorParam', 1640, 140, { params: { name: 'baseColor', color: '#ffa94f' } });
+      const out = N('output', 1880, 200, { params: { lighting: 'standard', alphaMode: 'clip', roughness: 0.35 } });
+      L(base, 'rgb', out, 'color');
+      L(keep, 'out', out, 'alpha');
+      L(e2, 'out', out, 'emissive');
+    },
+  },
+  {
+    id: 'presetHologram',
+    group: '內建材質',
+    label: '全像投影（疊加）',
+    mesh: 'torus',
+    desc: '同 ShaderPresets.hologram：Fresnel 邊緣光 × 移動的掃描線 × 閃爍，兩面、疊加混合。參數 tint、scanDensity、intensity',
+    build(N, L) {
+      const fr = N('fresnel', 40, 40, { values: { power: 2 } });
+      const rim = N('add', 280, 40, { values: { b: 0.15 } });
+      L(fr, 'out', rim, 'a');
+      const wp = N('worldPos', 40, 320);
+      const sp = N('split', 260, 320);
+      L(wp, 'pos', sp, 'v');
+      const dens = N('floatParam', 260, 580, { params: { name: 'scanDensity', value: 40 } });
+      const ys = N('multiply', 500, 320);
+      L(sp, 'y', ys, 'a');
+      L(dens, 'value', ys, 'b');
+      const t = N('time', 260, 800);
+      const t6 = N('multiply', 500, 580, { values: { b: 6 } });
+      L(t, 'time', t6, 'a');
+      const sub = N('subtract', 720, 380);
+      L(ys, 'out', sub, 'a');
+      L(t6, 'out', sub, 'b');
+      const sn = N('sin', 940, 380);
+      L(sub, 'out', sn, 'x');
+      const scan = N('remap', 1160, 380, { values: { inMin: -1, inMax: 1, outMin: 0.2, outMax: 1 } });
+      L(sn, 'out', scan, 'x');
+      // 閃爍：沿著時間的雜訊 0.85～1
+      const t12 = N('multiply', 500, 800, { values: { b: 12 } });
+      L(t, 'time', t12, 'a');
+      const cb = N('combine', 720, 760);
+      L(t12, 'out', cb, 'x');
+      const nz = N('noise', 940, 760, { values: { scale: 1 } });
+      L(cb, 'xy', nz, 'p');
+      const flick = N('remap', 1160, 760, { values: { inMin: 0, inMax: 1, outMin: 0.85, outMax: 1 } });
+      L(nz, 'out', flick, 'x');
+      const a1 = N('multiply', 1400, 120);
+      L(rim, 'out', a1, 'a');
+      L(scan, 'out', a1, 'b');
+      const a2 = N('multiply', 1620, 200);
+      L(a1, 'out', a2, 'a');
+      L(flick, 'out', a2, 'b');
+      const tint = N('colorParam', 1400, 440, { params: { name: 'tint', color: '#7ce7ff' } });
+      const inten = N('floatParam', 1400, 660, { params: { name: 'intensity', value: 1.5 } });
+      const col = N('multiply', 1620, 480);
+      L(tint, 'rgb', col, 'a');
+      L(inten, 'value', col, 'b');
+      const out = N('output', 1860, 300, { params: { side: 'double', blending: 'additive' } });
+      L(col, 'out', out, 'color');
+      L(a2, 'out', out, 'alpha');
+    },
+  },
+  {
+    id: 'presetWave',
+    group: '內建材質',
+    label: '波浪（頂點）',
+    mesh: 'sphere',
+    desc:
+      '同 ShaderPresets.wave：頂點沿物件座標 Z 隨時間起伏（法線不重算，適合旗子、水面等平面）。標準光照、兩面。' +
+      '參數 amplitude、frequency、speed、baseColor',
+    build(N, L) {
+      const op = N('objectPos', 40, 40);
+      const sp = N('split', 260, 40);
+      L(op, 'pos', sp, 'v');
+      const freq = N('floatParam', 40, 320, { params: { name: 'frequency', value: 3 } });
+      const speed = N('floatParam', 40, 520, { params: { name: 'speed', value: 2 } });
+      const amp = N('floatParam', 40, 720, { params: { name: 'amplitude', value: 0.15 } });
+      const time = N('time', 260, 520);
+      const t = N('multiply', 500, 520);
+      L(time, 'time', t, 'a');
+      L(speed, 'value', t, 'b');
+      // sin(x × frequency + t) × amplitude
+      const xf = N('multiply', 500, 40);
+      L(sp, 'x', xf, 'a');
+      L(freq, 'value', xf, 'b');
+      const a1 = N('add', 720, 40);
+      L(xf, 'out', a1, 'a');
+      L(t, 'out', a1, 'b');
+      const s1 = N('sin', 940, 40);
+      L(a1, 'out', s1, 'x');
+      const w1 = N('multiply', 1160, 40);
+      L(s1, 'out', w1, 'a');
+      L(amp, 'value', w1, 'b');
+      // cos(y × frequency × 0.7 + t × 1.3) × amplitude × 0.5
+      const yf = N('multiply', 500, 280);
+      L(sp, 'y', yf, 'a');
+      L(freq, 'value', yf, 'b');
+      const yf2 = N('multiply', 720, 280, { values: { b: 0.7 } });
+      L(yf, 'out', yf2, 'a');
+      const t13 = N('multiply', 720, 520, { values: { b: 1.3 } });
+      L(t, 'out', t13, 'a');
+      const a2 = N('add', 940, 340);
+      L(yf2, 'out', a2, 'a');
+      L(t13, 'out', a2, 'b');
+      const c2 = N('cos', 1160, 340);
+      L(a2, 'out', c2, 'x');
+      const w2 = N('multiply', 1380, 340);
+      L(c2, 'out', w2, 'a');
+      L(amp, 'value', w2, 'b');
+      const w2h = N('multiply', 1600, 340, { values: { b: 0.5 } });
+      L(w2, 'out', w2h, 'a');
+      const dz = N('add', 1820, 140);
+      L(w1, 'out', dz, 'a');
+      L(w2h, 'out', dz, 'b');
+      const off = N('combine', 2040, 140);
+      L(dz, 'out', off, 'z');
+      const vout = N('vertexOutput', 2280, 140);
+      L(off, 'xyz', vout, 'offset');
+      const base = N('colorParam', 2040, 520, { params: { name: 'baseColor', color: '#4cc9f0' } });
+      const out = N('output', 2280, 480, { params: { lighting: 'standard', side: 'double', roughness: 0.3 } });
+      L(base, 'rgb', out, 'color');
+    },
+  },
+  {
+    id: 'presetPulseRing',
+    group: '內建材質',
+    label: '脈衝光環',
+    mesh: 'plane',
+    desc: '同 official-demo-000-start 的 pulseRing：往外擴散的光環條紋，外緣淡出，疊加混合。參數 ringColor、speed、rings',
+    build(N, L) {
+      const cuv = N('centeredUV', 40, 40);
+      const r = N('length', 260, 40);
+      L(cuv, 'uv', r, 'v');
+      const rings = N('floatParam', 40, 240, { params: { name: 'rings', value: 3 } });
+      const speed = N('floatParam', 40, 440, { params: { name: 'speed', value: 0.8 } });
+      const time = N('time', 260, 440);
+      const rr = N('multiply', 500, 80);
+      L(r, 'out', rr, 'a');
+      L(rings, 'value', rr, 'b');
+      const ts = N('multiply', 500, 400);
+      L(time, 'time', ts, 'a');
+      L(speed, 'value', ts, 'b');
+      const sub = N('subtract', 720, 180);
+      L(rr, 'out', sub, 'a');
+      L(ts, 'out', sub, 'b');
+      const wave = N('fract', 940, 180);
+      L(sub, 'out', wave, 'x');
+      const in1 = N('smoothstep', 1160, 40, { values: { edge0: 0, edge1: 0.15 } });
+      L(wave, 'out', in1, 'x');
+      const in2 = N('smoothstep', 1160, 300, { values: { edge0: 0.15, edge1: 0.5 } });
+      L(wave, 'out', in2, 'x');
+      const inv = N('oneMinus', 1380, 300);
+      L(in2, 'out', inv, 'x');
+      const band = N('multiply', 1600, 140);
+      L(in1, 'out', band, 'a');
+      L(inv, 'out', band, 'b');
+      const fadeS = N('smoothstep', 1160, 560, { values: { edge0: 0.6, edge1: 1 } });
+      L(r, 'out', fadeS, 'x');
+      const fade = N('oneMinus', 1380, 560);
+      L(fadeS, 'out', fade, 'x');
+      const alpha = N('multiply', 1820, 260);
+      L(band, 'out', alpha, 'a');
+      L(fade, 'out', alpha, 'b');
+      const col = N('colorParam', 1600, 520, { params: { name: 'ringColor', color: '#ffc46b' } });
+      const bright = N('multiply', 1820, 520, { values: { b: 3 } });
+      L(col, 'rgb', bright, 'a');
+      const out = N('output', 2060, 340, { params: { blending: 'additive' } });
+      L(bright, 'out', out, 'color');
+      L(alpha, 'out', out, 'alpha');
+    },
+  },
+  {
+    id: 'presetStripes',
+    group: '內建材質',
+    label: '條紋',
+    mesh: 'sphere',
+    desc: '同 official-demo-005-postfx-shader 的 stripes：UV.y × count + 時間 × speed 取小數，step 切成兩色',
+    build(N, L) {
+      const uv = N('uv', 40, 40);
+      const sp = N('split', 260, 40);
+      L(uv, 'uv', sp, 'v');
+      const count = N('floatParam', 40, 280, { params: { name: 'count', value: 12 } });
+      const speed = N('floatParam', 40, 480, { params: { name: 'speed', value: 0.5 } });
+      const time = N('time', 260, 480);
+      const yc = N('multiply', 500, 80);
+      L(sp, 'y', yc, 'a');
+      L(count, 'value', yc, 'b');
+      const ts = N('multiply', 500, 400);
+      L(time, 'time', ts, 'a');
+      L(speed, 'value', ts, 'b');
+      const add = N('add', 720, 180);
+      L(yc, 'out', add, 'a');
+      L(ts, 'out', add, 'b');
+      const fr = N('fract', 940, 180);
+      L(add, 'out', fr, 'x');
+      const st = N('step', 1160, 180, { values: { edge: 0.5 } });
+      L(fr, 'out', st, 'x');
+      const ca = N('colorParam', 1160, 400, { params: { name: 'colorA', color: '#ff6b6b' } });
+      const cb = N('colorParam', 1160, 600, { params: { name: 'colorB', color: '#ffd166' } });
+      const mix = N('mix', 1400, 320);
+      L(ca, 'rgb', mix, 'a');
+      L(cb, 'rgb', mix, 'b');
+      L(st, 'out', mix, 't');
+      const out = N('output', 1640, 320);
+      L(mix, 'out', out, 'color');
+    },
+  },
+
+  /* ----------------------------- 內建全螢幕效果（和程式版 EffectPresets 一樣） ----------------------------- */
+  {
+    id: 'presetChromatic',
+    group: '內建全螢幕效果',
+    label: '色差',
+    mesh: 'quad',
+    desc: '同 EffectPresets.chromaticAberration：紅、藍通道往外偏移，越靠邊越明顯。參數 amount',
+    build(N, L) {
+      const uv = N('uv', 40, 40);
+      const c = N('subtract', 260, 40, { values: { b: 0.5 } });
+      L(uv, 'uv', c, 'a');
+      const amount = N('floatParam', 40, 260, { params: { name: 'amount', value: 0.004 } });
+      const m1 = N('multiply', 500, 80);
+      L(c, 'out', m1, 'a');
+      L(amount, 'value', m1, 'b');
+      const off = N('multiply', 720, 80, { values: { b: 2 } });
+      L(m1, 'out', off, 'a');
+      const uvR = N('add', 940, 40);
+      L(uv, 'uv', uvR, 'a');
+      L(off, 'out', uvR, 'b');
+      const uvB = N('subtract', 940, 300);
+      L(uv, 'uv', uvB, 'a');
+      L(off, 'out', uvB, 'b');
+      const sR = N('screenColor', 1160, 40);
+      L(uvR, 'out', sR, 'uv');
+      const sG = N('screenColor', 1160, 300);
+      const sB = N('screenColor', 1160, 560);
+      L(uvB, 'out', sB, 'uv');
+      const r = N('split', 1400, 40);
+      L(sR, 'rgba', r, 'v');
+      const g = N('split', 1400, 300);
+      L(sG, 'rgba', g, 'v');
+      const b = N('split', 1400, 560);
+      L(sB, 'rgba', b, 'v');
+      const cmb = N('combine', 1640, 300);
+      L(r, 'x', cmb, 'x');
+      L(g, 'y', cmb, 'y');
+      L(b, 'z', cmb, 'z');
+      const out = N('effectOutput', 1880, 300);
+      L(cmb, 'xyz', out, 'color');
+      L(g, 'w', out, 'alpha');
+    },
+  },
+  {
+    id: 'fxPixelate',
+    group: '內建全螢幕效果',
+    label: '像素化',
+    mesh: 'quad',
+    desc: '同 EffectPresets.pixelate：格子大小 = pixelSize ÷ 畫面大小，UV 取到格子中心再讀畫面。參數 pixelSize（像素）',
+    build(N, L) {
+      const size = N('screenSize', 40, 240);
+      const px = N('floatParam', 40, 420, { params: { name: 'pixelSize', value: 6 } });
+      const cell = N('divide', 260, 320);
+      L(px, 'value', cell, 'a');
+      L(size, 'size', cell, 'b');
+      const uv = N('uv', 260, 40);
+      const div = N('divide', 500, 80);
+      L(uv, 'uv', div, 'a');
+      L(cell, 'out', div, 'b');
+      const fl = N('floor', 720, 80);
+      L(div, 'out', fl, 'x');
+      const half = N('add', 940, 80, { values: { b: 0.5 } });
+      L(fl, 'out', half, 'a');
+      const back = N('multiply', 1160, 120);
+      L(half, 'out', back, 'a');
+      L(cell, 'out', back, 'b');
+      const scr = N('screenColor', 1380, 120);
+      L(back, 'out', scr, 'uv');
+      const out = N('effectOutput', 1600, 120);
+      L(scr, 'rgb', out, 'color');
+    },
+  },
+  {
+    id: 'presetColorGrade',
+    group: '內建全螢幕效果',
+    label: '調色 + 暗角',
+    mesh: 'quad',
+    desc:
+      '同後製的調色（postfx.settings.color、vignette）：亮度 → 對比 → 飽和度 → 色調，再加暗角。' +
+      '參數 brightness、contrast、saturation、tint、vignetteOffset、vignetteDarkness',
+    build(N, L) {
+      const scr = N('screenColor', 40, 40);
+      const bright = N('floatParam', 40, 280, { params: { name: 'brightness', value: 0 } });
+      const contrast = N('floatParam', 40, 480, { params: { name: 'contrast', value: 1.1 } });
+      const sat = N('floatParam', 40, 680, { params: { name: 'saturation', value: 1.2 } });
+      const a1 = N('add', 280, 40);
+      L(scr, 'rgb', a1, 'a');
+      L(bright, 'value', a1, 'b');
+      const c1 = N('subtract', 500, 40, { values: { b: 0.5 } });
+      L(a1, 'out', c1, 'a');
+      const c2 = N('multiply', 720, 40);
+      L(c1, 'out', c2, 'a');
+      L(contrast, 'value', c2, 'b');
+      const c3 = N('add', 940, 40, { values: { b: 0.5 } });
+      L(c2, 'out', c3, 'a');
+      const luma = N('grayscale', 1160, 280);
+      L(c3, 'out', luma, 'rgb');
+      const sm = N('mix', 1400, 120);
+      L(luma, 'out', sm, 'a');
+      L(c3, 'out', sm, 'b');
+      L(sat, 'value', sm, 't');
+      const tint = N('colorParam', 1400, 440, { params: { name: 'tint', color: '#ffffff' } });
+      const tinted = N('multiply', 1620, 160);
+      L(sm, 'out', tinted, 'a');
+      L(tint, 'rgb', tinted, 'b');
+      // 暗角：離中心越遠越接近 1 − darkness
+      const uv = N('uv', 940, 680);
+      const off = N('floatParam', 940, 860, { params: { name: 'vignetteOffset', value: 1 } });
+      const dark = N('floatParam', 1400, 860, { params: { name: 'vignetteDarkness', value: 1 } });
+      const d0 = N('subtract', 1160, 680, { values: { b: 0.5 } });
+      L(uv, 'uv', d0, 'a');
+      const d = N('multiply', 1400, 660);
+      L(d0, 'out', d, 'a');
+      L(off, 'value', d, 'b');
+      const dd = N('dot', 1620, 660);
+      L(d, 'out', dd, 'a');
+      L(d, 'out', dd, 'b');
+      const edge = N('oneMinus', 1620, 880);
+      L(dark, 'value', edge, 'x');
+      const vig = N('mix', 1860, 380);
+      L(tinted, 'out', vig, 'a');
+      L(edge, 'out', vig, 'b');
+      L(dd, 'out', vig, 't');
+      const cl = N('saturate', 2080, 380);
+      L(vig, 'out', cl, 'x');
+      const out = N('effectOutput', 2300, 380);
+      L(cl, 'out', out, 'color');
+    },
+  },
+  {
+    id: 'presetRain',
+    group: '內建全螢幕效果',
+    label: '雨落窗',
+    mesh: 'quad',
+    desc:
+      '同 EffectPresets.rainOnWindow：隔著淋雨、起霧的玻璃看出去。Rain Drops 算出水滴，Screen Blur 是起霧的玻璃，' +
+      '水滴的斜率偏移畫面做出透鏡，邊緣暗一圈、加上反光。參數 amount、speed、scale、distortion、fog、darken',
+    build(N, L) {
+      const time = N('time', 40, 40);
+      const speed = N('floatParam', 40, 200, { params: { name: 'speed', value: 1 } });
+      const amount = N('floatParam', 40, 400, { params: { name: 'amount', value: 0.7 } });
+      const scale = N('floatParam', 40, 600, { params: { name: 'scale', value: 5 } });
+      const t = N('multiply', 280, 80);
+      L(time, 'time', t, 'a');
+      L(speed, 'value', t, 'b');
+      const rain = N('rainDrops', 500, 260);
+      L(t, 'out', rain, 'time');
+      L(amount, 'value', rain, 'amount');
+      L(scale, 'value', rain, 'scale');
+      // 1 = 在水滴上
+      const wet = N('smoothstep', 780, 40, { values: { edge0: 0, edge1: 0.06 } });
+      L(rain, 'height', wet, 'x');
+      // 起霧的玻璃：模糊、稍微變暗
+      const fog = N('floatParam', 500, 700, { params: { name: 'fog', value: 5 } });
+      const darken = N('floatParam', 500, 900, { params: { name: 'darken', value: 0.08 } });
+      const blur = N('screenBlur', 780, 660);
+      L(fog, 'value', blur, 'radius');
+      const keep = N('oneMinus', 780, 960);
+      L(darken, 'value', keep, 'x');
+      const misty = N('multiply', 1020, 760);
+      L(blur, 'rgb', misty, 'a');
+      L(keep, 'out', misty, 'b');
+      // 水滴像小凸透鏡：依斜率偏移畫面
+      const dist = N('floatParam', 780, 440, { params: { name: 'distortion', value: 0.6 } });
+      const b1 = N('multiply', 1020, 300);
+      L(rain, 'slope', b1, 'a');
+      L(dist, 'value', b1, 'b');
+      const b2 = N('multiply', 1240, 300, { values: { b: 0.003 } });
+      L(b1, 'out', b2, 'a');
+      const bend = N('clamp', 1460, 300, { values: { min: -0.06, max: 0.06 } });
+      L(b2, 'out', bend, 'x');
+      const uv = N('uv', 1460, 560);
+      const uvb = N('add', 1680, 360);
+      L(uv, 'uv', uvb, 'a');
+      L(bend, 'out', uvb, 'b');
+      const uvc = N('clamp', 1900, 360);
+      L(uvb, 'out', uvc, 'x');
+      const through = N('screenColor', 2120, 360);
+      L(uvc, 'out', through, 'uv');
+      const mixed = N('mix', 2360, 560);
+      L(misty, 'out', mixed, 'a');
+      L(through, 'rgb', mixed, 'b');
+      L(wet, 'out', mixed, 't');
+      // 邊緣暗一圈
+      const hs = N('smoothstep', 1020, 40, { values: { edge0: 0, edge1: 0.4 } });
+      L(rain, 'height', hs, 'x');
+      const hinv = N('oneMinus', 1240, 40);
+      L(hs, 'out', hinv, 'x');
+      const rim = N('multiply', 1460, 40);
+      L(wet, 'out', rim, 'a');
+      L(hinv, 'out', rim, 'b');
+      const rim2 = N('multiply', 1680, 40, { values: { b: 0.45 } });
+      L(rim, 'out', rim2, 'a');
+      const rimK = N('oneMinus', 1900, 40);
+      L(rim2, 'out', rimK, 'x');
+      const shaded = N('multiply', 2600, 300);
+      L(mixed, 'out', shaded, 'a');
+      L(rimK, 'out', shaded, 'b');
+      // 左上方光源在水滴上的小亮點
+      const light = N('combine', 1020, 1100, { values: { x: -0.45, y: 0.6, z: 0.9 } });
+      const ln = N('normalize', 1240, 1100);
+      L(light, 'xyz', ln, 'x');
+      const dt = N('dot', 1460, 1000);
+      L(rain, 'normal', dt, 'a');
+      L(ln, 'out', dt, 'b');
+      const mx = N('maximum', 1680, 1000, { values: { b: 0 } });
+      L(dt, 'out', mx, 'a');
+      const pw = N('power', 1900, 1000, { values: { b: 28 } });
+      L(mx, 'out', pw, 'a');
+      const g1 = N('multiply', 2120, 1000);
+      L(pw, 'out', g1, 'a');
+      L(wet, 'out', g1, 'b');
+      const g2 = N('multiply', 2360, 1000, { values: { b: 0.7 } });
+      L(g1, 'out', g2, 'a');
+      const fin = N('add', 2840, 500);
+      L(shaded, 'out', fin, 'a');
+      L(g2, 'out', fin, 'b');
+      const out = N('effectOutput', 3080, 500);
+      L(fin, 'out', out, 'color');
     },
   },
 

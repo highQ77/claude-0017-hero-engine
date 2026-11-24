@@ -6,7 +6,9 @@
  *   不做轉換（效果加在色調映射之後）；3D 才有的值（世界座標、法線）是固定的預設值
  * - Fragment Output 決定像素顏色；Vertex Output（可以沒有）決定頂點位移
  * - 節點圖的顏色是畫面上看到的顏色（sRGB）：材質輸出前轉成線性，經過引擎的色彩轉換後和預覽、設計時一樣
- * - 節點圖自己的 uniform：uMouse（vec2）、uAspect（float，材質）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>
+ * - 節點圖自己的 uniform：uMouse（vec2）、uAspect（float，材質）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>，
+ *   以及參數節點（Parameter、Color Parameter）的名稱
+ * - Fragment Output 的「光照」選標準時建立在標準材質上（受燈光、陰影影響），color 是基本色、emissive 是發光
  */
 import { type GraphType, NODE_DEFS, type NodeBuiltin, type NodeDef, convertType, widerType } from './nodes';
 import { type ShaderNode, tsl } from '../tsl';
@@ -93,6 +95,19 @@ export interface GraphEnv {
   time?: ShaderNode;
 }
 
+/** 參數節點（Parameter、Color Parameter）：變成材質或效果的 uniform */
+export interface ShaderGraphParam {
+  /** uniform 名稱 */
+  name: string;
+  /** float：數字；color：顏色（THREE.Color） */
+  kind: 'float' | 'color';
+  /** 預設值：數字，或 '#rrggbb' */
+  value: number | string;
+}
+
+/** Fragment Output 的光照：unlit（顏色就是最後的顏色）、standard（受燈光影響） */
+export type ShaderGraphLighting = 'unlit' | 'standard';
+
 /** 編譯結果（shaderGraphDefinition、shaderGraphEffectDefinition 用它組出定義） */
 export interface CompiledShaderGraph {
   /** 材質或全螢幕效果 */
@@ -103,6 +118,18 @@ export interface CompiledShaderGraph {
   transparent: boolean;
   /** 畫哪一面 */
   side: 'front' | 'back' | 'double';
+  /** 光照（全螢幕效果、只預覽一個節點時是 unlit） */
+  lighting: ShaderGraphLighting;
+  /** 混合方式 */
+  blending: 'normal' | 'additive';
+  /** alpha 小於 0.5 的像素丟掉（Fragment Output 的透明選「裁切」） */
+  alphaClip: boolean;
+  /** 粗糙度（光照是 standard 時用） */
+  roughness: number;
+  /** 金屬度（光照是 standard 時用） */
+  metalness: number;
+  /** 參數節點（每個名稱一個） */
+  params: ShaderGraphParam[];
   /**
    * 組出顏色（vec4）：材質是線性的顏色（已從 sRGB 轉換）；全螢幕效果是畫面上的顏色。
    * 只預覽一個節點（target）時是那個輸出的顏色（sRGB，還沒轉換）
@@ -110,6 +137,8 @@ export interface CompiledShaderGraph {
   color(env: GraphEnv): ShaderNode;
   /** 組出頂點位置（物件座標，vec3）；沒有 Vertex Output 時是 null */
   position: ((env: GraphEnv) => ShaderNode) | null;
+  /** 組出發光（線性的 vec3）；光照是 unlit 或 emissive 沒有連接、是 0 時是 null */
+  emissive: ((env: GraphEnv) => ShaderNode) | null;
 }
 
 /** compileShaderGraph 的選項 */
@@ -120,6 +149,35 @@ export interface CompileOptions {
 
 /** 節點圖自己的 uniform 名稱（貼圖另外是 uTex<編號>） */
 export const GRAPH_UNIFORMS = ['uMouse', 'uAspect', 'uLightDir'] as const;
+
+/** 參數節點的種類 */
+const PARAM_NODES: Record<string, ShaderGraphParam['kind']> = { floatParam: 'float', colorParam: 'color' };
+
+/**
+ * 圖裡所有參數節點（同名的只算一個，用第一個的預設值）。
+ * 名稱不能用的時候（空白、不是英文字母開頭、和節點圖自己的 uniform 重複、同名但種類不同）丟出錯誤
+ */
+export function shaderGraphParams(graph: ShaderGraph): ShaderGraphParam[] {
+  const out = new Map<string, ShaderGraphParam>();
+  for (const n of graph.nodes) {
+    const kind = PARAM_NODES[n.type];
+    if (!kind) continue;
+    const name = String(n.params?.name ?? '').trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
+      throw new Error(`參數名稱「${name}」不能用：要是英文字母開頭，只有英文字母、數字、底線`);
+    if ((GRAPH_UNIFORMS as readonly string[]).includes(name) || name === 'uScreen' || /^uTex\d+$/.test(name))
+      throw new Error(`參數名稱「${name}」是節點圖自己用的，請換一個`);
+    const prev = out.get(name);
+    if (prev && prev.kind !== kind) throw new Error(`參數「${name}」同時是數值和顏色：同名的參數要是同一種`);
+    if (!prev)
+      out.set(name, {
+        name,
+        kind,
+        value: kind === 'color' ? String(n.params?.color ?? '#ffffff') : Number(n.params?.value ?? 0) || 0,
+      });
+  }
+  return [...out.values()];
+}
 
 interface Value {
   node: ShaderNode;
@@ -134,6 +192,7 @@ function stubEnv(graph: ShaderGraph, mode: ShaderGraphKind): GraphEnv {
     uLightDir: uniform(vec3(0, 1, 0)),
   };
   for (const n of graph.nodes) if (n.type === 'texture') uniforms[`uTex${n.id}`] = tsl.texture(null);
+  for (const p of shaderGraphParams(graph)) uniforms[p.name] = p.kind === 'color' ? uniform(vec3(1)) : uniform(0);
   return mode === 'effect' ? { uniforms, uv: uv(), screen: () => vec4(0) } : { uniforms };
 }
 
@@ -247,6 +306,11 @@ function makeCompiler(
           throw new Error(`${def.title} 只能用在全螢幕效果（圖裡要有 Effect Output，不是 Fragment Output）`);
         return env.screen(at);
       },
+      param: (name: string) => {
+        const u = env.uniforms[name];
+        if (!u) throw new Error(`找不到參數「${name}」的 uniform`);
+        return u;
+      },
     };
     const res = def.tsl ? def.tsl(ins, node.params ?? {}, T, ctx) : {};
 
@@ -269,6 +333,13 @@ function makeCompiler(
 
 /** sRGB（畫面上的顏色）→ 線性：引擎最後會把線性轉回 sRGB */
 const toLinear = (rgb: ShaderNode) => sRGBTransferEOTF(max(rgb, vec3(0)));
+
+/** 發光的顏色 → 線性：超過 1 的部分當成亮度倍數（顏色 × 6 就是 6 倍亮，不會因為 sRGB 曲線變成幾十倍） */
+const hdrToLinear = (rgb: ShaderNode) => {
+  const c = max(rgb, vec3(0));
+  const m = max(max(c.x, c.y), max(c.z, 1));
+  return toLinear(c.div(m)).mul(m);
+};
 
 /**
  * 節點圖編譯成組節點的函式。圖有錯誤（循環連線、沒有 Fragment Output、未知節點）時丟出錯誤。
@@ -299,7 +370,11 @@ export function compileShaderGraph(graph: ShaderGraph, options: CompileOptions =
     }
     c.visit(out!);
     const i = c.inputNodes.get(out!.id)!;
-    return { c, color: kind === 'effect' ? vec4(i.color, i.alpha) : vec4(toLinear(i.color), i.alpha) };
+    return {
+      c,
+      color: kind === 'effect' ? vec4(i.color, i.alpha) : vec4(toLinear(i.color), i.alpha),
+      emissive: kind === 'effect' ? null : hdrToLinear(i.emissive),
+    };
   };
   const vertex = (env: GraphEnv) => {
     const c = makeCompiler(graph, 'vertex', 'material', env);
@@ -316,13 +391,27 @@ export function compileShaderGraph(graph: ShaderGraph, options: CompileOptions =
   const alphaLinked = !!out && f.c.linked.has(`${out.id}:alpha`);
   const alphaValue = Number(out?.values?.alpha ?? 1);
   const side = String(out?.params?.side ?? 'front');
+  const material = !target && kind === 'material';
+  const lighting: ShaderGraphLighting = material && out?.params?.lighting === 'standard' ? 'standard' : 'unlit';
+  const alphaClip = material && out?.params?.alphaMode === 'clip';
+  const blending = material && out?.params?.blending === 'additive' ? 'additive' : 'normal';
+  const emissiveValue = Number(out?.values?.emissive ?? 0);
+  const hasEmissive = lighting === 'standard' && (f.c.linked.has(`${out!.id}:emissive`) || emissiveValue !== 0);
+  const finite = (v: unknown, d: number) => (Number.isFinite(Number(v)) ? Number(v) : d);
   return {
     kind,
     textures: [...textures],
-    transparent: !target && kind === 'material' && (alphaLinked || alphaValue < 1),
+    transparent: material && ((!alphaClip && (alphaLinked || alphaValue < 1)) || blending === 'additive'),
     side: side === 'double' || side === 'back' ? side : 'front',
+    lighting,
+    blending,
+    alphaClip,
+    roughness: finite(out?.params?.roughness, 0.5),
+    metalness: finite(out?.params?.metalness, 0),
+    params: shaderGraphParams(graph),
     color: (env) => fragment(env).color,
     position: vout ? (env) => vertex(env).position : null,
+    emissive: hasEmissive ? (env) => fragment(env).emissive : null,
   };
 }
 

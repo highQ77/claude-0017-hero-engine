@@ -45,8 +45,35 @@ describe('材質描述 { shaderGraph }', () => {
     expect(m.colorNode).toBeTruthy(); // 顏色由節點圖決定
     expect(m.positionNode).toBeTruthy(); // 熔岩有頂點位移（Vertex Output）
     expect(Object.keys(m.uniforms ?? {})).toEqual(expect.arrayContaining(['uMouse', 'uLightDir', 'uAspect']));
+    expect((m as unknown as { lights: boolean }).lights).toBe(false); // 不受光：顏色就是最後的顏色
     engine.removePlugin('shaders');
     expect(() => createMaterial({ shaderGraph: 'shaders/lava.shader.json' })).toThrow(/ShaderPlugin/);
+  });
+
+  test('光照選標準的節點圖：材質受燈光影響，有發光、裁切、參數', async () => {
+    const text = stringifyShaderGraphFile({
+      format: 'hero-shader-graph',
+      version: 1,
+      graph: buildExample('presetDissolve'),
+    });
+    vi.stubGlobal('fetch', async () => new Response(text));
+    const engine = new Engine({ scheduler: fakeScheduler().scheduler, pauseOnHidden: false });
+    engine.use(new EcsPlugin()).use(new ShaderPlugin());
+    const m = createMaterial({ shaderGraph: 'shaders/dissolve.shader.json' }) as THREE.Material & {
+      lights: boolean;
+      emissiveNode: unknown;
+      roughness: number;
+      uniforms?: Record<string, { value: unknown }>;
+    };
+    await flush();
+    await flush();
+    expect(m.visible).toBe(true);
+    expect(m.lights).toBe(true);
+    expect(m.emissiveNode).toBeTruthy();
+    expect(m.alphaTest).toBe(0.5);
+    expect(m.roughness).toBe(0.35);
+    expect(m.uniforms?.progress.value).toBe(0.35);
+    engine.removePlugin('shaders');
   });
 
   test('場景檔：XML 寫成 <material shaderGraph="…"/>，存讀一樣', () => {

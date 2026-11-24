@@ -158,6 +158,10 @@ export class MainPreview {
     this.mesh = new THREE.Mesh(geometry('sphere'));
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
+    // 燈光：只有 Fragment Output 選「標準」光照的材質看得到；方向和節點圖的 uLightDir 預設值一樣
+    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    sun.position.set(0.45, 0.75, 0.5);
+    this.scene.add(sun, new THREE.HemisphereLight(0xdde8ff, 0x3a3226, 1.1));
     this.ortho.position.z = 1;
   }
 

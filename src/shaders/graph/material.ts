@@ -7,7 +7,7 @@
  * - 開發時在著色器編輯器存檔：開著的遊戲、3D 場景編輯器裡用到那個檔案的材質會自動更新
  */
 import type * as THREE from 'three';
-import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { createLogger } from '../../core/Logger';
 import type { ShaderLibrary } from '../ShaderLibrary';
 import { loadShaderGraph } from './file';
@@ -23,8 +23,11 @@ interface GraphMaterialState {
   version: number;
 }
 
-/** 節點圖材質（節點材質；載入完成前不顯示） */
-type GraphMaterial = MeshBasicNodeMaterial & { uniforms?: Record<string, unknown> };
+/**
+ * 節點圖材質（節點材質；載入完成前不顯示）。
+ * 一律是標準材質：節點圖不受光時關掉 lights（和 unlit 一樣，顏色就是最後的顏色），受光時打開
+ */
+type GraphMaterial = MeshStandardNodeMaterial & { uniforms?: Record<string, unknown> };
 
 const states = new WeakMap<GraphMaterial, GraphMaterialState>();
 /** 網址 → 用到它的材質（存檔後重新載入） */
@@ -41,10 +44,17 @@ async function fill(material: GraphMaterial): Promise<void> {
     const def = await loadShaderGraph(st.url);
     if (version !== st.version || !states.has(material)) return; // 已經有更新的載入，或材質已釋放
     const inner = st.library.createFromDefinition(def) as unknown as GraphMaterial;
+    const lit = def.base !== 'unlit';
     // 換成節點圖的節點（uniform 節點是同一份：改 material.uniforms 一樣有效）
     material.positionNode = inner.positionNode;
     material.colorNode = inner.colorNode;
+    material.emissiveNode = lit ? inner.emissiveNode : null;
     material.outputNode = inner.outputNode;
+    material.lights = lit;
+    material.roughness = lit ? inner.roughness : 1;
+    material.metalness = lit ? inner.metalness : 0;
+    material.blending = inner.blending;
+    material.alphaTest = inner.alphaTest;
     material.uniforms = inner.uniforms;
     material.transparent = inner.transparent;
     material.depthWrite = inner.depthWrite;
@@ -65,7 +75,8 @@ async function fill(material: GraphMaterial): Promise<void> {
  */
 export function shaderGraphMaterial(library: ShaderLibrary, url: string): THREE.Material {
   const path = normalize(url);
-  const material: GraphMaterial = new MeshBasicNodeMaterial({ visible: false });
+  const material: GraphMaterial = new MeshStandardNodeMaterial({ visible: false });
+  material.lights = false;
   Object.assign(material, { shaderName: path });
   states.set(material, { library, url: path, inner: null, version: 0 });
   let set = byUrl.get(path);
