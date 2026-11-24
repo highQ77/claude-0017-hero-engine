@@ -32,11 +32,17 @@ export class AssetPlugin implements Plugin {
   /** 取消登記場景檔存讀規則 */
   private offCodecs: () => void = () => {};
 
+  /**
+   * @param options 網址前綴（baseUrl）、Draco 解碼器路徑、是否不註冊預設的載入器
+   */
   constructor(options: AssetPluginOptions = {}) {
     this.assets = new AssetManager(options);
     if (!options.noDefaultLoaders) registerDefaultLoaders(this.assets, options);
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     this.ecs = ecs;

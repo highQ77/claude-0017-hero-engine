@@ -74,7 +74,10 @@ const MAX_LAYERS = 32;
 export class LayerNames {
   private readonly bits = new Map<string, number>([['default', 0]]);
 
-  /** 圖層的編號（第一次用到時配一個新的；超過 32 個時丟出錯誤） */
+  /**
+   * 圖層的編號（第一次用到時配一個新的；超過 32 個時丟出錯誤）
+   * @param name 圖層名稱
+   */
   bit(name: string): number {
     let b = this.bits.get(name);
     if (b === undefined) {
@@ -86,7 +89,10 @@ export class LayerNames {
     return b;
   }
 
-  /** 幾個圖層合起來的 mask（three.js Layers.mask） */
+  /**
+   * 幾個圖層合起來的 mask（three.js Layers.mask）
+   * @param names 圖層名稱
+   */
   mask(names: readonly string[]): number {
     let m = 0;
     for (const n of names) m |= 1 << this.bit(n);

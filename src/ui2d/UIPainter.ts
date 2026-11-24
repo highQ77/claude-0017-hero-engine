@@ -49,7 +49,10 @@ interface Shadow {
   color: string;
 }
 
-/** 解析 "0 4px 12px rgba(0,0,0,0.5)" 這類陰影寫法 */
+/**
+ * 解析 "0 4px 12px rgba(0,0,0,0.5)" 這類陰影寫法
+ * @param v 陰影文字："x y 模糊 顏色"
+ */
 export function parseShadow(v: string | undefined): Shadow | null {
   if (!v) return null;
   const nums: number[] = [];
@@ -77,11 +80,21 @@ export class UIPainter {
   paintedCount = 0;
   private region: Rect | null = null;
 
+  /**
+   * @param images 依網址取得已載入圖片的函式
+   */
   constructor(private readonly images: ImageSourceLookup) {}
 
   /**
    * 畫介面（width、height 為 CSS 像素，pixelRatio 為裝置像素比）。
    * 有給 region 時只重畫該範圍（局部重畫）：先清除再在裁切範圍內重畫。
+   * @param ctx 2D 繪圖環境
+   * @param root 根元件
+   * @param width 寬（CSS 像素）
+   * @param height 高（CSS 像素）
+   * @param pixelRatio 裝置像素比
+   * @param state 滑鼠下、按著、展開中的元件與最上層的東西
+   * @param region 只重畫這個範圍（局部重畫）；省略時整張
    */
   paint(
     ctx: Context2D,
@@ -792,7 +805,18 @@ function bgOffset(position: string | undefined, w: number, h: number, dw: number
   return [ox, oy];
 }
 
-/** 九宮格（bgSlice）：四角原尺寸、四邊單向延伸、中間雙向延伸；編輯器的九宮格預覽也用它 */
+/**
+ * 九宮格（bgSlice）：四角原尺寸、四邊單向延伸、中間雙向延伸；編輯器的九宮格預覽也用它
+ * @param ctx 2D 繪圖環境
+ * @param img 圖片
+ * @param size 圖片大小
+ * @param slice 四邊切幾像素（bgSlice，"上 右 下 左" 簡寫）
+ * @param sliceWidth 四邊畫多寬（省略時同 slice）
+ * @param x 左
+ * @param y 上
+ * @param w 寬
+ * @param h 高
+ */
 export function drawNineSlice(
   ctx: Context2D,
   img: CanvasImageSource,

@@ -69,7 +69,12 @@ export interface PlayAnimationOptions {
   restart?: boolean;
 }
 
-/** 播放片段的便利函式 */
+/**
+ * 播放片段的便利函式
+ * @param animator Animator 元件的資料
+ * @param name 動畫片段名稱（null 停止播放）
+ * @param options 淡入秒數、速度、是否循環
+ */
 export function playAnimation(animator: AnimatorData, name: string | null, options: PlayAnimationOptions = {}): void {
   animator.play = name;
   if (options.loop !== undefined) animator.loop = options.loop;
@@ -97,6 +102,10 @@ export class AnimatorController {
   private readonly tracked = new Map<Entity, Tracked>();
   private readonly off: () => void;
 
+  /**
+   * @param world ECS 世界
+   * @param getRoot 取得實體的 three.js 物件（模型的根節點）
+   */
   constructor(
     private readonly world: World,
     private readonly getRoot: (e: Entity) => THREE.Object3D | null | undefined,
@@ -104,12 +113,18 @@ export class AnimatorController {
     this.off = world.onRemove(Animator, (e) => this.release(e));
   }
 
-  /** 取得實體的 mixer（進階用途，例如直接操作 AnimationAction） */
+  /**
+   * 取得實體的 mixer（進階用途，例如直接操作 AnimationAction）
+   * @param e 實體
+   */
   mixerOf(e: Entity): THREE.AnimationMixer | undefined {
     return this.tracked.get(e)?.mixer;
   }
 
-  /** 更新所有模型動畫（每幀由外掛呼叫） */
+  /**
+   * 更新所有模型動畫（每幀由外掛呼叫）
+   * @param delta 經過的時間（秒）
+   */
   update(delta: number): void {
     this.world.query([Animator]).each((e, a) => {
       const root = this.getRoot(e) ?? null;

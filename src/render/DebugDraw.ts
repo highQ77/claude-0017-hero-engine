@@ -106,12 +106,23 @@ export class DebugDraw {
     this.object.add(this.onTop.lines, this.depth.lines);
   }
 
-  /** 畫一條線 */
+  /**
+   * 畫一條線
+   * @param from 起點
+   * @param to 終點
+   * @param options 顏色、顯示幾秒（0 只畫這一幀）、是否被物體擋住
+   */
   line(from: Vec3Like, to: Vec3Like, options: DebugDrawOptions = {}): void {
     this.push([toVector3(from), toVector3(to)], options);
   }
 
-  /** 射線：從 origin 往 direction 畫 length 長（direction 不用是單位向量） */
+  /**
+   * 射線：從 origin 往 direction 畫 length 長（direction 不用是單位向量）
+   * @param origin 起點
+   * @param direction 方向（不用是單位向量）
+   * @param length 長度
+   * @param options 顏色、顯示幾秒（0 只畫這一幀）、是否被物體擋住
+   */
   ray(origin: Vec3Like, direction: Vec3Like, length = 1, options: DebugDrawOptions = {}): void {
     const o = toVector3(origin);
     const d = toVector3(direction);
@@ -127,7 +138,12 @@ export class DebugDraw {
     this.push([o, end, end, back.clone().add(side), end, back.clone().sub(side)], options);
   }
 
-  /** 方框：中心與尺寸（[x, y, z] 或一個數字），或直接給 Box3 */
+  /**
+   * 方框：中心與尺寸（[x, y, z] 或一個數字），或直接給 Box3
+   * @param center 中心，或直接給 Box3
+   * @param size 尺寸：[x, y, z] 或一個數字（給 Box3 時不用）
+   * @param options 顏色、顯示幾秒（0 只畫這一幀）、是否被物體擋住
+   */
   box(center: Vec3Like | THREE.Box3, size: Vec3Like | number = 1, options: DebugDrawOptions = {}): void {
     let min: THREE.Vector3;
     let max: THREE.Vector3;
@@ -164,7 +180,12 @@ export class DebugDraw {
     this.push(pts, options);
   }
 
-  /** 球：三個方向的圓 */
+  /**
+   * 球：三個方向的圓
+   * @param center 球心
+   * @param radius 半徑
+   * @param options 顏色、顯示幾秒（0 只畫這一幀）、是否被物體擋住
+   */
   sphere(center: Vec3Like, radius = 1, options: DebugDrawOptions = {}): void {
     const c = toVector3(center);
     const pts: THREE.Vector3[] = [];
@@ -187,7 +208,12 @@ export class DebugDraw {
     this.push(pts, options);
   }
 
-  /** 點：一個小十字 */
+  /**
+   * 點：一個小十字
+   * @param position 位置
+   * @param size 十字的大小
+   * @param options 顏色、顯示幾秒（0 只畫這一幀）、是否被物體擋住
+   */
   point(position: Vec3Like, size = 0.2, options: DebugDrawOptions = {}): void {
     const p = toVector3(position);
     const h = size / 2;
@@ -204,8 +230,18 @@ export class DebugDraw {
     );
   }
 
-  /** 把一串點連成線（closed 時頭尾相連） */
-  path(points: readonly Vec3Like[], options: DebugDrawOptions & { closed?: boolean } = {}): void {
+  /**
+   * 把一串點連成線（closed 時頭尾相連）
+   * @param points 依序連接的點
+   * @param options 顏色、顯示幾秒、是否被物體擋住、是否頭尾相連
+   */
+  path(
+    points: readonly Vec3Like[],
+    options: DebugDrawOptions & {
+      /** true：最後一點連回第一點 */
+      closed?: boolean;
+    } = {},
+  ): void {
     if (points.length < 2) return;
     const vs = points.map((p) => toVector3(p));
     const pts: THREE.Vector3[] = [];

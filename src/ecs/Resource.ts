@@ -12,6 +12,9 @@ export interface ResourceKey<T> {
 }
 
 /*#__NO_SIDE_EFFECTS__*/
+/**
+ * @param name 資源名稱（找不到時的錯誤訊息用）
+ */
 export function defineResource<T>(name: string): ResourceKey<T> {
   return Object.freeze({ name }) as ResourceKey<T>;
 }

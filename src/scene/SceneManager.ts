@@ -9,9 +9,16 @@ export const SceneMember = defineComponent<{ scene: string }>('SceneMember', () 
 export interface Scene {
   /** 場景名稱 */
   readonly name: string;
-  /** 建立場景內容。這期間建立的實體會自動歸屬於此場景 */
+  /**
+   * 建立場景內容。這期間建立的實體會自動歸屬於此場景
+   * @param world ECS 世界
+   * @param scenes 場景管理器
+   */
   setup(world: World, scenes: SceneManager): void;
-  /** 卸載時呼叫（實體會自動銷毀，這裡只需清理額外資源） */
+  /**
+   * 卸載時呼叫（實體會自動銷毀，這裡只需清理額外資源）
+   * @param world ECS 世界
+   */
   teardown?(world: World): void;
 }
 
@@ -35,13 +42,19 @@ export class SceneManager {
   private spawnTarget: string | null = null;
   private readonly offCreate: () => void;
 
+  /**
+   * @param world ECS 世界
+   */
   constructor(private readonly world: World) {
     this.offCreate = world.onCreate((e) => {
       if (this.spawnTarget !== null) world.add(e, SceneMember, { scene: this.spawnTarget });
     });
   }
 
-  /** 註冊場景 */
+  /**
+   * 註冊場景
+   * @param scenes 要註冊的場景
+   */
   register(...scenes: Scene[]): this {
     for (const scene of scenes) {
       if (this.registry.has(scene.name)) throw new Error(`場景「${scene.name}」已註冊`);
@@ -60,7 +73,10 @@ export class SceneManager {
     return this.loaded;
   }
 
-  /** 場景是否已載入 */
+  /**
+   * 場景是否已載入
+   * @param name 場景名稱
+   */
   isLoaded(name: string): boolean {
     return this.loaded.includes(name);
   }
@@ -68,6 +84,8 @@ export class SceneManager {
   /**
    * 載入場景。預設會先卸載所有場景；additive 為 true 時疊加載入。
    * 建議在系統之外呼叫，或用 world.defer() 包起來。
+   * @param name 場景名稱
+   * @param options additive：true 時疊加載入，不卸載其他場景
    */
   load(name: string, options: LoadOptions = {}): void {
     const scene = this.registry.get(name);
@@ -88,7 +106,10 @@ export class SceneManager {
     }
   }
 
-  /** 卸載場景（移除它建立的實體） */
+  /**
+   * 卸載場景（移除它建立的實體）
+   * @param name 場景名稱
+   */
   unload(name: string): void {
     const i = this.loaded.indexOf(name);
     if (i === -1) return;
@@ -106,7 +127,10 @@ export class SceneManager {
     for (const name of [...this.loaded].reverse()) this.unload(name);
   }
 
-  /** 讓實體（連同子孫）不隨場景卸載，例如玩家角色、背景音樂 */
+  /**
+   * 讓實體（連同子孫）不隨場景卸載，例如玩家角色、背景音樂
+   * @param e 實體（連同子孫）
+   */
   persist(e: Entity): void {
     this.world.remove(e, SceneMember);
     this.world.getResource(HierarchyKey)?.forEachDescendant(e, (d) => this.world.remove(d, SceneMember));

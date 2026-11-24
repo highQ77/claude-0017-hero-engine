@@ -59,7 +59,13 @@ export const lightCodec = plainCodec(Light, {
  * 圖層清單的存讀規則：檔案裡寫 { layers: 'default minimap' }（用空白或逗號隔開；陣列也可以），名稱是英數字、- _。
  * 存檔時寫成用空白隔開的文字（XML 裡就是 layers="default minimap"）。
  */
-function layersCodec(type: ComponentType<{ layers: string[] }>): ComponentCodec<{ layers: string[] }> {
+/** 有圖層清單的元件（RenderLayer、CameraLayers） */
+interface LayersData {
+  /** 圖層名稱（預設只有 'default'） */
+  layers: string[];
+}
+
+function layersCodec(type: ComponentType<LayersData>): ComponentCodec<LayersData> {
   return {
     type,
     read(data) {

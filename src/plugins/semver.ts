@@ -4,24 +4,39 @@
  * 以空白表示「且」，以 || 表示「或」。可以省略後段：^0.1 等於 ^0.1.0。
  */
 
+/** 拆開的版本號，例如 1.2.3-beta → { major: 1, minor: 2, patch: 3, prerelease: 'beta' } */
 export interface Version {
+  /** 主版本：不相容的改動 */
   major: number;
+  /** 次版本：新增功能 */
   minor: number;
+  /** 修訂：修正錯誤 */
   patch: number;
+  /** 預先發行標記（beta、rc.1…）；正式版是空字串 */
   prerelease: string;
 }
 
+/**
+ * @param v 版本字串，例如 '1.2.3-beta'
+ */
 export function parseVersion(v: string): Version | null {
   const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([\w.]+))?$/.exec(v.trim());
   if (!m) return null;
   return { major: +m[1], minor: +(m[2] ?? 0), patch: +(m[3] ?? 0), prerelease: m[4] ?? '' };
 }
 
+/**
+ * @param v 版本字串
+ */
 export function isValidVersion(v: string): boolean {
   return /^\d+\.\d+\.\d+(-[\w.]+)?$/.test(v.trim());
 }
 
-/** a < b 回傳負數，相等為 0 */
+/**
+ * a < b 回傳負數，相等為 0
+ * @param a 第一個版本
+ * @param b 第二個版本
+ */
 export function compareVersions(a: string | Version, b: string | Version): number {
   const x = typeof a === 'string' ? parseVersion(a) : a;
   const y = typeof b === 'string' ? parseVersion(b) : b;
@@ -69,6 +84,10 @@ function satisfiesComparator(v: Version, comp: string): boolean {
   return false;
 }
 
+/**
+ * @param version 版本，例如 '1.4.0'
+ * @param range 範圍，例如 '^1.2.0'、'>=1.0.0 <2.0.0'、'^1.0.0 || ^2.0.0'
+ */
 export function satisfies(version: string, range: string): boolean {
   const v = parseVersion(version);
   if (!v) throw new Error(`版本格式錯誤：${version}`);

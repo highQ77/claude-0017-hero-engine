@@ -59,6 +59,9 @@ export class AIPlugin implements Plugin {
     this.lastRepath.clear();
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     this.ecs = ecs;

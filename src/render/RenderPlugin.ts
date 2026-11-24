@@ -43,7 +43,10 @@ const log = createLogger('render');
  */
 export type EngineRenderer = WebGPURenderer;
 
-/** 是不是 WebGPURenderer（測試用的替身不是） */
+/**
+ * 是不是 WebGPURenderer（測試用的替身不是）
+ * @param renderer 繪製器
+ */
 export function isWebGPURenderer(renderer: unknown): renderer is WebGPURenderer {
   // 只認 true（測試用的替身可能對任何屬性都回傳函式）
   return (renderer as { isWebGPURenderer?: unknown } | null)?.isWebGPURenderer === true;
@@ -67,7 +70,10 @@ export type DrawHandler = (
 export interface OverlayCompositor {
   /** 介面緩衝區換了時會變（用來判斷要不要重建） */
   readonly key: string;
-  /** color：畫面上的顏色（sRGB，vec4 節點）；回傳疊上介面後的顏色 */
+  /**
+   * color：畫面上的顏色（sRGB，vec4 節點）；回傳疊上介面後的顏色
+   * @param color 畫面上的顏色（sRGB，vec4 節點）
+   */
   composite(color: ShaderNode): ShaderNode;
 }
 
@@ -211,6 +217,9 @@ export class RenderPlugin implements Plugin {
   private readonly options: RenderOptions;
   private orbit: OrbitController | null = null;
 
+  /**
+   * @param options 放在哪個元素、畫布、反鋸齒、像素比、背景色、陰影、自動調整解析度、固定大小、攝影機滑鼠控制
+   */
   constructor(options: RenderOptions = {}) {
     this.options = { ...RenderPlugin.defaults, ...options };
   }
@@ -251,18 +260,28 @@ export class RenderPlugin implements Plugin {
     return this._activeCamera;
   }
 
-  /** 取得實體對應的 three.js 物件（例如要直接操作材質或做點選） */
+  /**
+   * 取得實體對應的 three.js 物件（例如要直接操作材質或做點選）
+   * @param e 實體
+   * @param kind 要哪一種：mesh（預設）、camera、light，或 object（任何物件）
+   */
   getObject(e: Entity, kind: 'mesh' | 'camera' | 'light' | 'object' = 'mesh'): THREE.Object3D | undefined {
     const binding = { mesh: this.meshes, camera: this.cameras, light: this.lights, object: this.objects }[kind];
     return binding?.get(e);
   }
 
-  /** 讓有 CameraFollow 的攝影機下一幀直接跳到跟隨位置（傳送、切換場景之後，不要慢慢滑過去） */
+  /**
+   * 讓有 CameraFollow 的攝影機下一幀直接跳到跟隨位置（傳送、切換場景之後，不要慢慢滑過去）
+   * @param camera 攝影機的實體
+   */
   snapCamera(camera: Entity): void {
     this.cameraRig?.snap(camera);
   }
 
-  /** 由 three.js 物件反查實體（點選用） */
+  /**
+   * 由 three.js 物件反查實體（點選用）
+   * @param object three.js 物件（例如射線打到的）
+   */
   entityOf(object: THREE.Object3D | null): Entity | null {
     for (let o = object; o; o = o.parent) {
       if (o.userData.entity !== undefined) return o.userData.entity as Entity;
@@ -274,6 +293,9 @@ export class RenderPlugin implements Plugin {
    * 從畫面座標發出射線，回傳所有打到的實體（由近到遠）。
    * ndcX、ndcY 為 -1~1（可直接用 input.pointer.ndcX / ndcY）。
    * 使用上一次繪製時的位置，也就是玩家眼睛看到的畫面。
+   * @param ndcX 畫面 X（-1 左、1 右，可以用 input.pointer.ndcX）
+   * @param ndcY 畫面 Y（-1 下、1 上）
+   * @param filter 只留下符合的命中
    */
   raycast(ndcX: number, ndcY: number, filter?: (hit: RaycastHit) => boolean): RaycastHit[] {
     const camera = this._activeCamera !== null ? this.cameras?.get(this._activeCamera) : undefined;
@@ -297,12 +319,21 @@ export class RenderPlugin implements Plugin {
     return hits;
   }
 
-  /** 點選：回傳最近的一個實體 */
+  /**
+   * 點選：回傳最近的一個實體
+   * @param ndcX 畫面 X（-1 左、1 右，可以用 input.pointer.ndcX）
+   * @param ndcY 畫面 Y（-1 下、1 上）
+   * @param filter 只考慮符合的命中
+   */
   pick(ndcX: number, ndcY: number, filter?: (hit: RaycastHit) => boolean): RaycastHit | null {
     return this.raycast(ndcX, ndcY, filter)[0] ?? null;
   }
 
-  /** 設定畫布大小（固定尺寸時用；預設跟著容器） */
+  /**
+   * 設定畫布大小（固定尺寸時用；預設跟著容器）
+   * @param width 寬（CSS 像素）
+   * @param height 高（CSS 像素）
+   */
   setSize(width: number, height: number): void {
     this.width = Math.max(1, Math.floor(width));
     this.height = Math.max(1, Math.floor(height));
@@ -315,13 +346,17 @@ export class RenderPlugin implements Plugin {
   /**
    * 每次畫面繪製前呼叫（3D 畫面與介面之前）。例如更新要給 3D 物件用的貼圖：
    * 在這裡更新，同一幀就看得到。回傳取消監聽的函式。
+   * @param listener 每次繪製前呼叫
    */
   onBeforeDraw(listener: () => void): () => void {
     this.beforeDrawListeners.add(listener);
     return () => this.beforeDrawListeners.delete(listener);
   }
 
-  /** 監聽畫面尺寸改變（CSS 像素） */
+  /**
+   * 監聽畫面尺寸改變（CSS 像素）
+   * @param listener 尺寸改變時呼叫：寬、高（CSS 像素）
+   */
   onResize(listener: (width: number, height: number) => void): () => void {
     this.resizeListeners.add(listener);
     return () => this.resizeListeners.delete(listener);
@@ -330,8 +365,16 @@ export class RenderPlugin implements Plugin {
   /**
    * 接管實際繪製（例如後製外掛）。傳 null 恢復成直接繪製。
    * 同時只能有一個接管者。
+   * @param handler 接管繪製的函式；null 恢復成直接繪製
+   * @param options 是否由接管者自己疊加介面
    */
-  setDrawHandler(handler: DrawHandler | null, options: { compositesOverlays?: boolean } = {}): void {
+  setDrawHandler(
+    handler: DrawHandler | null,
+    options: {
+      /** true：接管者自己把疊加圖層（介面等）疊到畫面上（handler 會拿到 overlay） */
+      compositesOverlays?: boolean;
+    } = {},
+  ): void {
     if (handler && this.drawHandler && handler !== this.drawHandler) {
       throw new Error('已經有其他外掛接管繪製');
     }
@@ -342,6 +385,9 @@ export class RenderPlugin implements Plugin {
   /**
    * 疊加圖層：在 3D 畫面（含後製）之後繪製，例如 2D 介面。
    * order 小的先畫。回傳移除函式。
+   * @param scene 要疊上去的場景
+   * @param camera 繪製它的攝影機
+   * @param order 順序：小的先畫
    */
   addOverlay(scene: THREE.Scene, camera: THREE.Camera, order = 0): () => void {
     const entry = { scene, camera, order };
@@ -430,6 +476,9 @@ export class RenderPlugin implements Plugin {
     return this._activeCamera !== null ? this.cameras?.get(this._activeCamera) : undefined;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     this.engine = engine;
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
@@ -699,7 +748,10 @@ export class RenderPlugin implements Plugin {
     return this.overlays.length > 0;
   }
 
-  /** 把疊加圖層（介面等）畫到 target：透明背景、線性色彩、預乘 alpha（WebGPU 合成介面用） */
+  /**
+   * 把疊加圖層（介面等）畫到 target：透明背景、線性色彩、預乘 alpha（WebGPU 合成介面用）
+   * @param target 要畫進去的繪製目標
+   */
   drawOverlaysInto(target: THREE.RenderTarget): void {
     const renderer = this.renderer as WebGPURenderer;
     const prevTarget = renderer.getRenderTarget();

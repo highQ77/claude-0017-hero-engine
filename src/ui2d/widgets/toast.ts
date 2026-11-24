@@ -51,7 +51,11 @@ export class UIToast extends UILayout {
     return this.items.length;
   }
 
-  /** 顯示一則提示訊息 */
+  /**
+   * 顯示一則提示訊息
+   * @param text 訊息文字
+   * @param options 圖示、顏色、顯示幾秒、背景顏色
+   */
   show(text: string, options: ToastOptions = {}): void {
     const a = this.attrs;
     const item = new UILayout(this.ctx, 'UIToastItem', {

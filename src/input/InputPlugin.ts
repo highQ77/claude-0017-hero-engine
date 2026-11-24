@@ -46,6 +46,9 @@ export class InputPlugin implements Plugin {
   private world: World | null = null;
   private target: HTMLElement | null = null;
 
+  /**
+   * @param options 監聽事件的元素、要擋掉的瀏覽器預設動作（右鍵選單、捲動、快捷鍵）、手把死區
+   */
   constructor(private readonly options: InputPluginOptions = {}) {
     this.input = new Input(options);
   }
@@ -60,6 +63,9 @@ export class InputPlugin implements Plugin {
     if (typeof document !== 'undefined' && document.pointerLockElement) document.exitPointerLock();
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const world = engine.getPlugin<EcsPlugin>('ecs')!.world;
     this.world = world;

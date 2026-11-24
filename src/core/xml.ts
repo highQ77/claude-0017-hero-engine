@@ -28,6 +28,9 @@ export const COMMENT_TAG = '#comment';
 
 /** XML 格式錯誤（含行號、欄號） */
 export class XmlError extends Error {
+  /**
+   * @param message 錯誤訊息
+   */
   constructor(
     message: string,
     /** 錯誤的行號 */
@@ -60,6 +63,10 @@ function decode(s: string): string {
   });
 }
 
+/**
+ * @param source XML 文字
+ * @param options 沒有結束標籤的元素名稱、是否保留註解
+ */
 export function parseXml(source: string, options: ParseOptions = {}): XmlNode {
   const voidTags = new Set(options.voidTags ?? []);
   let i = 0;

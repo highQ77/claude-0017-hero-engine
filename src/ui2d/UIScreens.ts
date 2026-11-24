@@ -6,7 +6,15 @@ import { createLogger } from '../core/Logger';
 const log = createLogger('ui2d');
 
 /** 一個介面畫面的來源：網址（例如 ui/settings.xml）或直接給 XML 文字 */
-export type ScreenSource = { url: string } | { xml: string };
+export type ScreenSource =
+  | {
+      /** 介面檔的網址（相對於 public，例如 ui/settings.xml） */
+      url: string;
+    }
+  | {
+      /** 直接給 XML 文字 */
+      xml: string;
+    };
 
 /** 畫面的設定 */
 export interface ScreenOptions {
@@ -26,7 +34,12 @@ interface ScreenEntry extends ScreenOptions {
 }
 
 /** 畫面的變化：顯示基本畫面、打開、關閉 */
-export type ScreenChange = { type: 'show' | 'open' | 'close'; name: string };
+export type ScreenChange = {
+  /** show：顯示基本畫面；open：打開（疊在上面）；close：關閉 */
+  type: 'show' | 'open' | 'close';
+  /** 畫面名稱 */
+  name: string;
+};
 
 /**
  * 介面畫面管理（XML 管理器）：管理多份 UI XML，並在同一個介面上切換、疊加。
@@ -54,22 +67,36 @@ export class UIScreenManager {
   private readonly listeners = new Set<(change: ScreenChange) => void>();
   private readonly fetchText: (url: string) => Promise<string>;
 
+  /**
+   * @param options 下載介面檔的方式（測試用）
+   */
   constructor(
     /** 介面 */
     readonly ui: UI2D,
-    options: { fetch?: (url: string) => Promise<string> } = {},
+    options: {
+      /** 下載介面檔的方式（測試用）；省略時用瀏覽器的 fetch */
+      fetch?: (url: string) => Promise<string>;
+    } = {},
   ) {
     this.fetchText = options.fetch ?? ((url) => fetchUIXml(url));
     this.installHandlers();
   }
 
-  /** 註冊一個畫面 */
+  /**
+   * 註冊一個畫面
+   * @param name 畫面名稱
+   * @param source 介面檔網址（{ url }）或 XML 文字（{ xml }）
+   * @param options 顯示名稱、是否擋住下面的介面（modal）、背景顏色
+   */
   register(name: string, source: ScreenSource, options: ScreenOptions = {}): this {
     this.entries.set(name, { name, source, xml: 'xml' in source ? source.xml : null, ...options });
     return this;
   }
 
-  /** 一次註冊好幾個：{ hud: 'ui/scene.xml', settings: { url: 'ui/settings.xml', modal: true } } */
+  /**
+   * 一次註冊好幾個：{ hud: 'ui/scene.xml', settings: { url: 'ui/settings.xml', modal: true } }
+   * @param map 畫面名稱 → 網址，或 { url／xml, modal, backdrop… }
+   */
   registerAll(map: Record<string, string | (ScreenOptions & ScreenSource)>): this {
     for (const [name, v] of Object.entries(map)) {
       if (typeof v === 'string') this.register(name, { url: v });
@@ -83,7 +110,10 @@ export class UIScreenManager {
     return [...this.entries.keys()];
   }
 
-  /** 畫面的設定（沒有註冊時是 undefined） */
+  /**
+   * 畫面的設定（沒有註冊時是 undefined）
+   * @param name 畫面名稱
+   */
   info(name: string): Readonly<ScreenOptions & { name: string; source: ScreenSource }> | undefined {
     return this.entries.get(name);
   }
@@ -98,17 +128,26 @@ export class UIScreenManager {
     return this.stack;
   }
 
-  /** 畫面是否開著 */
+  /**
+   * 畫面是否開著
+   * @param name 畫面名稱
+   */
   isOpen(name: string): boolean {
     return this.stack.includes(name);
   }
 
-  /** 預先載入 XML（之後切換不用等網路） */
+  /**
+   * 預先載入 XML（之後切換不用等網路）
+   * @param names 畫面名稱
+   */
   async preload(...names: string[]): Promise<void> {
     await Promise.all((names.length ? names : this.names).map((n) => this.xmlOf(n)));
   }
 
-  /** 換掉整個畫面（疊加中的畫面會保留在上面） */
+  /**
+   * 換掉整個畫面（疊加中的畫面會保留在上面）
+   * @param name 畫面名稱
+   */
   async show(name: string): Promise<UIElement> {
     const xml = await this.xmlOf(name);
     const entry = this.require(name);
@@ -125,7 +164,10 @@ export class UIScreenManager {
     return root;
   }
 
-  /** 疊在最上層（已經開著的話移到最上面） */
+  /**
+   * 疊在最上層（已經開著的話移到最上面）
+   * @param name 畫面名稱
+   */
   async open(name: string): Promise<UIElement> {
     const xml = await this.xmlOf(name);
     if (!this.ui.root) throw new Error('請先用 show() 顯示一個基本畫面');
@@ -137,7 +179,10 @@ export class UIScreenManager {
     return layer;
   }
 
-  /** 關閉疊加的畫面（不給名稱時關最上層） */
+  /**
+   * 關閉疊加的畫面（不給名稱時關最上層）
+   * @param name 畫面名稱；省略時關最上層
+   */
   close(name?: string): boolean {
     const target = name ?? this.stack[this.stack.length - 1];
     if (!target) return false;
@@ -154,7 +199,10 @@ export class UIScreenManager {
     return this.close();
   }
 
-  /** 開／關切換 */
+  /**
+   * 開／關切換
+   * @param name 畫面名稱
+   */
   async toggle(name: string): Promise<void> {
     if (this.isOpen(name)) this.close(name);
     else await this.open(name);
@@ -165,7 +213,10 @@ export class UIScreenManager {
     for (const name of [...this.stack].reverse()) this.close(name);
   }
 
-  /** 畫面打開、關閉時通知，回傳取消監聽的函式 */
+  /**
+   * 畫面打開、關閉時通知，回傳取消監聽的函式
+   * @param listener 畫面打開、關閉時呼叫
+   */
   onChange(listener: (change: ScreenChange) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -206,7 +257,10 @@ export class UIScreenManager {
     return layer;
   }
 
-  /** 找出元件所在的疊加畫面 */
+  /**
+   * 找出元件所在的疊加畫面
+   * @param el 元件
+   */
   screenOf(el: UIElement): string | null {
     for (let e: UIElement | null = el; e; e = e.parent) {
       const s = e.raw['data-screen'];

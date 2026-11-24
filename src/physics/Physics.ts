@@ -99,11 +99,20 @@ export class Physics {
   private readonly offs: (() => void)[] = [];
   private _collisions: CollisionEvent[] = [];
 
+  /**
+   * @param ecs ECS 世界
+   * @param options 重力、是否平滑插值
+   */
   constructor(
     /** Rapier 模組本身（進階用途：建立關節、角色控制器等） */
     readonly rapier: RapierModule,
     private readonly ecs: World,
-    options: { gravity?: Vec3; interpolate?: boolean } = {},
+    options: {
+      /** 重力（公尺／秒²），預設 (0, -9.81, 0) */
+      gravity?: Vec3;
+      /** 讓畫面在兩次物理更新之間平滑插值，預設開啟 */
+      interpolate?: boolean;
+    } = {},
   ) {
     this.world = new rapier.World(options.gravity ?? { x: 0, y: -9.81, z: 0 });
     this.eventQueue = new rapier.EventQueue(true);
@@ -128,7 +137,10 @@ export class Physics {
     return this._collisions;
   }
 
-  /** 監聽碰撞事件（在物理更新後立即呼叫） */
+  /**
+   * 監聽碰撞事件（在物理更新後立即呼叫）
+   * @param listener 碰撞開始、結束時呼叫
+   */
   onCollision(listener: (event: CollisionEvent) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -136,48 +148,82 @@ export class Physics {
 
   // ───────── 剛體操作 ─────────
 
-  /** 實體的 Rapier 剛體（進階用途；沒有時是 undefined） */
+  /**
+   * 實體的 Rapier 剛體（進階用途；沒有時是 undefined）
+   * @param e 實體
+   */
   bodyOf(e: Entity): RAPIER.RigidBody | undefined {
     return this.bodies.get(e)?.body;
   }
 
-  /** 實體的 Rapier 碰撞體（進階用途；沒有時是 undefined） */
+  /**
+   * 實體的 Rapier 碰撞體（進階用途；沒有時是 undefined）
+   * @param e 實體
+   */
   colliderOf(e: Entity): RAPIER.Collider | undefined {
     return this.colliders.get(e)?.collider;
   }
 
-  /** 由碰撞體找到所屬實體 */
+  /**
+   * 由碰撞體找到所屬實體
+   * @param collider Rapier 碰撞體
+   */
   entityOf(collider: RAPIER.Collider): Entity | undefined {
     return this.colliderOwners.get(collider.handle);
   }
 
-  /** 施加瞬間衝量（例如跳躍、爆炸） */
+  /**
+   * 施加瞬間衝量（例如跳躍、爆炸）
+   * @param e 有剛體的實體
+   * @param impulse 衝量（方向 × 大小，公斤·公尺／秒）
+   */
   applyImpulse(e: Entity, impulse: Vec3): void {
     this.requireBody(e).applyImpulse(impulse, true);
   }
 
-  /** 施加旋轉的衝量（瞬間轉起來） */
+  /**
+   * 施加旋轉的衝量（瞬間轉起來）
+   * @param e 有剛體的實體
+   * @param impulse 旋轉衝量（繞 x、y、z 軸）
+   */
   applyTorqueImpulse(e: Entity, impulse: Vec3): void {
     this.requireBody(e).applyTorqueImpulse(impulse, true);
   }
 
-  /** 設定移動速度（公尺／秒） */
+  /**
+   * 設定移動速度（公尺／秒）
+   * @param e 有剛體的實體
+   * @param v 速度（公尺／秒）
+   */
   setLinearVelocity(e: Entity, v: Vec3): void {
     this.requireBody(e).setLinvel(v, true);
   }
 
-  /** 目前的移動速度 */
+  /**
+   * 目前的移動速度
+   * @param e 有剛體的實體
+   * @param out 存放結果的向量（省略時建立新的）
+   */
   getLinearVelocity(e: Entity, out = new THREE.Vector3()): THREE.Vector3 {
     const v = this.requireBody(e).linvel();
     return out.set(v.x, v.y, v.z);
   }
 
-  /** 設定旋轉速度（弧度／秒） */
+  /**
+   * 設定旋轉速度（弧度／秒）
+   * @param e 有剛體的實體
+   * @param v 旋轉速度（繞 x、y、z 軸，弧度／秒）
+   */
   setAngularVelocity(e: Entity, v: Vec3): void {
     this.requireBody(e).setAngvel(v, true);
   }
 
-  /** 瞬間移動到指定位置（同時更新 Transform，不會插值拖影） */
+  /**
+   * 瞬間移動到指定位置（同時更新 Transform，不會插值拖影）
+   * @param e 有剛體的實體
+   * @param position 新的位置
+   * @param rotation 新的旋轉（四元數）；省略時不變
+   */
   teleport(e: Entity, position: Vec3, rotation?: { x: number; y: number; z: number; w: number }): void {
     const t = this.ecs.require(e, Transform);
     const tracked = this.bodies.get(e);
@@ -194,7 +240,13 @@ export class Physics {
 
   // ───────── 查詢 ─────────
 
-  /** 射線檢測：回傳最近的命中 */
+  /**
+   * 射線檢測：回傳最近的命中
+   * @param origin 射線起點
+   * @param direction 方向（會自動正規化）
+   * @param maxDistance 最遠距離
+   * @param options 排除的實體、是否打到感應區、只打哪些群組
+   */
   raycast(origin: Vec3, direction: Vec3, maxDistance = 1000, options: RaycastOptions = {}): PhysicsHit | null {
     const dir = new THREE.Vector3(direction.x, direction.y, direction.z).normalize();
     const ray = new this.rapier.Ray(origin, dir);
@@ -221,8 +273,20 @@ export class Physics {
     };
   }
 
-  /** 找出與球體重疊的所有實體（例如爆炸範圍） */
-  overlapSphere(center: Vec3, radius: number, options: { includeSensors?: boolean } = {}): Entity[] {
+  /**
+   * 找出與球體重疊的所有實體（例如爆炸範圍）
+   * @param center 球心
+   * @param radius 半徑
+   * @param options 是否也算感應區
+   */
+  overlapSphere(
+    center: Vec3,
+    radius: number,
+    options: {
+      /** 也算感應區（sensor 碰撞體），預設不算 */
+      includeSensors?: boolean;
+    } = {},
+  ): Entity[] {
     const found = new Set<Entity>();
     this.world.intersectionsWithShape(
       center,
@@ -259,7 +323,10 @@ export class Physics {
     this.world.updateSceneQueries();
   }
 
-  /** 推進一步物理模擬 */
+  /**
+   * 推進一步物理模擬
+   * @param dt 步長（秒）
+   */
   step(dt: number): void {
     this.flush();
     this.syncToPhysics();
@@ -269,7 +336,10 @@ export class Physics {
     this.dispatchEvents();
   }
 
-  /** 把剛體姿態寫回 Transform（有插值時依 alpha 平滑） */
+  /**
+   * 把剛體姿態寫回 Transform（有插值時依 alpha 平滑）
+   * @param alpha 插值比例 0~1（上一步到這一步之間的位置）
+   */
   writeTransforms(alpha: number): void {
     const a = this.interpolate ? alpha : 1;
     for (const [e, t] of this.bodies) {

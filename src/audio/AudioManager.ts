@@ -104,7 +104,10 @@ export class Sound {
     return this.panner !== null;
   }
 
-  /** 停止；fade 秒數內淡出 */
+  /**
+   * 停止；fade 秒數內淡出
+   * @param fade 淡出秒數（0 立刻停止）
+   */
   stop(fade = 0): void {
     if (this.done || this._state === 'stopping') return;
     if (this._state === 'loading' || !this.source) {
@@ -121,7 +124,11 @@ export class Sound {
     }
   }
 
-  /** 設定音量（fade：幾秒內慢慢變過去） */
+  /**
+   * 設定音量（fade：幾秒內慢慢變過去）
+   * @param volume 音量 0~1
+   * @param fade 過渡秒數
+   */
   setVolume(volume: number, fade = 0): void {
     this.volume = volume;
     if (this._state === 'playing') this.ramp(volume, fade);
@@ -133,19 +140,30 @@ export class Sound {
     return this.volume;
   }
 
-  /** 設定播放速度（1 為原速，也會改變音高） */
+  /**
+   * 設定播放速度（1 為原速，也會改變音高）
+   * @param pitch 播放速度（1 原速，2 快一倍、音調高八度）
+   */
   setPitch(pitch: number): void {
     this.pitch = pitch;
     if (this.source) this.source.playbackRate.value = pitch;
   }
 
-  /** 設定是否重複播放 */
+  /**
+   * 設定是否重複播放
+   * @param loop 是否循環播放
+   */
   setLoop(loop: boolean): void {
     this.loop = loop;
     if (this.source) this.source.loop = loop;
   }
 
-  /** 設定 3D 位置（只對空間音效有效） */
+  /**
+   * 設定 3D 位置（只對空間音效有效）
+   * @param x X（世界座標）
+   * @param y Y
+   * @param z Z
+   */
   setPosition(x: number, y: number, z: number): void {
     const p = this.panner;
     if (!p) return;
@@ -250,6 +268,10 @@ export class AudioManager {
   private music: { url: string; sound: Sound } | null = null;
   private disposed = false;
 
+  /**
+   * @param assets 資源管理器（載入音檔用）；null 時自己下載
+   * @param options AudioContext、音量群組、同時播放的上限
+   */
   constructor(
     private readonly assets: AssetManager | null,
     options: AudioManagerOptions = {},
@@ -295,26 +317,41 @@ export class AudioManager {
 
   // ───────── 音量 ─────────
 
-  /** 設定群組音量（'master' 為總音量） */
+  /**
+   * 設定群組音量（'master' 為總音量）
+   * @param group 音量群組（例如 'master'、'sfx'、'music'）
+   * @param volume 音量 0~1
+   * @param fade 過渡秒數
+   */
   setVolume(group: string, volume: number, fade = 0): void {
     const g = this.group(group);
     g.volume = Math.max(0, volume);
     this.applyGroup(g, fade);
   }
 
-  /** 群組的音量（0~1） */
+  /**
+   * 群組的音量（0~1）
+   * @param group 音量群組
+   */
   getVolume(group: string): number {
     return this.group(group).volume;
   }
 
-  /** 設定群組靜音（例如 'music'、'sfx'、'ui'） */
+  /**
+   * 設定群組靜音（例如 'music'、'sfx'、'ui'）
+   * @param group 音量群組
+   * @param muted true 靜音
+   */
   setMuted(group: string, muted: boolean): void {
     const g = this.group(group);
     g.muted = muted;
     this.applyGroup(g, 0);
   }
 
-  /** 群組是否靜音 */
+  /**
+   * 群組是否靜音
+   * @param group 音量群組
+   */
   isMuted(group: string): boolean {
     return this.group(group).muted;
   }
@@ -326,12 +363,18 @@ export class AudioManager {
 
   // ───────── 資源 ─────────
 
-  /** 預先載入並常駐（之後播放可立即發聲，不必等下載與解碼） */
+  /**
+   * 預先載入並常駐（之後播放可立即發聲，不必等下載與解碼）
+   * @param urls 音檔網址
+   */
   async preload(urls: readonly string[]): Promise<void> {
     await Promise.all(urls.map((url) => this.bufferOf(url)));
   }
 
-  /** 釋放常駐的音效資料 */
+  /**
+   * 釋放常駐的音效資料
+   * @param url 音檔網址
+   */
   unload(url: string): void {
     if (!this.buffers.delete(url)) return;
     this.assets?.release(url, 'audio');
@@ -341,6 +384,8 @@ export class AudioManager {
 
   /**
    * 播放音效。網址第一次播放時會自動載入並常駐。
+   * @param source 音檔網址或已解碼的 AudioBuffer
+   * @param options 音量、音調、循環、群組、3D 位置
    * @example
    * audio.play('sfx/jump.ogg', { randomPitch: 0.1 });
    * audio.play('sfx/explosion.ogg', { spatial: { refDistance: 2 }, position: hitPoint });
@@ -370,7 +415,11 @@ export class AudioManager {
     return sound;
   }
 
-  /** 播放背景音樂，與目前的音樂交叉淡入淡出；同一首正在播放時不重新開始 */
+  /**
+   * 播放背景音樂，與目前的音樂交叉淡入淡出；同一首正在播放時不重新開始
+   * @param url 音樂網址
+   * @param options 音量、淡入秒數、是否循環
+   */
   playMusic(url: string, options: MusicOptions = {}): Sound {
     const fade = options.fade ?? 1;
     if (this.music?.url === url && this.music.sound.playing) {
@@ -388,19 +437,28 @@ export class AudioManager {
     return sound;
   }
 
-  /** 停止背景音樂（fade：淡出秒數） */
+  /**
+   * 停止背景音樂（fade：淡出秒數）
+   * @param fade 淡出秒數
+   */
   stopMusic(fade = 1): void {
     this.music?.sound.stop(fade);
     this.music = null;
   }
 
-  /** 停止所有聲音（fade：淡出秒數） */
+  /**
+   * 停止所有聲音（fade：淡出秒數）
+   * @param fade 淡出秒數（0 立刻停止）
+   */
   stopAll(fade = 0): void {
     for (const s of [...this.sounds]) s.stop(fade);
     this.music = null;
   }
 
-  /** 依世界矩陣設定聽者位置與朝向（-Z 為前方、+Y 為上方） */
+  /**
+   * 依世界矩陣設定聽者位置與朝向（-Z 為前方、+Y 為上方）
+   * @param matrix 聽者（通常是攝影機）的世界矩陣
+   */
   setListenerMatrix(matrix: THREE.Matrix4): void {
     const e = matrix.elements;
     const l = this.context.listener;

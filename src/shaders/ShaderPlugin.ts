@@ -19,6 +19,9 @@ export class ShaderPlugin implements Plugin {
   private world: World | null = null;
   private offMaterial: (() => void) | null = null;
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     this.world = ecs.world;

@@ -12,7 +12,11 @@ export declare class ShaderFilter {
   readonly source: string;
   /** 目前的 uniform 值 */
   uniforms: Record<string, ShaderUniformValue>;
-  /** 設定 uniform，回傳自己（可以串接） */
+  /**
+   * 設定 uniform，回傳自己（可以串接）
+   * @param name uniform 名稱
+   * @param value 數值、向量（陣列）或貼圖
+   */
   setUniform(name: string, value: ShaderUniformValue): this;
   /** shader 裡宣告的 uniform 名稱（不含內建的 u_src、u_resolution、u_size、u_pixelRatio） */
   readonly uniformNames: string[];
@@ -43,7 +47,12 @@ export interface WebGL2DOptions {
    * 共用模式：借用別人的 WebGL 2（例如 three.js）畫進自己的 framebuffer，結果在 outputTexture。
    * canvas 參數只需要有 width、height（實體像素）。onEnd 在每次繪圖後呼叫，用來讓對方重設 GL 狀態（three.js：renderer.resetState）
    */
-  external?: { gl: WebGL2RenderingContext; onEnd?: () => void };
+  external?: {
+    /** 借用的 WebGL 2 context */
+    gl: WebGL2RenderingContext;
+    /** 每次繪圖後呼叫：讓對方重設 GL 狀態（three.js：renderer.resetState） */
+    onEnd?: () => void;
+  };
 }
 
 /** 高解析度 context 的選項 */
@@ -73,7 +82,11 @@ export interface WebGL2DRenderingContext
   filter: string | ShaderFilter | (string | ShaderFilter)[];
   /** 和原生相同的欄位 */
   getContextAttributes(): CanvasRenderingContext2DSettings;
-  /** 編譯自訂濾鏡：source 需定義 vec4 effect(vec2 uv)，回傳預乘 alpha 的顏色 */
+  /**
+   * 編譯自訂濾鏡：source 需定義 vec4 effect(vec2 uv)，回傳預乘 alpha 的顏色
+   * @param source GLSL 程式：要定義 vec4 effect(vec2 uv)
+   * @param uniforms uniform 的初始值
+   */
   createShaderFilter(source: string, uniforms?: Record<string, ShaderUniformValue>): ShaderFilter;
   /** 共用模式的結果貼圖（預乘 alpha、sRGB 值、第 0 列是畫面底部）；一般模式是 null */
   readonly outputTexture: WebGLTexture | null;
@@ -83,12 +96,22 @@ export interface WebGL2DRenderingContext
   syncExport(): void;
   /** 釋放 GPU 資源（一般模式會連 WebGL context 一起釋放） */
   dispose(): void;
-  /** 對畫布上已有的內容套用濾鏡（不受變換影響；受裁切影響）。矩形以 CSS 像素計，預設為整個畫布 */
+  /**
+   * 對畫布上已有的內容套用濾鏡（不受變換影響；受裁切影響）。矩形以 CSS 像素計，預設為整個畫布
+   * @param filter createShaderFilter 建立的濾鏡
+   * @param x 矩形左邊（CSS 像素，預設 0）
+   * @param y 矩形上邊
+   * @param w 寬（預設整個畫布）
+   * @param h 高
+   */
   applyFilter(filter: WebGL2DFilter, x?: number, y?: number, w?: number, h?: number): void;
 }
 
 /** WebGL2D 的 Path2D（和原生 Path2D 介面相同；也可以用 SVG 路徑字串建立） */
 export declare class WebGL2DPath2D implements Path2D {
+  /**
+   * @param path SVG 路徑字串，或要複製的路徑
+   */
   constructor(path?: Path2D | WebGL2DPath2D | string);
   addPath(path: Path2D | WebGL2DPath2D, transform?: DOMMatrix2DInit): void;
   closePath(): void;

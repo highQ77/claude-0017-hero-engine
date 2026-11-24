@@ -77,6 +77,9 @@ function makeTrack(path: string, track: ClipTrack): THREE.KeyframeTrack {
 
 /**
  * 建立模型動畫片段：鍵是「物件名稱.屬性」，值是時間點與數值。長度預設是最後一個時間點。
+ * @param name 動畫片段名稱
+ * @param tracks 每個屬性的關鍵影格：路徑 → 時間與數值
+ * @param duration 長度（秒）；-1 時依最後一個關鍵影格自動計算
  * @example
  * const bounce = create.clip('bounce', { 'cube.position': { times: [0, 0.5, 1], values: [[0, 0, 0], [0, 1, 0], [0, 0, 0]] } });
  */

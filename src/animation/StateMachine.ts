@@ -82,6 +82,10 @@ export const AnimationStateMachine = defineComponent<AnimationStateMachineData>(
   previous: null,
 }));
 
+/**
+ * @param sm 動畫狀態機元件的資料
+ * @param name 觸發的名稱（transition 裡的 trigger）
+ */
 export function triggerAnimation(sm: AnimationStateMachineData, name: string): void {
   sm.triggers.add(name);
 }
@@ -98,7 +102,10 @@ function validate(def: AnimationStateMachineDef): void {
   validated.add(def);
 }
 
-/** 每幀評估所有狀態機（在 Animator 更新之前） */
+/**
+ * 每幀評估所有狀態機（在 Animator 更新之前）
+ * @param world ECS 世界
+ */
 export function updateStateMachines(world: World): void {
   world.query([AnimationStateMachine, Animator]).each((_e, sm, animator) => {
     const def = sm.definition;

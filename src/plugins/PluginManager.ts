@@ -44,13 +44,23 @@ export interface PluginPackage<O = Record<string, unknown>> {
   engine?: string;
   /** 需要先安裝的外掛或套件名稱，例如 ['ecs', 'render', 'other/package'] */
   requires?: string[];
-  /** 安裝：在這裡註冊系統、元件等。透過 ctx 註冊的東西，移除時會自動撤銷 */
+  /**
+   * 安裝：在這裡註冊系統、元件等。透過 ctx 註冊的東西，移除時會自動撤銷
+   * @param ctx 套件的環境：透過它註冊的東西移除時自動撤銷
+   * @param options 安裝時給的設定
+   */
   setup(ctx: PluginContext, options: O): void | Promise<void>;
-  /** 額外的清理（自動撤銷之外） */
+  /**
+   * 額外的清理（自動撤銷之外）
+   * @param ctx 套件的環境
+   */
   teardown?(ctx: PluginContext): void;
 }
 
-/** 型別輔助：讓編輯器提示套件的欄位 */
+/**
+ * 型別輔助：讓編輯器提示套件的欄位
+ * @param pkg 套件：名稱、版本、需要的引擎版本與其他套件、setup、teardown
+ */
 export function definePlugin<O = Record<string, unknown>>(pkg: PluginPackage<O>): PluginPackage<O> {
   return pkg;
 }
@@ -78,6 +88,10 @@ export class PluginContext {
   /** @internal 撤銷用的清單（反向執行） */
   readonly _cleanups: (() => void)[] = [];
 
+  /**
+   * @param manager 套件管理器
+   * @param modules 引擎各模組的 API
+   */
   constructor(
     /** 引擎 */
     readonly engine: Engine,
@@ -89,7 +103,10 @@ export class PluginContext {
     private readonly modules: EngineApiModules = {},
   ) {}
 
-  /** 可有可無的模組：沒提供時回傳 undefined（例如效能監視器有物理時才顯示剛體數量） */
+  /**
+   * 可有可無的模組：沒提供時回傳 undefined（例如效能監視器有物理時才顯示剛體數量）
+   * @param name 模組名稱（例如 'physics'）
+   */
   optionalApi<K extends keyof EngineApiModules>(name: K): EngineApiModules[K] | undefined {
     return this.modules[name];
   }
@@ -101,7 +118,10 @@ export class PluginContext {
     return ecs.world;
   }
 
-  /** 新增系統（名稱會自動加上套件前綴，避免衝突） */
+  /**
+   * 新增系統（名稱會自動加上套件前綴，避免衝突）
+   * @param system 系統：名稱、階段、順序、run（每幀執行）、init、dispose
+   */
   addSystem(system: System): void {
     const ecs = this.engine.getPlugin<EcsPlugin>('ecs');
     if (!ecs) throw new Error(`套件「${this.pluginName}」需要 EcsPlugin 才能新增系統`);
@@ -114,12 +134,20 @@ export class PluginContext {
     this._cleanups.push(() => ecs.removeSystem(named.name));
   }
 
-  /** 直接掛在主迴圈的某個階段 */
+  /**
+   * 直接掛在主迴圈的某個階段
+   * @param phase 哪個階段：input、fixedUpdate、update、lateUpdate、render
+   * @param callback 每幀呼叫的函式
+   * @param priority 同階段內的順序：小的先執行
+   */
   on(phase: Phase, callback: PhaseCallback, priority = 0): void {
     this._cleanups.push(this.engine.on(phase, callback, priority));
   }
 
-  /** 安裝一個引擎外掛（移除套件時一併移除） */
+  /**
+   * 安裝一個引擎外掛（移除套件時一併移除）
+   * @param plugin 引擎外掛
+   */
   use(plugin: Plugin): void {
     this.engine.use(plugin);
     this._cleanups.push(() => {
@@ -127,7 +155,11 @@ export class PluginContext {
     });
   }
 
-  /** 設定資源（移除套件時刪除） */
+  /**
+   * 設定資源（移除套件時刪除）
+   * @param key 資源的鍵（define.resource 定義的）
+   * @param value 資源
+   */
   setResource<T>(key: ResourceKey<T>, value: T): void {
     const world = this.world;
     world.setResource(key, value);
@@ -136,7 +168,11 @@ export class PluginContext {
     });
   }
 
-  /** 註冊資源載入器（需要 AssetPlugin）；移除時還原原本的載入器 */
+  /**
+   * 註冊資源載入器（需要 AssetPlugin）；移除時還原原本的載入器
+   * @param type 資源類型名稱
+   * @param loader 載入器：副檔名、load、dispose
+   */
   registerLoader<T>(type: string, loader: AssetLoader<T>): void {
     const assets = this.world.requireResource(AssetsKey);
     const previous = assets.getLoader(type);
@@ -147,7 +183,11 @@ export class PluginContext {
     });
   }
 
-  /** 註冊 2D 介面元件，之後就能在 XML 裡使用 <tag> */
+  /**
+   * 註冊 2D 介面元件，之後就能在 XML 裡使用 <tag>
+   * @param tag XML 標籤名稱（例如 'UIHealthBar'）
+   * @param component 元件類別
+   */
   registerUIComponent(tag: string, component: ComponentConstructor): void {
     const previous = uiComponents.get(tag);
     uiComponents.set(tag, component);
@@ -157,31 +197,46 @@ export class PluginContext {
     });
   }
 
-  /** 註冊自訂材質（需要 ShaderPlugin） */
+  /**
+   * 註冊自訂材質（需要 ShaderPlugin）
+   * @param def 材質定義（同 shaders.define）
+   */
   defineShader(def: ShaderDefinition): void {
     const lib = this.world.requireResource(ShadersKey);
     lib.define(def);
     this._cleanups.push(() => lib.remove(def.name));
   }
 
-  /** 註冊全螢幕效果（需要 ShaderPlugin） */
+  /**
+   * 註冊全螢幕效果（需要 ShaderPlugin）
+   * @param def 效果定義（同 shaders.defineEffect）
+   */
   defineEffect(def: EffectDefinition): void {
     const lib = this.world.requireResource(ShadersKey);
     lib.defineEffect(def);
     this._cleanups.push(() => lib.remove(def.name));
   }
 
-  /** 移除套件時要執行的清理 */
+  /**
+   * 移除套件時要執行的清理
+   * @param fn 清理函式
+   */
   onDispose(fn: () => void): void {
     this._cleanups.push(fn);
   }
 
-  /** 取得其他已安裝的套件資訊 */
+  /**
+   * 取得其他已安裝的套件資訊
+   * @param name 套件名稱
+   */
   getPackage(name: string): InstalledPlugin | undefined {
     return this.manager.get(name);
   }
 
-  /** 印出訊息（前面加上套件名稱） */
+  /**
+   * 印出訊息（前面加上套件名稱）
+   * @param args 要印出的內容（和 console.log 一樣）
+   */
   log(...args: unknown[]): void {
     log.info(`[${this.pluginName}]`, ...args);
   }
@@ -249,6 +304,9 @@ export class PluginManager {
   private readonly listeners = new Set<() => void>();
   private readonly trustedOrigins: string[];
 
+  /**
+   * @param options 信任的來源、下載與匯入模組的方式、提供給套件的引擎 API
+   */
   constructor(
     /** 引擎 */
     readonly engine: Engine,
@@ -268,24 +326,38 @@ export class PluginManager {
     return [...this.installed.values()].map((r) => ({ ...r.info }));
   }
 
-  /** 取得已安裝的套件資訊（沒有時是 undefined） */
+  /**
+   * 取得已安裝的套件資訊（沒有時是 undefined）
+   * @param name 套件名稱
+   */
   get(name: string): InstalledPlugin | undefined {
     const r = this.installed.get(name);
     return r ? { ...r.info } : undefined;
   }
 
-  /** 是否已安裝 */
+  /**
+   * 是否已安裝
+   * @param name 套件名稱
+   */
   has(name: string): boolean {
     return this.installed.has(name);
   }
 
-  /** 套件安裝或移除時通知，回傳取消監聽的函式 */
+  /**
+   * 套件安裝或移除時通知，回傳取消監聽的函式
+   * @param listener 套件安裝或移除時呼叫
+   */
   onChange(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
-  /** 安裝套件（從程式匯入的套件物件） */
+  /**
+   * 安裝套件（從程式匯入的套件物件）
+   * @param pkg 套件物件
+   * @param options 傳給套件 setup 的設定
+   * @param source 來源（顯示用，預設 'local'）
+   */
   async install<O>(pkg: PluginPackage<O>, options?: O, source = 'local'): Promise<InstalledPlugin> {
     this.validate(pkg);
     if (this.installed.has(pkg.name))
@@ -322,6 +394,8 @@ export class PluginManager {
   /**
    * 從網址安裝（ES 模組，預設匯出套件物件，或匯出名為 plugin 的物件）。
    * 非信任來源必須提供 integrity。
+   * @param url 套件的網址（ES 模組）
+   * @param opts 內容雜湊（integrity，非信任來源必須提供）、傳給套件的設定
    */
   async installFromUrl<O>(url: string, opts: UrlInstallOptions<O> = {}): Promise<InstalledPlugin> {
     const absolute = this.absoluteUrl(url);
@@ -356,7 +430,10 @@ export class PluginManager {
     return this.install(pkg, opts.options, url);
   }
 
-  /** 移除套件：自動撤銷它註冊的所有東西 */
+  /**
+   * 移除套件：自動撤銷它註冊的所有東西
+   * @param name 套件名稱
+   */
   uninstall(name: string): void {
     const r = this.installed.get(name);
     if (!r) return;
@@ -421,7 +498,12 @@ export class PluginManager {
   }
 }
 
-/** 驗證內容雜湊（格式：sha256-Base64，與瀏覽器的 SRI 相同） */
+/**
+ * 驗證內容雜湊（格式：sha256-Base64，與瀏覽器的 SRI 相同）
+ * @param code 內容
+ * @param integrity 預期的雜湊（sha256-Base64 等）
+ * @param label 錯誤訊息裡顯示的名稱
+ */
 export async function verifyIntegrity(code: string, integrity: string, label = ''): Promise<void> {
   const m = /^(sha256|sha384|sha512)-(.+)$/.exec(integrity.trim());
   if (!m) throw new Error(`integrity 格式錯誤：${integrity}（需要像 sha256-xxxx）`);
@@ -435,7 +517,11 @@ export async function verifyIntegrity(code: string, integrity: string, label = '
   }
 }
 
-/** 計算內容雜湊（發布套件時用來產生 integrity） */
+/**
+ * 計算內容雜湊（發布套件時用來產生 integrity）
+ * @param code 內容
+ * @param algorithm 雜湊演算法（預設 sha256）
+ */
 export async function computeIntegrity(
   code: string,
   algorithm: 'sha256' | 'sha384' | 'sha512' = 'sha256',

@@ -19,9 +19,15 @@ export interface Plugin {
   readonly name: string;
   /** 依賴的其他外掛名稱，安裝前會檢查 */
   readonly dependencies?: readonly string[];
-  /** 安裝時呼叫（engine.use） */
+  /**
+   * 安裝時呼叫（engine.use）
+   * @param engine 引擎
+   */
   install(engine: Engine): void;
-  /** 移除時呼叫（engine.removePlugin、engine.destroy） */
+  /**
+   * 移除時呼叫（engine.removePlugin、engine.destroy）
+   * @param engine 引擎
+   */
   uninstall?(engine: Engine): void;
 }
 
@@ -52,6 +58,9 @@ export class Engine {
   private readonly listeners = new Map<EngineEvent, Set<Listener>>();
   private pausedByVisibility = false;
 
+  /**
+   * @param options 固定步長、時間縮放、分頁隱藏時暫停、排程器等設定
+   */
   constructor(options: EngineOptions = {}) {
     const { scheduler, ...overrides } = options;
     this.config = createConfig(overrides);
@@ -119,7 +128,10 @@ export class Engine {
     return this;
   }
 
-  /** 暫停時逐幀推進（除錯用），預設推進一個固定步長 */
+  /**
+   * 暫停時逐幀推進（除錯用），預設推進一個固定步長
+   * @param seconds 推進幾秒（預設一個固定步長）
+   */
   stepFrame(seconds = this.time.fixedDelta): this {
     this.assertAlive();
     if (this._state === 'running') return this;
@@ -144,7 +156,12 @@ export class Engine {
 
   // ───────── 更新階段 ─────────
 
-  /** 註冊階段回呼，回傳取消註冊函式 */
+  /**
+   * 註冊階段回呼，回傳取消註冊函式
+   * @param phase 哪個階段：input、fixedUpdate、update、lateUpdate、render
+   * @param callback 每幀呼叫的函式
+   * @param priority 同階段內的順序：小的先執行
+   */
   on(phase: Phase, callback: PhaseCallback, priority = 0): () => void {
     this.assertAlive();
     return this.loop.on(phase, callback, priority);
@@ -152,7 +169,10 @@ export class Engine {
 
   // ───────── 外掛 ─────────
 
-  /** 安裝外掛（有依賴關係的要照順序安裝） */
+  /**
+   * 安裝外掛（有依賴關係的要照順序安裝）
+   * @param plugin 要安裝的外掛
+   */
   use(plugin: Plugin): this {
     this.assertAlive();
     if (this.plugins.has(plugin.name)) {
@@ -169,17 +189,26 @@ export class Engine {
     return this;
   }
 
-  /** 取得已安裝的外掛（沒有時是 undefined） */
+  /**
+   * 取得已安裝的外掛（沒有時是 undefined）
+   * @param name 外掛名稱
+   */
   getPlugin<T extends Plugin>(name: string): T | undefined {
     return this.plugins.get(name) as T | undefined;
   }
 
-  /** 是否安裝了這個外掛 */
+  /**
+   * 是否安裝了這個外掛
+   * @param name 外掛名稱
+   */
   hasPlugin(name: string): boolean {
     return this.plugins.has(name);
   }
 
-  /** 移除外掛 */
+  /**
+   * 移除外掛
+   * @param name 外掛名稱
+   */
   removePlugin(name: string): this {
     const plugin = this.plugins.get(name);
     if (!plugin) return this;
@@ -196,7 +225,11 @@ export class Engine {
 
   // ───────── 生命週期事件 ─────────
 
-  /** 監聽引擎事件（start、pause、resume…），回傳取消監聽的函式 */
+  /**
+   * 監聽引擎事件（start、pause、resume…），回傳取消監聽的函式
+   * @param event 事件名稱（start、pause、resume…）
+   * @param listener 事件發生時呼叫
+   */
   addListener(event: EngineEvent, listener: Listener): () => void {
     let set = this.listeners.get(event);
     if (!set) this.listeners.set(event, (set = new Set()));

@@ -56,7 +56,10 @@ export const AudioSource = defineComponent<AudioSourceData>('AudioSource', () =>
   status: 'idle',
 }));
 
-/** 從頭播放（即使正在播放） */
+/**
+ * 從頭播放（即使正在播放）
+ * @param source AudioSource 元件的資料
+ */
 export function playSound(source: AudioSourceData): void {
   source.playing = true;
   source.token++;
@@ -84,6 +87,10 @@ export class AudioSourceController {
   private readonly tracked = new Map<Entity, Tracked>();
   private readonly off: () => void;
 
+  /**
+   * @param world ECS 世界
+   * @param audio 音效管理器
+   */
   constructor(
     private readonly world: World,
     private readonly audio: AudioManager,

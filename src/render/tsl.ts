@@ -12,5 +12,8 @@ import * as tslModule from 'three/tsl';
 // biome-ignore lint/suspicious/noExplicitAny: TSL 節點的型別太嚴格（見上面的說明）
 export type ShaderNode = any;
 
-/** three/tsl 的所有函式與節點（回傳 ShaderNode） */
-export const tsl = tslModule as unknown as Record<string, ShaderNode>;
+/**
+ * three/tsl 的所有函式與節點（回傳 ShaderNode）。
+ * 名稱和 three/tsl 一樣（編輯器列得出名稱、打錯會報錯、看得到 three.js 的說明），參數與回傳值用寬鬆的 ShaderNode
+ */
+export const tsl = tslModule as unknown as { readonly [K in keyof typeof tslModule]: ShaderNode };

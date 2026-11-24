@@ -28,12 +28,18 @@ function keyOf(url: string): string {
   }
 }
 
-/** 登記打包好的 XML（鍵是網站根目錄起算的路徑，例如 '/ui/scene.xml'） */
+/**
+ * 登記打包好的 XML（鍵是網站根目錄起算的路徑，例如 '/ui/scene.xml'）
+ * @param modules 路徑 → XML 模組（import.meta.glob 的結果）
+ */
 export function registerUIXml(modules: Record<string, XmlModule>): void {
   for (const [path, load] of Object.entries(modules)) bundled.set(keyOf(path), load);
 }
 
-/** 這個網址有打包好的 XML */
+/**
+ * 這個網址有打包好的 XML
+ * @param url XML 的網址
+ */
 export function hasBundledUIXml(url: string): boolean {
   return bundled.has(keyOf(url));
 }
@@ -43,12 +49,18 @@ export function hasBundledUIXml(url: string): boolean {
 const cache = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
 
-/** 已經讀過的 XML（沒有讀過回傳 undefined）：內嵌元件可以同步建立，不用等 */
+/**
+ * 已經讀過的 XML（沒有讀過回傳 undefined）：內嵌元件可以同步建立，不用等
+ * @param url XML 的網址
+ */
 export function cachedUIXml(url: string): string | undefined {
   return cache.get(keyOf(url));
 }
 
-/** 讀取 XML 並快取（同一個檔案同時要求多次只會讀一次） */
+/**
+ * 讀取 XML 並快取（同一個檔案同時要求多次只會讀一次）
+ * @param url XML 的網址
+ */
 export function loadUIXml(url: string): Promise<string> {
   const key = keyOf(url);
   const override = overrides.get(key);
@@ -68,7 +80,10 @@ export function loadUIXml(url: string): Promise<string> {
   return pending;
 }
 
-/** 清除快取（例如編輯器存檔後，下次內嵌會讀到新內容） */
+/**
+ * 清除快取（例如編輯器存檔後，下次內嵌會讀到新內容）
+ * @param url XML 的網址；省略時全部清除
+ */
 export function clearUIXmlCache(url?: string): void {
   if (url === undefined) cache.clear();
   else cache.delete(keyOf(url));
@@ -85,7 +100,11 @@ export function setUIXmlOverride(url: string, xml: string | null): void {
   cache.delete(key);
 }
 
-/** 讀取介面 XML：有開發工具給的內容就用它，再來是登記過的、打包時保護過的，都沒有就用網址抓 */
+/**
+ * 讀取介面 XML：有開發工具給的內容就用它，再來是登記過的、打包時保護過的，都沒有就用網址抓
+ * @param url XML 的網址
+ * @param init fetch 的選項
+ */
 export async function fetchUIXml(url: string, init?: RequestInit): Promise<string> {
   const override = overrides.get(keyOf(url));
   if (override !== undefined) return override;

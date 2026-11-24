@@ -37,6 +37,7 @@ export const ShaderPresets = {
   /**
    * 溶解：依雜訊逐漸消失，邊緣發光。保留標準材質的光照與陰影。
    * uniform progress：0 完整、1 完全消失
+   * @param options 材質參數（例如 { color: '#ffa94f', roughness: 0.35 }）
    */
   dissolve: (options: Record<string, unknown> = {}): ShaderDefinition => {
     /** 這個像素的雜訊值與邊緣亮度（color、emissive 都用） */
@@ -97,6 +98,7 @@ export const ShaderPresets = {
 
   /**
    * 波浪：頂點隨時間上下起伏（法線不會重新計算，適合旗子、水面等平面）。
+   * @param options 材質參數（例如 { color: '#4cc9f0', side: 'double' }）
    */
   wave: (options: Record<string, unknown> = {}): ShaderDefinition => ({
     name: 'wave',

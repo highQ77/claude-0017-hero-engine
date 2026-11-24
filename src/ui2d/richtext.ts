@@ -44,6 +44,7 @@ interface RichLine {
  * 解析 BBCode 風格的標記：
  * [b]粗體[/b] [i]斜體[/i] [u]底線[/u] [s]刪除線[/s] [color=#f55]顏色[/color] [size=22]大小[/size]
  * [bg=#333]底色[/bg] [icon=fire] [icon=coin color=#ffd75e] [br] 換行；[[ 代表一個 [
+ * @param markup 標記文字，例如 '[b]粗體[/b] [color=#f55]紅字[/color]'
  */
 export function parseRichText(markup: string): RichItem[] {
   const items: RichItem[] = [];
@@ -108,6 +109,12 @@ export class UIRichText extends UIElement {
   /** 只顯示前幾個字（打字機效果；圖示算一個字；排版仍以完整內容計算，不會跳動） */
   revealed = Infinity;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   * @param text 一開始的文字
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, text = '') {
     super(ctx, type, raw);
     this.markup = raw.text ?? text;
@@ -125,7 +132,10 @@ export class UIRichText extends UIElement {
     return { fontSize: '16', color: '#ffffff', lineHeight: '1.5', fontWeight: 'normal' };
   }
 
-  /** 換內容（標記語法） */
+  /**
+   * 換內容（標記語法）
+   * @param markup 標記文字（[b]、[color=#f55]、[icon=coin]…）
+   */
   setText(markup: string): this {
     if (markup === this.markup) return this;
     this.markup = markup;

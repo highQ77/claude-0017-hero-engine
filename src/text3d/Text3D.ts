@@ -171,6 +171,11 @@ export class Text3DController {
   private readonly off: () => void;
   private nextToken = 1;
 
+  /**
+   * @param world ECS 世界
+   * @param assets 資源管理器（載入字型）
+   * @param createCanvas 建立畫布的方式
+   */
   constructor(
     private readonly world: World,
     private readonly assets: AssetManager | null,

@@ -55,7 +55,12 @@ export class UIMinimap extends UIElement {
     };
   }
 
-  /** 設定中心與面向 */
+  /**
+   * 設定中心與面向
+   * @param x 中心的世界座標 X
+   * @param z 中心的世界座標 Z
+   * @param heading 面向（弧度，0 = 北方）
+   */
   setView(x: number, z: number, heading = 0): void {
     if (x === this.centerX && z === this.centerZ && heading === this.heading) return;
     this.centerX = x;
@@ -64,13 +69,21 @@ export class UIMinimap extends UIElement {
     this.invalidate();
   }
 
-  /** 設定標記 */
+  /**
+   * 設定標記
+   * @param markers 標記：位置、顏色、形狀、大小
+   */
   setMarkers(markers: readonly MinimapMarker[]): void {
     this.markers = markers.map((m) => ({ ...m }));
     this.invalidate();
   }
 
-  /** 世界座標 → 小地圖上的位置（相對中心，像素） */
+  /**
+   * 世界座標 → 小地圖上的位置（相對中心，像素）
+   * @param x 世界座標 X
+   * @param z 世界座標 Z
+   * @param scale 每公尺幾像素
+   */
   project(x: number, z: number, scale: number): { px: number; py: number } {
     let dx = (x - this.centerX) * scale;
     let dz = (z - this.centerZ) * scale;

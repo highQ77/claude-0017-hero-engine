@@ -22,11 +22,17 @@ export abstract class BTNode<B extends object = Record<string, unknown>> {
   /** 上一次 tick 的結果 */
   lastStatus: BTStatus | null = null;
 
+  /**
+   * @param label 除錯用名稱
+   */
   constructor(label: string) {
     this.label = label;
   }
 
-  /** 執行這個節點 */
+  /**
+   * 執行這個節點
+   * @param ctx 這次執行的環境：實體、黑板、時間
+   */
   tick(ctx: BTContext<B>): BTStatus {
     const status = this.run(ctx);
     this.lastStatus = status;
@@ -47,8 +53,12 @@ export abstract class BTNode<B extends object = Record<string, unknown>> {
 }
 
 abstract class Composite<B extends object> extends BTNode<B> {
+  /**
+   * @param label 除錯用名稱
+   */
   constructor(
     label: string,
+    /** 子節點（依順序執行） */
     readonly nodes: BTNode<B>[],
   ) {
     super(label);
@@ -110,6 +120,10 @@ export class Selector<B extends object> extends Composite<B> {
 
 /** 同時執行：policy 'all' 全部成功才成功；'one' 任一成功即成功 */
 export class Parallel<B extends object> extends Composite<B> {
+  /**
+   * @param label 除錯用名稱
+   * @param nodes 子節點
+   */
   constructor(
     label: string,
     /** all：全部成功才成功；one：一個成功就成功 */
@@ -317,32 +331,70 @@ class Wait<B extends object> extends BTNode<B> {
  * );
  */
 export const BT = {
-  /** 依序執行子節點：全部成功才成功，有一個失敗就停下（「先做 A 再做 B」） */
+  /**
+   * 依序執行子節點：全部成功才成功，有一個失敗就停下（「先做 A 再做 B」）
+   * @param children 子節點，依序執行
+   */
   sequence: <B extends object>(...children: BTNode<B>[]) => new Sequence<B>('sequence', children),
-  /** 依序嘗試子節點：有一個成功就成功（「能做 A 就做 A，不行就做 B」，越前面優先度越高） */
+  /**
+   * 依序嘗試子節點：有一個成功就成功（「能做 A 就做 A，不行就做 B」，越前面優先度越高）
+   * @param children 子節點，越前面優先度越高
+   */
   selector: <B extends object>(...children: BTNode<B>[]) => new Selector<B>('selector', children),
-  /** 同時執行所有子節點（all：全部成功才成功；one：一個成功就成功） */
+  /**
+   * 同時執行所有子節點（all：全部成功才成功；one：一個成功就成功）
+   * @param policy all：全部成功才成功；one：一個成功就成功
+   * @param children 同時執行的子節點
+   */
   parallel: <B extends object>(policy: 'all' | 'one', ...children: BTNode<B>[]) =>
     new Parallel<B>('parallel', policy, children),
-  /** 條件：回傳 true 成功、false 失敗（例如「看得到玩家嗎」） */
+  /**
+   * 條件：回傳 true 成功、false 失敗（例如「看得到玩家嗎」）
+   * @param fn 判斷條件：回傳 true 成功、false 失敗
+   * @param label 除錯用名稱
+   */
   condition: <B extends object>(fn: (ctx: BTContext<B>) => boolean, label = 'condition') => new Condition<B>(label, fn),
   /**
    * 動作：回傳 'running' 代表還在做，'failure' 代表失敗，不回傳視為成功。
    * onInterrupt 會在執行中被中斷時呼叫（例如停下移動）。
+   * @param fn 要做的事：回傳 'running' 還在做、'failure' 失敗，不回傳視為成功
+   * @param label 除錯用名稱
+   * @param onInterrupt 執行中被中斷時呼叫（例如停下移動）
    */
   action: <B extends object>(fn: (ctx: BTContext<B>) => BTStatus | void, label = 'action', onInterrupt?: () => void) =>
     new Action<B>(label, fn, onInterrupt),
-  /** 等待幾秒後成功（也可以給函式，每次重新計算秒數） */
+  /**
+   * 等待幾秒後成功（也可以給函式，每次重新計算秒數）
+   * @param seconds 等待的秒數，或每次重新計算秒數的函式
+   */
   wait: <B extends object>(seconds: number | ((ctx: BTContext<B>) => number)) => new Wait<B>('wait', seconds),
-  /** 反轉結果：成功變失敗、失敗變成功 */
+  /**
+   * 反轉結果：成功變失敗、失敗變成功
+   * @param child 要反轉結果的子節點
+   */
   invert: <B extends object>(child: BTNode<B>) => new Inverter<B>('invert', child),
-  /** 不論結果都當作成功 */
+  /**
+   * 不論結果都當作成功
+   * @param child 子節點（結果一律當作成功）
+   */
   succeed: <B extends object>(child: BTNode<B>) => new AlwaysSucceed<B>('succeed', child),
-  /** 重複執行子節點幾次（預設無限次） */
+  /**
+   * 重複執行子節點幾次（預設無限次）
+   * @param child 要重複的子節點
+   * @param times 重複幾次（預設無限次）
+   */
   repeat: <B extends object>(child: BTNode<B>, times = Infinity) => new Repeat<B>('repeat', child, times),
-  /** 冷卻：成功後幾秒內不再執行（直接失敗） */
+  /**
+   * 冷卻：成功後幾秒內不再執行（直接失敗）
+   * @param seconds 成功後幾秒內不再執行
+   * @param child 子節點
+   */
   cooldown: <B extends object>(seconds: number, child: BTNode<B>) => new Cooldown<B>('cooldown', child, seconds),
-  /** 逾時：執行超過幾秒就失敗 */
+  /**
+   * 逾時：執行超過幾秒就失敗
+   * @param seconds 最多執行幾秒，超過就失敗
+   * @param child 子節點
+   */
   timeout: <B extends object>(seconds: number, child: BTNode<B>) => new Timeout<B>('timeout', child, seconds),
 };
 
@@ -352,7 +404,10 @@ export const BT = {
 export class BehaviorTree<B extends object = Record<string, unknown>> {
   constructor(/** 根節點 */ readonly root: BTNode<B>) {}
 
-  /** 執行一次（每幀呼叫；Brain 元件會自動呼叫） */
+  /**
+   * 執行一次（每幀呼叫；Brain 元件會自動呼叫）
+   * @param ctx 這次執行的環境：實體、黑板、時間
+   */
   tick(ctx: BTContext<B>): BTStatus {
     return this.root.tick(ctx);
   }

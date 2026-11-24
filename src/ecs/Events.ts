@@ -25,7 +25,10 @@ export interface EventType<T = void> {
   readonly _payload?: T;
 }
 
-/** 定義事件：define.event<{ value: number }>('CoinCollected') */
+/**
+ * 定義事件：define.event<{ value: number }>('CoinCollected')
+ * @param name 事件名稱（除錯時顯示）
+ */
 export function defineEvent<T = void>(name: string): EventType<T> {
   return Object.freeze({ name });
 }
@@ -54,7 +57,12 @@ interface Listener {
 export class EventBus {
   private readonly listeners = new Map<EventType<unknown>, Listener[]>();
 
-  /** 收聽事件，回傳取消的函式 */
+  /**
+   * 收聽事件，回傳取消的函式
+   * @param type 事件（define.event 定義的）
+   * @param handler 事件發生時呼叫，拿到事件的資料
+   * @param options 只收一次、擁有者（offOwner 一起取消）
+   */
   on<T>(type: EventType<T>, handler: (payload: T) => void, options: EventOptions = {}): () => void {
     const listener: Listener = { handler: handler as Handler, once: options.once ?? false, owner: options.owner };
     const list = this.listeners.get(type as EventType<unknown>) ?? [];
@@ -63,12 +71,21 @@ export class EventBus {
     return () => this.remove(type as EventType<unknown>, listener);
   }
 
-  /** 只收一次 */
+  /**
+   * 只收一次
+   * @param type 事件（define.event 定義的）
+   * @param handler 事件發生時呼叫，拿到事件的資料
+   * @param options 擁有者（offOwner 一起取消）
+   */
   once<T>(type: EventType<T>, handler: (payload: T) => void, options: Omit<EventOptions, 'once'> = {}): () => void {
     return this.on(type, handler, { ...options, once: true });
   }
 
-  /** 發出事件：馬上呼叫所有收聽的函式 */
+  /**
+   * 發出事件：馬上呼叫所有收聽的函式
+   * @param type 事件（define.event 定義的）
+   * @param payload 事件的資料（沒有資料的事件不用給）
+   */
   emit<T>(type: EventType<T>, ...payload: T extends void ? [] : [T]): void {
     const list = this.listeners.get(type as EventType<unknown>);
     if (!list?.length) return;
@@ -82,7 +99,10 @@ export class EventBus {
     }
   }
 
-  /** 取消某個擁有者（例如實體）的所有收聽 */
+  /**
+   * 取消某個擁有者（例如實體）的所有收聽
+   * @param owner 擁有者（收聽時給的 owner）
+   */
   offOwner(owner: unknown): void {
     for (const [type, list] of this.listeners) {
       const kept = list.filter((l) => l.owner !== owner);
@@ -92,7 +112,10 @@ export class EventBus {
     }
   }
 
-  /** 收聽某個事件的數量（不給事件時是全部） */
+  /**
+   * 收聽某個事件的數量（不給事件時是全部）
+   * @param type 事件；省略時算全部
+   */
   listenerCount(type?: EventType<unknown>): number {
     if (type) return this.listeners.get(type)?.length ?? 0;
     let n = 0;

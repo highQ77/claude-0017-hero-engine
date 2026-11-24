@@ -20,6 +20,10 @@ export class Query<Cs extends readonly ComponentType<unknown>[]> {
   private cache: Entity[] = [];
   private dirty = true;
 
+  /**
+   * @param allStores 要有的元件
+   * @param noneStores 不能有的元件
+   */
   constructor(
     /** 必須有的元件 */
     readonly all: Cs,
@@ -53,7 +57,10 @@ export class Query<Cs extends readonly ComponentType<unknown>[]> {
     return this.entities[0];
   }
 
-  /** 這個實體是否符合 */
+  /**
+   * 這個實體是否符合
+   * @param e 實體
+   */
   matches(e: Entity): boolean {
     return this.allStores.every((s) => s.has(e)) && !this.noneStores.some((s) => s.has(e));
   }
@@ -61,6 +68,7 @@ export class Query<Cs extends readonly ComponentType<unknown>[]> {
   /**
    * 走訪每個符合的實體，並直接取得元件資料。
    * 走訪途中已被移除元件或銷毀的實體會自動跳過。
+   * @param fn 每個實體呼叫一次：實體、各元件的資料
    * @example
    * world.query([Transform, Velocity]).each((e, t, v) => { t.position.x += v.x * dt; });
    */

@@ -37,6 +37,10 @@ export class AdaptiveResolution {
   private blockRaiseUntil = 0;
   private readonly warmup: number;
 
+  /**
+   * @param initialPixelRatio 一開始的像素比
+   * @param options 目標 FPS、像素比的上下限、開始調整前等幾秒
+   */
   constructor(initialPixelRatio: number, options: AdaptiveResolutionOptions = {}) {
     this.budgetMs = 1000 / (options.targetFps ?? 60);
     this.max = options.maxPixelRatio ?? initialPixelRatio;
@@ -57,6 +61,7 @@ export class AdaptiveResolution {
 
   /**
    * 每幀呼叫（真實的幀間隔，秒）。需要調整時回傳新的像素比，否則回傳 null。
+   * @param realDelta 真實的幀間隔（秒）
    */
   update(realDelta: number): number | null {
     const ms = realDelta * 1000;

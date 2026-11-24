@@ -33,11 +33,28 @@ export interface PostFxSettings {
   /** 曝光 */
   exposure: number;
   /** 光暈：亮的地方向外發光 */
-  bloom: { enabled: boolean; strength: number; radius: number; threshold: number };
+  bloom: {
+    /** 是否開啟 */
+    enabled: boolean;
+    /** 強度：光暈有多亮，預設 0.6 */
+    strength: number;
+    /** 擴散範圍 0~1：越大光暈散得越開，預設 0.4 */
+    radius: number;
+    /** 亮度門檻：比這個亮的地方才發光（0~1，越低越多地方發光），預設 0.85 */
+    threshold: number;
+  };
   /** 環境光遮蔽：角落、縫隙變暗，增加立體感（較耗效能） */
-  ao: { enabled: boolean; radius: number; intensity: number };
+  ao: {
+    /** 是否開啟 */
+    enabled: boolean;
+    /** 取樣半徑（世界單位）：多遠以內的物體會互相遮蔽，預設 0.5 */
+    radius: number;
+    /** 強度：遮蔽處變暗的程度，預設 1 */
+    intensity: number;
+  };
   /** 景深：對焦距離以外變模糊 */
   dof: {
+    /** 是否開啟 */
     enabled: boolean;
     /** 對焦距離（世界單位）；設定 focusOn 時會自動計算 */
     focus: number;
@@ -49,15 +66,34 @@ export interface PostFxSettings {
     focusOn: Entity | null;
   };
   /** 底片顆粒 */
-  film: { enabled: boolean; intensity: number; grayscale: boolean };
+  film: {
+    /** 是否開啟 */
+    enabled: boolean;
+    /** 顆粒強度 0~1，預設 0.35 */
+    intensity: number;
+    /** true：畫面變成黑白 */
+    grayscale: boolean;
+  };
   /** 暗角：畫面四周變暗 */
-  vignette: { enabled: boolean; offset: number; darkness: number };
+  vignette: {
+    /** 是否開啟 */
+    enabled: boolean;
+    /** 暗角的範圍：越大，暗角越往中央延伸、四角也越暗，預設 1 */
+    offset: number;
+    /** 變暗的程度：1 時畫面四角大約暗一半，預設 1.1 */
+    darkness: number;
+  };
   /** 調色 */
   color: {
+    /** 是否開啟 */
     enabled: boolean;
+    /** 亮度：加在每個顏色上，0 不變（-1~1） */
     brightness: number;
+    /** 對比：1 不變，大於 1 對比更強，0 變成一片灰 */
     contrast: number;
+    /** 飽和度：1 不變，0 黑白，大於 1 更鮮豔 */
     saturation: number;
+    /** 色調：乘在畫面上的顏色，白色（預設）不變，例如 '#ffe0c0' 偏暖 */
     tint: THREE.ColorRepresentation;
   };
   /**
@@ -270,6 +306,9 @@ export class PostProcessingPlugin implements Plugin {
   /** 取消登記場景設定 */
   private offSettings: () => void = () => {};
 
+  /**
+   * @param settings 一開始的後製設定（沒給的用預設值）
+   */
   constructor(settings: DeepPartial<PostFxSettings> = {}) {
     this.settings = mergeSettings(defaultPostFxSettings(), settings);
   }
@@ -282,7 +321,10 @@ export class PostProcessingPlugin implements Plugin {
     return this.world?.getResource(ShadersKey) ?? (this.ownLibrary ??= new ShaderLibrary());
   }
 
-  /** 重新載入 settings.effects 裡的節點圖（開發時存檔後自動呼叫） */
+  /**
+   * 重新載入 settings.effects 裡的節點圖（開發時存檔後自動呼叫）
+   * @param url 節點圖檔的網址
+   */
   reloadGraph(url: string): void {
     const key = normalizeUrl(url);
     const st = this.graphs.get(key);
@@ -303,17 +345,25 @@ export class PostProcessingPlugin implements Plugin {
   /**
    * 加入自訂效果：shaders.createEffect 建立的效果，或自己實作 PostFxPass（apply 拿到前一個效果的顏色節點，回傳新的）。
    * stage：scene（預設，色調映射之前，線性、高動態範圍）或 display（之後，畫面上的顏色）
+   * @param pass 效果（shaders.createEffect 建立的，或自己實作 PostFxPass）
+   * @param stage display（預設，色調映射之後）或 scene（之前，線性、高動態範圍）
    */
   addPass(pass: PostFxPass, stage: PassStage = 'scene'): void {
     this.custom.push({ pass, stage, id: this.nextId++ });
   }
 
-  /** 移除自訂效果（不會釋放它，由加入者負責） */
+  /**
+   * 移除自訂效果（不會釋放它，由加入者負責）
+   * @param pass 要移除的效果
+   */
   removePass(pass: PostFxPass): void {
     const i = this.custom.findIndex((c) => c.pass === pass);
     if (i !== -1) this.custom.splice(i, 1);
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     installed.add(this);
     const render = engine.getPlugin<RenderPlugin>('render')!;
@@ -639,6 +689,7 @@ export class PostProcessingPlugin implements Plugin {
    * 遊戲載入完成後呼叫，把之後會用到的組合先畫一次（每幀一個，分散成本；畫完立刻被那一幀的畫面蓋掉，看不到）。
    * 每一項是要和目前設定合併的設定（寫法和 settings 一樣）。建好的管線會保留起來，切換到這個組合時直接用
    * （最多保留 6 條，縮到很小的解析度，不佔記憶體）。
+   * @param variants 之後會用到的設定組合（各自和目前的設定合併）
    * @example
    * await postfx.prewarm([{ bloom: { enabled: true } }, { dof: { enabled: true }, film: { enabled: true } }]);
    */

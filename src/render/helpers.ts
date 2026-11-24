@@ -109,7 +109,12 @@ export interface SpawnEntityOptions extends SpawnCommon {
   scale?: number | Vec3Like;
 }
 
-/** 任意實體：Transform（位置、旋轉、縮放）＋ 父節點、名稱 ＋ 其他元件 */
+/**
+ * 任意實體：Transform（位置、旋轉、縮放）＋ 父節點、名稱 ＋ 其他元件
+ * @param world ECS 世界
+ * @param options 位置、旋轉、縮放、父節點、名稱
+ * @param components 其他元件
+ */
 function spawnEntity(world: World, options: SpawnEntityOptions = {}, ...components: ComponentInit[]): Entity {
   const e = world.spawn(...components);
   placeTransform(world.add(e, Transform), options);
@@ -117,7 +122,11 @@ function spawnEntity(world: World, options: SpawnEntityOptions = {}, ...componen
   return e;
 }
 
-/** 攝影機：預設在 [0, 2, 6] 看向原點 */
+/**
+ * 攝影機：預設在 [0, 2, 6] 看向原點
+ * @param world ECS 世界
+ * @param options 種類（透視、正交）、視角、遠近裁切、位置、看向哪裡、父節點、名稱
+ */
 function spawnCamera(world: World, options: SpawnCameraOptions = {}): Entity {
   const { position = [0, 2, 6], target = [0, 0, 0], parent, name, ...data } = options;
   const e = world.spawn(Camera.with(data));
@@ -126,7 +135,11 @@ function spawnCamera(world: World, options: SpawnCameraOptions = {}): Entity {
   return e;
 }
 
-/** 燈光：kind 預設平行光；平行光、聚光燈有 target 時照向它 */
+/**
+ * 燈光：kind 預設平行光；平行光、聚光燈有 target 時照向它
+ * @param world ECS 世界
+ * @param options 種類、顏色、強度、照射距離、角度、陰影、位置、照向哪裡、父節點、名稱
+ */
 function spawnLight(world: World, options: SpawnLightOptions = {}): Entity {
   // 半球光的「天空」方向是它的位置（從原點指向光源）：沒有指定時放在正上方，和 three.js 預設一樣
   const { position = options.kind === 'hemisphere' ? [0, 1, 0] : undefined, target, parent, name, ...data } = options;
@@ -136,7 +149,11 @@ function spawnLight(world: World, options: SpawnLightOptions = {}): Entity {
   return e;
 }
 
-/** 常用的燈光組合：半球光（天空與地面的環境光）＋ 一盞從斜上方照下的平行光 */
+/**
+ * 常用的燈光組合：半球光（天空與地面的環境光）＋ 一盞從斜上方照下的平行光
+ * @param world ECS 世界
+ * @param options 整體強度倍率、太陽的位置、是否有陰影
+ */
 function spawnDefaultLights(world: World, options: DefaultLightsOptions = {}): { ambient: Entity; sun: Entity } {
   const k = options.intensity ?? 1;
   const ambient = spawnLight(world, { kind: 'hemisphere', color: 0xcfe0ff, groundColor: 0x40342a, intensity: 1.2 * k });
@@ -150,7 +167,11 @@ function spawnDefaultLights(world: World, options: DefaultLightsOptions = {}): {
   return { ambient, sun };
 }
 
-/** 網格：幾何、材質可以是描述（{ box: 1 }、'#f80'）或 three.js 物件 */
+/**
+ * 網格：幾何、材質可以是描述（{ box: 1 }、'#f80'）或 three.js 物件
+ * @param world ECS 世界
+ * @param options 幾何、材質、位置、旋轉、縮放、陰影、父節點、名稱
+ */
 function spawnMesh(world: World, options: SpawnMeshOptions): Entity {
   const { position, rotation, scale, parent, name, ...data } = options;
   const e = world.spawn(MeshRenderer.with(data));
@@ -173,7 +194,11 @@ export interface SpawnGridOptions {
   position?: Vec3Like;
 }
 
-/** 地面格線（除錯、編輯時看位置用） */
+/**
+ * 地面格線（除錯、編輯時看位置用）
+ * @param world ECS 世界
+ * @param options 邊長、格數、線的顏色、中心線的顏色、位置
+ */
 function spawnGrid(world: World, options: SpawnGridOptions = {}): Entity {
   const color = options.color ?? 0x444444;
   const grid = new THREE.GridHelper(options.size ?? 10, options.divisions ?? 10, options.centerColor ?? color, color);

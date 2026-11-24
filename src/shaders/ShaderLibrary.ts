@@ -156,7 +156,9 @@ export interface EffectDefinition {
 
 /** 用自訂著色器建立的材質：可以透過 uniforms 修改參數（uniforms.名稱.value） */
 export type CustomMaterial = THREE.Material & {
+  /** 這個材質的 uniform：改 .value，下一幀生效（例如 material.uniforms.progress.value = 0.5） */
   uniforms: Record<string, UniformNode>;
+  /** 著色器名稱（define 的 name） */
   readonly shaderName: string;
 };
 
@@ -169,7 +171,10 @@ export interface PostFxPass {
   enabled: boolean;
   /** 定義改變時加一（後製看到會重建效果） */
   readonly version?: number;
-  /** 套用效果：input 是前一個效果的顏色（vec4 節點），回傳新的顏色 */
+  /**
+   * 套用效果：input 是前一個效果的顏色（vec4 節點），回傳新的顏色
+   * @param input 前一個效果的顏色（vec4 節點）
+   */
   apply(input: ShaderNode): ShaderNode;
 }
 
@@ -274,7 +279,10 @@ export class ShaderLibrary {
   private readonly entries = new Map<string, Entry>();
   private anonymous = 0;
 
-  /** 是否定義了這個著色器或效果 */
+  /**
+   * 是否定義了這個著色器或效果
+   * @param name 著色器或效果的名稱
+   */
   has(name: string): boolean {
     return this.entries.has(name);
   }
@@ -284,36 +292,54 @@ export class ShaderLibrary {
     return [...this.entries.keys()];
   }
 
-  /** 著色器或效果的定義 */
+  /**
+   * 著色器或效果的定義
+   * @param name 著色器或效果的名稱
+   */
   definition(name: string): ShaderDefinition | EffectDefinition | undefined {
     return this.entries.get(name)?.def;
   }
 
-  /** 移除註冊（已建立的實例照常運作，但不能再 update） */
+  /**
+   * 移除註冊（已建立的實例照常運作，但不能再 update）
+   * @param name 著色器或效果的名稱
+   */
   remove(name: string): boolean {
     return this.entries.delete(name);
   }
 
-  /** 定義的版本：每次 define、update 加一（後製用它判斷要不要重建效果）；沒有這個名稱時是 0 */
+  /**
+   * 定義的版本：每次 define、update 加一（後製用它判斷要不要重建效果）；沒有這個名稱時是 0
+   * @param name 著色器或效果的名稱
+   */
   version(name: string): number {
     return this.entries.get(name)?.version ?? 0;
   }
 
-  /** 目前還在使用中的實例數量 */
+  /**
+   * 目前還在使用中的實例數量
+   * @param name 著色器或效果的名稱
+   */
   liveCount(name: string): number {
     return this.entries.get(name)?.live.size ?? 0;
   }
 
   // ───────── 註冊 ─────────
 
-  /** 註冊自訂材質 */
+  /**
+   * 註冊自訂材質
+   * @param def 材質定義：名稱、建立在哪種材質上、uniform、position／color／emissive 函式
+   */
   define(def: ShaderDefinition): this {
     this.validate(def);
     this.register(def.name, 'material', def);
     return this;
   }
 
-  /** 註冊自訂全螢幕效果 */
+  /**
+   * 註冊自訂全螢幕效果
+   * @param def 效果定義：名稱、uniform、color 函式
+   */
   defineEffect(def: EffectDefinition): this {
     if (typeof def.color !== 'function') throw new Error(`效果「${def.name}」需要 color 函式（回傳新的顏色）`);
     this.register(def.name, 'effect', def);
@@ -322,6 +348,8 @@ export class ShaderLibrary {
 
   /**
    * 執行中更新定義：所有使用中的實例會換成新的節點，既有的 uniform 數值會保留（新增的 uniform 用初始值）。
+   * @param name 著色器或效果的名稱
+   * @param changes 要換掉的欄位（例如新的 color 函式）
    */
   update(name: string, changes: Partial<ShaderDefinition> | Partial<EffectDefinition>): void {
     const entry = this.entries.get(name);
@@ -343,6 +371,7 @@ export class ShaderLibrary {
 
   /**
    * 建立材質。每次呼叫都是新的實例，uniform 各自獨立（例如每個敵人各自的溶解進度）。
+   * @param name 著色器名稱（define 的 name）
    * @param uniforms 覆蓋這個實例的 uniform 初始值
    * @param options 覆蓋這個實例的材質參數（例如 { color: 0xff0000 }）
    */
@@ -366,6 +395,9 @@ export class ShaderLibrary {
   /**
    * 直接用定義建立材質，不註冊名稱（不能 update；節點圖材質、編輯器預覽這種每次內容都不同的用）。
    * 材質的 shaderName 是定義的 name。
+   * @param def 材質定義
+   * @param uniforms 覆蓋這個實例的 uniform 初始值
+   * @param options 覆蓋這個實例的材質參數
    * @example
    * const m = shaders.createFromDefinition(await loadShaderGraph('shaders/lava.shader.json'));
    */
@@ -385,7 +417,11 @@ export class ShaderLibrary {
     }
   }
 
-  /** 建立全螢幕效果，交給 postfx.addPass(effect, 'display') 或放進 postfx.settings.effects */
+  /**
+   * 建立全螢幕效果，交給 postfx.addPass(effect, 'display') 或放進 postfx.settings.effects
+   * @param name 效果名稱（defineEffect 的 name）
+   * @param uniforms 覆蓋這個實例的 uniform 初始值
+   */
   createEffect(name: string, uniforms: Record<string, unknown> = {}): CustomEffect {
     const entry = this.entry(name, 'effect');
     const own = makeUniforms(name, (entry.def as EffectDefinition).uniforms, uniforms);

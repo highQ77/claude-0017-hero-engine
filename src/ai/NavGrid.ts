@@ -98,6 +98,9 @@ export class NavGrid {
   /** 每格的額外成本（例如泥地較慢），預設 1 */
   readonly cost: Float32Array;
 
+  /**
+   * @param options 範圍（min、max）、格子大小、地面高度
+   */
   constructor(options: NavGridOptions) {
     this.cellSize = options.cellSize ?? 0.5;
     this.min = { ...options.min };
@@ -110,7 +113,10 @@ export class NavGrid {
 
   // ───────── 座標換算 ─────────
 
-  /** 世界座標所在的格子，超出範圍回傳 null */
+  /**
+   * 世界座標所在的格子，超出範圍回傳 null
+   * @param p 世界座標（只用 x、z）
+   */
   cellOf(p: { x: number; z: number }): { col: number; row: number } | null {
     const col = Math.floor((p.x - this.min.x) / this.cellSize);
     const row = Math.floor((p.z - this.min.z) / this.cellSize);
@@ -118,12 +124,20 @@ export class NavGrid {
     return { col, row };
   }
 
-  /** 格子中心的世界座標 */
+  /**
+   * 格子中心的世界座標
+   * @param col 第幾欄
+   * @param row 第幾列
+   * @param out 存放結果的向量（省略時建立新的）
+   */
   cellCenter(col: number, row: number, out = new THREE.Vector3()): THREE.Vector3 {
     return out.set(this.min.x + (col + 0.5) * this.cellSize, this.y, this.min.z + (row + 0.5) * this.cellSize);
   }
 
-  /** 這個位置能不能走 */
+  /**
+   * 這個位置能不能走
+   * @param p 世界座標（只用 x、z）
+   */
   isWalkable(p: { x: number; z: number }): boolean {
     const c = this.cellOf(p);
     return c !== null && this.walkable[c.row * this.cols + c.col] === 1;
@@ -131,13 +145,25 @@ export class NavGrid {
 
   // ───────── 標記 ─────────
 
-  /** 設定格子能不能走 */
+  /**
+   * 設定格子能不能走
+   * @param col 第幾欄
+   * @param row 第幾列
+   * @param walkable true 可走、false 擋住
+   */
   setWalkable(col: number, row: number, walkable: boolean): void {
     if (col < 0 || row < 0 || col >= this.cols || row >= this.rows) return;
     this.walkable[row * this.cols + col] = walkable ? 1 : 0;
   }
 
-  /** 把一個矩形範圍（世界座標）標記為擋住或可走 */
+  /**
+   * 把一個矩形範圍（世界座標）標記為擋住或可走
+   * @param minX 範圍的最小 X（世界座標）
+   * @param minZ 範圍的最小 Z
+   * @param maxX 範圍的最大 X
+   * @param maxZ 範圍的最大 Z
+   * @param walkable true 可走、false 擋住
+   */
   setArea(minX: number, minZ: number, maxX: number, maxZ: number, walkable: boolean): void {
     const a = this.cellOf({ x: Math.max(minX, this.min.x), z: Math.max(minZ, this.min.z) });
     const b = this.cellOf({
@@ -151,6 +177,7 @@ export class NavGrid {
   /**
    * 把障礙物往外擴大 cells 格：替角色的身體寬度預留空間，避免轉彎時切進牆角。
    * （bakeFromPhysics 已經用 agentRadius 處理過，通常只有手動標記時需要）
+   * @param cells 往外擴大幾格
    */
   inflate(cells: number): void {
     if (cells <= 0) return;
@@ -168,6 +195,9 @@ export class NavGrid {
   /**
    * 從物理世界產生：每個格子中心放一顆半徑為 agentRadius 的球，碰到固定障礙物就標記為擋住。
    * 地板不會被算進去，只要 probeY 高於地板 agentRadius 以上。
+   * @param physics 物理世界
+   * @param world ECS 世界
+   * @param options 角色半徑、探測高度、忽略的實體
    */
   bakeFromPhysics(physics: Physics, world: World, options: BakeOptions): void {
     physics.flush();
@@ -193,6 +223,9 @@ export class NavGrid {
   /**
    * A* 尋路。起點或終點在障礙物裡時，會改用最近的可走格子。
    * 找不到路回傳 null。
+   * @param start 起點（世界座標）
+   * @param goal 終點（世界座標）
+   * @param options 是否走斜線、是否平滑路線
    */
   findPath(start: Vec3, goal: Vec3, options: PathOptions = {}): THREE.Vector3[] | null {
     const diagonal = options.diagonal ?? true;
@@ -265,7 +298,11 @@ export class NavGrid {
     return null;
   }
 
-  /** 兩點之間是否全部可走（直線經過的每個格子） */
+  /**
+   * 兩點之間是否全部可走（直線經過的每個格子）
+   * @param a 起點（世界座標，只用 x、z）
+   * @param b 終點（世界座標，只用 x、z）
+   */
   lineOfSight(a: { x: number; z: number }, b: { x: number; z: number }): boolean {
     const dist = Math.hypot(b.x - a.x, b.z - a.z);
     const steps = Math.max(1, Math.ceil(dist / (this.cellSize * 0.25)));

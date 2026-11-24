@@ -3,7 +3,15 @@
 /** 2D 繪圖環境（瀏覽器的 CanvasRenderingContext2D 或 OffscreenCanvas 的） */
 export type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
-/** 圓角矩形路徑（不依賴 ctx.roundRect，相容性較好） */
+/**
+ * 圓角矩形路徑（不依賴 ctx.roundRect，相容性較好）
+ * @param ctx 2D 繪圖環境
+ * @param x 左
+ * @param y 上
+ * @param w 寬
+ * @param h 高
+ * @param r 圓角半徑
+ */
 export function roundRectPath(ctx: Context2D, x: number, y: number, w: number, h: number, r: number): void {
   const radius = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.beginPath();

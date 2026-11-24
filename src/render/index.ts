@@ -90,13 +90,19 @@ export const create = {
   /**
    * 貼圖：給網址就載入（create.texture('textures/wood.png', { repeat: 4 })），
    * 也可以給畫布、圖片、影片（畫布重畫後設定 texture.needsUpdate = true）。pixelated: true 為像素風（放大不模糊）
+   * @param source 網址，或畫布、圖片、影片
+   * @param options 重複次數、超出範圍時的處理、是否是顏色資料、像素風
    */
   texture: (
     source: string | TextureImage,
     options: {
+      /** 重複幾次：數字或 [橫, 縱]；有設定時預設 wrap: 'repeat' */
       repeat?: number | readonly [number, number];
+      /** 超出 0～1 時：'repeat' 重複、'clamp' 延伸邊緣、'mirror' 鏡像重複 */
       wrap?: WrapName;
+      /** false：不是顏色的資料（法線貼圖、粗糙度貼圖），不做色彩空間轉換；預設 true */
       color?: boolean;
+      /** true：像素風，放大時不模糊 */
       pixelated?: boolean;
     } = {},
   ) => {
@@ -122,6 +128,9 @@ export const create = {
   /**
    * 幾何的頂點資料（自訂著色器用）：create.attribute(new Float32Array(n * 2), 2)，
    * 再用 geometry.setAttribute('aWeight', …) 加到幾何上；itemSize 是每個頂點幾個數字
+   * @param array 頂點資料（例如 new Float32Array(頂點數 × 2)）
+   * @param itemSize 每個頂點幾個數字
+   * @param normalized 整數資料是否轉成 0~1
    */
   attribute: (array: TypedArray, itemSize: number, normalized = false): BufferAttribute =>
     new BufferAttribute(array, itemSize, normalized),

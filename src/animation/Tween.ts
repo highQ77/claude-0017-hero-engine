@@ -83,24 +83,42 @@ export class Timeline {
     return this.end;
   }
 
-  /** 從目前數值補間到 props */
+  /**
+   * 從目前數值補間到 props
+   * @param target 要改變數值的物件
+   * @param props 目標數值：屬性名稱 → 數字
+   * @param options 時間長度、緩動、開始時間（at）
+   */
   to<T extends object>(target: T, props: TweenProps<T>, options: StepOptions): this {
     return this.addTween(target, null, props, options);
   }
 
-  /** 從 from 補間到 to */
+  /**
+   * 從 from 補間到 to
+   * @param target 要改變數值的物件
+   * @param from 開始的數值
+   * @param to 結束的數值
+   * @param options 時間長度、緩動、開始時間（at）
+   */
   fromTo<T extends object>(target: T, from: TweenProps<T>, to: TweenProps<T>, options: StepOptions): this {
     return this.addTween(target, from, to, options);
   }
 
-  /** 等待一段時間 */
+  /**
+   * 等待一段時間
+   * @param seconds 等待的秒數
+   */
   wait(seconds: number): this {
     this.end += Math.max(0, seconds);
     this.lastStart = this.end;
     return this;
   }
 
-  /** 在此時呼叫函式 */
+  /**
+   * 在此時呼叫函式
+   * @param fn 要呼叫的函式
+   * @param at 什麼時候呼叫：秒數，或 '<' 和上一步同時；省略時接在最後
+   */
   call(fn: () => void, at?: number | '<'): this {
     const start = this.startOf(at, 0);
     this.steps.push({ kind: 'call', start, fn });
@@ -211,7 +229,10 @@ export class Tween {
     return this;
   }
 
-  /** 停止；jumpToEnd 為 true 時先跳到最終狀態 */
+  /**
+   * 停止；jumpToEnd 為 true 時先跳到最終狀態
+   * @param jumpToEnd true：先跳到最終狀態再停止
+   */
   stop(jumpToEnd = false): void {
     if (!this.active) return;
     if (jumpToEnd) {
@@ -223,7 +244,10 @@ export class Tween {
     }
   }
 
-  /** 是否作用在這個物件上 */
+  /**
+   * 是否作用在這個物件上
+   * @param target 要檢查的物件
+   */
   targets(target: object): boolean {
     return this.tracks.some((t) => t.target === target);
   }
@@ -327,6 +351,9 @@ export class TweenManager {
   /** update() 走訪中的清單（讓回呼裡的 killTweensOf 也找得到） */
   private updating: Tween[] = [];
 
+  /**
+   * @param world ECS 世界：補間綁定實體（entity）時，實體被刪除就自動停止；可以省略
+   */
   constructor(private readonly world: World | null = null) {}
 
   /** 正在播放的補間數量 */
@@ -336,6 +363,9 @@ export class TweenManager {
 
   /**
    * 從目前數值補間到 props。
+   * @param target 要改變數值的物件
+   * @param props 目標數值：屬性名稱 → 數字
+   * @param options 時間長度、緩動、延遲、重複、回呼
    * @example
    * tweens.to(t.position, { y: 2 }, { duration: 0.5, easing: 'backOut', entity: e });
    */
@@ -343,7 +373,13 @@ export class TweenManager {
     return this.play(new Timeline().to(target, props, options), options);
   }
 
-  /** 從指定的起始值補間到目標值 */
+  /**
+   * 從指定的起始值補間到目標值
+   * @param target 要改變數值的物件
+   * @param from 開始的數值
+   * @param to 結束的數值
+   * @param options 時間長度、緩動、延遲、重複、回呼
+   */
   fromTo<T extends object>(
     target: T,
     from: TweenProps<T>,
@@ -353,7 +389,11 @@ export class TweenManager {
     return this.play(new Timeline().fromTo(target, from, to, options), options);
   }
 
-  /** 等待一段遊戲時間：await tweens.delay(1) */
+  /**
+   * 等待一段遊戲時間：await tweens.delay(1)
+   * @param seconds 幾秒後
+   * @param options 回呼、是否用不受時間縮放影響的時間
+   */
   delay(seconds: number, options: PlayOptions = {}): Tween {
     return this.play(new Timeline().wait(seconds), options);
   }
@@ -363,14 +403,22 @@ export class TweenManager {
     return new Timeline();
   }
 
-  /** 播放時間軸 */
+  /**
+   * 播放時間軸
+   * @param timeline 要播放的時間軸
+   * @param options 重複、回呼、是否用不受時間縮放影響的時間
+   */
   play(timeline: Timeline, options: PlayOptions = {}): Tween {
     const tween = new Tween(timeline, options);
     this.active.push(tween);
     return tween;
   }
 
-  /** 停止所有作用在 target 上的補間 */
+  /**
+   * 停止所有作用在 target 上的補間
+   * @param target 物件
+   * @param jumpToEnd true：先跳到最終狀態再停止
+   */
   killTweensOf(target: object, jumpToEnd = false): void {
     for (const t of [...this.active, ...this.updating]) if (t.targets(target)) t.stop(jumpToEnd);
   }
@@ -380,7 +428,11 @@ export class TweenManager {
     for (const t of [...this.active.splice(0), ...this.updating]) t.stop();
   }
 
-  /** 每幀呼叫 */
+  /**
+   * 每幀呼叫
+   * @param delta 這一幀的時間（秒，受時間縮放影響）
+   * @param unscaledDelta 這一幀的實際時間（秒，unscaled 的補間用）
+   */
   update(delta: number, unscaledDelta: number = delta): void {
     if (this.active.length === 0) return;
     const list = (this.updating = this.active);

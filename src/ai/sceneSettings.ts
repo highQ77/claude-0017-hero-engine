@@ -20,7 +20,10 @@ export interface NavGridFile {
   walkable?: number[];
 }
 
-/** 0/1 陣列 → 可走、擋住交替的格數 */
+/**
+ * 0/1 陣列 → 可走、擋住交替的格數
+ * @param walkable 每格 0（擋住）或 1（可走）
+ */
 export function encodeWalkable(walkable: ArrayLike<number>): number[] {
   const runs: number[] = [];
   let want = 1;
@@ -37,7 +40,11 @@ export function encodeWalkable(walkable: ArrayLike<number>): number[] {
   return runs;
 }
 
-/** 可走、擋住交替的格數 → 0/1（長度 length；不夠的補可走） */
+/**
+ * 可走、擋住交替的格數 → 0/1（長度 length；不夠的補可走）
+ * @param runs encodeWalkable 產生的格數
+ * @param length 總格數
+ */
 export function decodeWalkable(runs: readonly number[], length: number): Uint8Array {
   const out = new Uint8Array(length).fill(1);
   let i = 0;
@@ -48,7 +55,10 @@ export function decodeWalkable(runs: readonly number[], length: number): Uint8Ar
   return out;
 }
 
-/** 導航網格 → 場景檔寫法 */
+/**
+ * 導航網格 → 場景檔寫法
+ * @param grid 導航網格
+ */
 export function navGridToFile(grid: NavGrid): NavGridFile {
   const out: NavGridFile = {
     min: [grid.min.x, grid.min.z],
@@ -60,7 +70,10 @@ export function navGridToFile(grid: NavGrid): NavGridFile {
   return out;
 }
 
-/** 場景檔寫法 → 導航網格（格式錯誤時拋出錯誤） */
+/**
+ * 場景檔寫法 → 導航網格（格式錯誤時拋出錯誤）
+ * @param value 場景檔裡的 navGrid 設定
+ */
 export function navGridFromFile(value: unknown): NavGrid {
   const v = value as Partial<NavGridFile> | null;
   const pair = (p: unknown, name: string) => {

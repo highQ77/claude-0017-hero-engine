@@ -149,6 +149,7 @@ function serialize(node: El, indent: string, out: string[]): void {
 /**
  * 場景檔轉成 XML 文字（兩格縮排，結尾換行；prefabs 不會寫出）。
  * 子實體寫在父實體裡面；同一層依檔案裡的順序。
+ * @param data 場景檔
  */
 export function stringifySceneXml(data: SceneFileData): string {
   const root = el('Scene', [

@@ -2,11 +2,23 @@
  * 有限狀態機的一個狀態。update 回傳另一個狀態名稱時就會切換過去。
  */
 export interface FsmState<C> {
-  /** 進入這個狀態時呼叫（from：上一個狀態） */
+  /**
+   * 進入這個狀態時呼叫（from：上一個狀態）
+   * @param ctx 狀態共用的資料
+   * @param from 原本的狀態（第一次是 null）
+   */
   enter?(ctx: C, from: string | null): void;
-  /** 回傳狀態名稱以切換；不回傳則維持 */
+  /**
+   * 回傳狀態名稱以切換；不回傳則維持
+   * @param ctx 狀態共用的資料
+   * @param dt 這一幀的時間（秒）
+   */
   update?(ctx: C, dt: number): string | void;
-  /** 離開這個狀態時呼叫（to：下一個狀態） */
+  /**
+   * 離開這個狀態時呼叫（to：下一個狀態）
+   * @param ctx 狀態共用的資料
+   * @param to 要切換到的狀態
+   */
   exit?(ctx: C, to: string): void;
 }
 
@@ -27,6 +39,10 @@ export class StateMachine<C> {
   private started = false;
   private readonly listeners = new Set<(to: string, from: string | null) => void>();
 
+  /**
+   * @param initial 一開始的狀態名稱
+   * @param states 所有狀態：名稱 → 狀態的函式（enter、update、exit）
+   */
   constructor(
     /** 狀態共用的資料（每個狀態的函式都收到它） */
     readonly context: C,
@@ -52,18 +68,27 @@ export class StateMachine<C> {
     return this._time;
   }
 
-  /** 目前是不是這個狀態 */
+  /**
+   * 目前是不是這個狀態
+   * @param state 狀態名稱
+   */
   is(state: string): boolean {
     return this._current === state;
   }
 
-  /** 狀態改變時通知 */
+  /**
+   * 狀態改變時通知
+   * @param listener 狀態改變時呼叫：新的狀態、原本的狀態
+   */
   onChange(listener: (to: string, from: string | null) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
-  /** 每幀呼叫。第一次呼叫時會先進入初始狀態 */
+  /**
+   * 每幀呼叫。第一次呼叫時會先進入初始狀態
+   * @param dt 這一幀的時間（秒）
+   */
   update(dt: number): void {
     if (!this.started) this.start();
     this._time += dt;
@@ -71,7 +96,10 @@ export class StateMachine<C> {
     if (typeof next === 'string' && next !== this._current) this.go(next);
   }
 
-  /** 立刻切換狀態 */
+  /**
+   * 立刻切換狀態
+   * @param state 要切換到的狀態名稱
+   */
   go(state: string): void {
     if (!this.states[state]) throw new Error(`狀態「${state}」不存在`);
     if (!this.started) {

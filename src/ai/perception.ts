@@ -24,6 +24,10 @@ const _s = new THREE.Vector3();
 /**
  * viewer 看不看得到 target：距離、視野角度，以及中間有沒有障礙物。
  * 前方為 viewer 的 -Z 方向。
+ * @param world ECS 世界
+ * @param viewer 看的實體
+ * @param target 被看的實體
+ * @param options 視野距離、視角、眼睛高度、是否檢查遮擋
  */
 export function canSee(world: World, viewer: Entity, target: Entity, options: SightOptions = {}): boolean {
   const vt = world.get(viewer, Transform);
@@ -59,7 +63,12 @@ export function canSee(world: World, viewer: Entity, target: Entity, options: Si
   return hit.distance >= dist - 0.05;
 }
 
-/** 兩個實體之間的距離（世界座標） */
+/**
+ * 兩個實體之間的距離（世界座標）
+ * @param world ECS 世界
+ * @param a 第一個實體
+ * @param b 第二個實體
+ */
 export function distanceBetween(world: World, a: Entity, b: Entity): number {
   const ta = world.get(a, Transform);
   const tb = world.get(b, Transform);

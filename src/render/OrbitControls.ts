@@ -117,6 +117,10 @@ export class OrbitController {
   private focused = false;
   private readonly cleanup: (() => void)[] = [];
 
+  /**
+   * @param world ECS 世界
+   * @param canvas 監聽滑鼠、觸控的畫布
+   */
   constructor(
     private readonly world: World,
     private readonly canvas: HTMLCanvasElement,
@@ -151,7 +155,10 @@ export class OrbitController {
     this.states.clear();
   }
 
-  /** 每幀：套用操作、慣性、自動旋轉，寫回攝影機的 Transform */
+  /**
+   * 每幀：套用操作、慣性、自動旋轉，寫回攝影機的 Transform
+   * @param dt 這一幀的時間（秒）
+   */
   update(dt: number): void {
     const cam = this.activeCamera();
     this.canvas.style.touchAction = cam !== null && this.world.has(cam, OrbitControl) ? 'none' : '';

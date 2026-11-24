@@ -58,6 +58,10 @@ export class ModelController {
   private readonly offs: (() => void)[] = [];
   private nextToken = 1;
 
+  /**
+   * @param world ECS 世界
+   * @param assets 資源管理器
+   */
   constructor(
     private readonly world: World,
     private readonly assets: AssetManager,

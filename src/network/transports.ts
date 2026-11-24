@@ -5,17 +5,29 @@
 export interface TransportHandlers {
   /** 連線成功時呼叫 */
   open(): void;
-  /** 收到訊息時呼叫 */
+  /**
+   * 收到訊息時呼叫
+   * @param data 收到的文字
+   */
   message(data: string): void;
-  /** 連線中斷（不是自己呼叫 close 造成的） */
+  /**
+   * 連線中斷（不是自己呼叫 close 造成的）
+   * @param reason 中斷的原因
+   */
   close(reason?: string): void;
 }
 
 /** 傳輸方式：負責收送文字訊息（WebSocket、同一個瀏覽器的分頁、測試用） */
 export interface Transport {
-  /** 開始連線；成功時呼叫 handlers.open */
+  /**
+   * 開始連線；成功時呼叫 handlers.open
+   * @param handlers 連線成功、收到訊息、連線中斷時呼叫的函式
+   */
   connect(handlers: TransportHandlers): void;
-  /** 送出訊息 */
+  /**
+   * 送出訊息
+   * @param data 要送出的文字
+   */
   send(data: string): void;
   /** 主動關閉（不會觸發 handlers.close） */
   close(): void;
@@ -33,6 +45,9 @@ export class WebSocketTransport implements Transport {
 
   constructor(/** 伺服器網址（ws:// 或 wss://） */ readonly url: string) {}
 
+  /**
+   * @param handlers 連線成功、收到訊息、連線中斷時呼叫的函式
+   */
   connect(handlers: TransportHandlers): void {
     this.closing = false;
     const socket = new WebSocket(this.url);
@@ -50,7 +65,10 @@ export class WebSocketTransport implements Transport {
     };
   }
 
-  /** 送出訊息 */
+  /**
+   * 送出訊息
+   * @param data 要送出的文字
+   */
   send(data: string): void {
     if (this.socket?.readyState === 1) this.socket.send(data);
   }
@@ -72,6 +90,9 @@ export class BroadcastChannelTransport implements Transport {
 
   constructor(/** 頻道名稱（同名的分頁互相連線） */ readonly name: string) {}
 
+  /**
+   * @param handlers 連線成功、收到訊息、連線中斷時呼叫的函式
+   */
   connect(handlers: TransportHandlers): void {
     const channel = new BroadcastChannel(this.name);
     this.channel = channel;
@@ -83,7 +104,10 @@ export class BroadcastChannelTransport implements Transport {
     });
   }
 
-  /** 送出訊息 */
+  /**
+   * 送出訊息
+   * @param data 要送出的文字
+   */
   send(data: string): void {
     this.channel?.postMessage(data);
   }
@@ -112,7 +136,10 @@ export interface LoopbackOptions {
 export class LoopbackHub {
   private readonly members = new Set<LoopbackTransport>();
 
-  /** 建立一個連到這個中心的傳輸 */
+  /**
+   * 建立一個連到這個中心的傳輸
+   * @param options 模擬的網路延遲（毫秒）
+   */
   create(options: LoopbackOptions = {}): LoopbackTransport {
     return new LoopbackTransport(this, options.latency ?? 0);
   }
@@ -132,7 +159,10 @@ export class LoopbackHub {
     for (const m of this.members) if (m !== from) m._deliver(data, from.latency);
   }
 
-  /** 模擬某一端的網路斷線（會觸發它的 close） */
+  /**
+   * 模擬某一端的網路斷線（會觸發它的 close）
+   * @param t 要斷線的那一端
+   */
   drop(t: LoopbackTransport): void {
     if (!this.members.has(t)) return;
     this.members.delete(t);
@@ -151,12 +181,18 @@ export class LoopbackTransport implements Transport {
   /** 設為 true 時，connect 會失敗（測試重連用） */
   failNextConnect = false;
 
+  /**
+   * @param hub 連到的中心
+   */
   constructor(
     private readonly hub: LoopbackHub,
     /** 模擬的延遲（毫秒） */
     readonly latency: number,
   ) {}
 
+  /**
+   * @param handlers 連線成功、收到訊息、連線中斷時呼叫的函式
+   */
   connect(handlers: TransportHandlers): void {
     this.handlers = handlers;
     if (this.failNextConnect) {
@@ -168,7 +204,10 @@ export class LoopbackTransport implements Transport {
     queueMicrotask(() => handlers.open());
   }
 
-  /** 送出訊息 */
+  /**
+   * 送出訊息
+   * @param data 要送出的文字
+   */
   send(data: string): void {
     if (this.handlers) this.hub._broadcast(this, data); // 已關閉或斷線就送不出去
   }

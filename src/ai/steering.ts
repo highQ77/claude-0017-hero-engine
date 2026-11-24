@@ -8,7 +8,14 @@ import type { Vec3 } from '../physics/Physics';
 
 const _v = new THREE.Vector3();
 
-/** 往目標全速前進 */
+/**
+ * 往目標全速前進
+ * @param position 自己的位置
+ * @param velocity 自己目前的速度
+ * @param target 要前往的位置
+ * @param maxSpeed 最高速度（公尺／秒）
+ * @param out 存放結果的向量（省略時建立新的）
+ */
 export function seek(
   position: Vec3,
   velocity: Vec3,
@@ -23,7 +30,14 @@ export function seek(
   return out.sub(_v.set(velocity.x, velocity.y, velocity.z));
 }
 
-/** 遠離目標 */
+/**
+ * 遠離目標
+ * @param position 自己的位置
+ * @param velocity 自己目前的速度
+ * @param threat 要遠離的位置
+ * @param maxSpeed 最高速度（公尺／秒）
+ * @param out 存放結果的向量（省略時建立新的）
+ */
 export function flee(
   position: Vec3,
   velocity: Vec3,
@@ -37,7 +51,15 @@ export function flee(
   return out.add(_v).negate().sub(_v);
 }
 
-/** 往目標前進，進入 slowRadius 後逐漸減速，停在目標上 */
+/**
+ * 往目標前進，進入 slowRadius 後逐漸減速，停在目標上
+ * @param position 自己的位置
+ * @param velocity 自己目前的速度
+ * @param target 要抵達的位置
+ * @param maxSpeed 最高速度（公尺／秒）
+ * @param slowRadius 離目標多近開始減速
+ * @param out 存放結果的向量（省略時建立新的）
+ */
 export function arrive(
   position: Vec3,
   velocity: Vec3,
@@ -54,7 +76,15 @@ export function arrive(
   return out.sub(_v.set(velocity.x, velocity.y, velocity.z));
 }
 
-/** 預測目標未來位置並追上 */
+/**
+ * 預測目標未來位置並追上
+ * @param position 自己的位置
+ * @param velocity 自己目前的速度
+ * @param targetPos 目標的位置
+ * @param targetVel 目標的速度（用來預測位置）
+ * @param maxSpeed 最高速度（公尺／秒）
+ * @param out 存放結果的向量（省略時建立新的）
+ */
 export function pursue(
   position: Vec3,
   velocity: Vec3,
@@ -73,7 +103,15 @@ export function pursue(
   return seek(position, velocity, future, maxSpeed, out);
 }
 
-/** 預測威脅未來位置並躲開 */
+/**
+ * 預測威脅未來位置並躲開
+ * @param position 自己的位置
+ * @param velocity 自己目前的速度
+ * @param threatPos 威脅的位置
+ * @param threatVel 威脅的速度（用來預測位置）
+ * @param maxSpeed 最高速度（公尺／秒）
+ * @param out 存放結果的向量（省略時建立新的）
+ */
 export function evade(
   position: Vec3,
   velocity: Vec3,
@@ -95,14 +133,31 @@ export function evade(
 /**
  * 隨意遊走：在前方的圓上隨機偏移目標點，產生自然的漫步。
  * state.angle 會被更新，請每個角色各自保存。
+ * @param position 自己的位置
+ * @param velocity 自己目前的速度
+ * @param state 每個角色各自保存的遊走狀態（會被更新）
+ * @param maxSpeed 最高速度（公尺／秒）
+ * @param dt 這一幀的時間（秒）
+ * @param options 圓的距離、半徑、隨機程度
+ * @param out 存放結果的向量（省略時建立新的）
  */
 export function wander(
   position: Vec3,
   velocity: Vec3,
-  state: { angle: number },
+  state: {
+    /** 目前在圓上的角度（弧度）：每個角色各自保存，wander 會更新它 */
+    angle: number;
+  },
   maxSpeed: number,
   dt: number,
-  options: { distance?: number; radius?: number; jitter?: number } = {},
+  options: {
+    /** 圓心在前方多遠，預設 2 */
+    distance?: number;
+    /** 圓的半徑：越大轉彎越大，預設 1 */
+    radius?: number;
+    /** 每秒隨機改變角度的幅度（弧度）：越大越常改變方向，預設 3 */
+    jitter?: number;
+  } = {},
   out = new THREE.Vector3(),
 ): THREE.Vector3 {
   const distance = options.distance ?? 2;
@@ -116,7 +171,14 @@ export function wander(
   return seek(position, velocity, target, maxSpeed, out);
 }
 
-/** 與鄰居保持距離：越近推力越大 */
+/**
+ * 與鄰居保持距離：越近推力越大
+ * @param position 自己的位置
+ * @param neighbors 鄰居的位置
+ * @param radius 保持多遠的距離
+ * @param maxSpeed 最高速度（公尺／秒）
+ * @param out 存放結果的向量（省略時建立新的）
+ */
 export function separation(
   position: Vec3,
   neighbors: readonly Vec3[],
@@ -134,7 +196,11 @@ export function separation(
   return out.multiplyScalar(maxSpeed);
 }
 
-/** 把向量長度限制在 max 以內 */
+/**
+ * 把向量長度限制在 max 以內
+ * @param v 要限制的向量（會被修改）
+ * @param max 最大長度
+ */
 export function truncate(v: THREE.Vector3, max: number): THREE.Vector3 {
   const len = v.length();
   if (len > max) v.multiplyScalar(max / len);

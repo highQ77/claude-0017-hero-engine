@@ -30,6 +30,10 @@ export class Time {
 
   private _timeScale: number;
 
+  /**
+   * @param fixedDelta 固定步長（秒）
+   * @param timeScale 時間縮放（1 正常）
+   */
   constructor(fixedDelta: number, timeScale: number) {
     this.fixedDelta = fixedDelta;
     this._timeScale = timeScale;

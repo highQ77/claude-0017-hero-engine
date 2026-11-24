@@ -26,6 +26,9 @@ export const DEFAULT_CONFIG: Readonly<EngineConfig> = Object.freeze({
   debug: false,
 });
 
+/**
+ * @param overrides 要改的設定（固定步長、時間縮放、分頁隱藏時暫停…）；其他用預設值
+ */
 export function createConfig(overrides: Partial<EngineConfig> = {}): EngineConfig {
   const config: EngineConfig = { ...DEFAULT_CONFIG, ...overrides };
   if (!(config.fixedDelta > 0)) throw new Error('fixedDelta 必須大於 0');

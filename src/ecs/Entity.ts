@@ -10,10 +10,16 @@ const INDEX_LIMIT = 2 ** 22; // 最多約 419 萬個同時存在的實體
 /** 代表「沒有實體」 */
 export const NULL_ENTITY = -1 as Entity;
 
+/**
+ * @param e 實體
+ */
 export function entityIndex(e: Entity): number {
   return e % INDEX_LIMIT;
 }
 
+/**
+ * @param e 實體
+ */
 export function entityGeneration(e: Entity): number {
   return Math.floor(e / INDEX_LIMIT);
 }

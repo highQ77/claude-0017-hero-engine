@@ -1,0 +1,9 @@
+{
+  // 在字串裡打字也跳出提示：例如 spawn.light(world, { kind: '' }) 的引號裡列出 'point'、'spot'…
+  "[typescript]": {
+    "editor.quickSuggestions": { "other": "on", "comments": "off", "strings": "on" }
+  },
+  "[javascript]": {
+    "editor.quickSuggestions": { "other": "on", "comments": "off", "strings": "on" }
+  }
+}

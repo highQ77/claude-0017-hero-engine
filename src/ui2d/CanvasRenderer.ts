@@ -6,7 +6,10 @@ import { UIPainter, type Context2D } from './UIPainter';
  * 顯示層介面：UI2D 排版或互動狀態改變後呼叫 render()。
  */
 export interface UIRenderer {
-  /** 連接到介面 */
+  /**
+   * 連接到介面
+   * @param ui 介面
+   */
   attach(ui: UI2D): void;
   /** 重畫 */
   render(): void;
@@ -20,7 +23,11 @@ export interface UIRenderer {
 
 /** 全螢幕單色層：opacity 0（看不到）～ 1（完全蓋住） */
 export interface ScreenFader {
-  /** 設定透明度（0 看不到 ~ 1 完全蓋住）與顏色 */
+  /**
+   * 設定透明度（0 看不到 ~ 1 完全蓋住）與顏色
+   * @param opacity 透明度：0 看不到 ~ 1 完全蓋住
+   * @param color 顏色（CSS 顏色）
+   */
   set(opacity: number, color?: string): void;
 }
 
@@ -37,6 +44,9 @@ export class CanvasUIRenderer implements UIRenderer {
   private painter: UIPainter | null = null;
   private readonly cleanup: (() => void)[] = [];
 
+  /**
+   * @param container 放畫布的元素
+   */
   constructor(container: HTMLElement) {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'ui2d-canvas';
@@ -53,7 +63,10 @@ export class CanvasUIRenderer implements UIRenderer {
     this.ctx = this.canvas.getContext('2d')!;
   }
 
-  /** 連接到介面 */
+  /**
+   * 連接到介面
+   * @param ui 介面
+   */
   attach(ui: UI2D): void {
     this.ui = ui;
     this.painter = new UIPainter((url) => ui.imageSource(url));

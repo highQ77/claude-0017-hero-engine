@@ -92,7 +92,10 @@ export class UIStackView extends UIElement {
     return this.children.length;
   }
 
-  /** 把「索引或 id」換成索引（找不到為 -1） */
+  /**
+   * 把「索引或 id」換成索引（找不到為 -1）
+   * @param page 頁的索引或 id
+   */
   indexOf(page: string | number): number {
     if (typeof page === 'number') return page >= 0 && page < this.count ? page : -1;
     const byId = this.children.findIndex((c) => c.id === page);
@@ -112,12 +115,19 @@ export class UIStackView extends UIElement {
     return this.children[this.selectedIndex] ?? null;
   }
 
-  /** 某一頁是否顯示中（給 select 按鈕判斷要不要亮起來） */
+  /**
+   * 某一頁是否顯示中（給 select 按鈕判斷要不要亮起來）
+   * @param page 頁的 id
+   */
   isShowing(page: string): boolean {
     return this.indexOf(page) === this.selectedIndex;
   }
 
-  /** 切換到某一頁（emit 為 true 時觸發 change 事件） */
+  /**
+   * 切換到某一頁（emit 為 true 時觸發 change 事件）
+   * @param page 頁的索引或 id
+   * @param emit true 時觸發 change 事件
+   */
   show(page: string | number, emit = false): void {
     const to = this.indexOf(page);
     const from = this.selectedIndex;
@@ -127,14 +137,20 @@ export class UIStackView extends UIElement {
     if (emit) this.emit('change', { value: to });
   }
 
-  /** 下一頁（emit：是否觸發 change 事件） */
+  /**
+   * 下一頁（emit：是否觸發 change 事件）
+   * @param emit true 時觸發 change 事件
+   */
   next(emit = true): void {
     const i = this.selectedIndex + 1;
     if (i < this.count) this.show(i, emit);
     else if (bool(this.attrs.loop)) this.show(0, emit);
   }
 
-  /** 上一頁（emit：是否觸發 change 事件） */
+  /**
+   * 上一頁（emit：是否觸發 change 事件）
+   * @param emit true 時觸發 change 事件
+   */
   prev(emit = true): void {
     const i = this.selectedIndex - 1;
     if (i >= 0) this.show(i, emit);
@@ -178,7 +194,10 @@ export class UIStackView extends UIElement {
     return true;
   }
 
-  /** 左右滑動換頁（swipe="true"；按在頁面的按鈕上時照常點擊） */
+  /**
+   * 左右滑動換頁（swipe="true"；按在頁面的按鈕上時照常點擊）
+   * @param px 指標 X（介面座標）
+   */
   override pointerDown(px: number, _py: number): PointerCapture | null {
     if (!bool(this.attrs.swipe) || this.count < 2) return null;
     const page = this.selectedPage;
@@ -266,6 +285,11 @@ export class UITabs extends UIElement {
   readonly content: UIStackView;
   private buttons: UIButton[] = [];
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, _text = '') {
     super(ctx, type, raw);
     this.bar = new UILayout(ctx, 'UITabBar', { dir: 'h', gap: '4' });
@@ -320,7 +344,10 @@ export class UITabs extends UIElement {
     return this.tabs[this.selectedIndex] ?? null;
   }
 
-  /** 切換分頁（不會觸發 change 事件；有切換動畫） */
+  /**
+   * 切換分頁（不會觸發 change 事件；有切換動畫）
+   * @param index 分頁的索引
+   */
   select(index: number): void {
     if (index === this.selectedIndex && this.raw.value !== undefined) return;
     this.raw.value = String(index);
@@ -432,6 +459,11 @@ export class UITable extends UIElement {
   private rowEls: UILayout[] = [];
   private headerCells: UILabel[] = [];
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, _text = '') {
     super(ctx, type, raw);
     this.header = new UILayout(ctx, 'UITableHeader', { dir: 'h' });
@@ -462,7 +494,10 @@ export class UITable extends UIElement {
     };
   }
 
-  /** XML 裡的 <UIColumn>、<UIRow> */
+  /**
+   * XML 裡的 <UIColumn>、<UIRow>
+   * @param node XML 子節點
+   */
   override consumeChild(node: XmlNode): boolean {
     if (node.tag === 'UIColumn') {
       const a = node.attrs;
@@ -488,13 +523,19 @@ export class UITable extends UIElement {
     this.rebuild();
   }
 
-  /** 設定欄位（沒寫的設定用預設值） */
+  /**
+   * 設定欄位（沒寫的設定用預設值）
+   * @param columns 欄位：key（資料的欄位名稱）、標題、寬度、比例、對齊、能否排序
+   */
   setColumns(columns: (Partial<TableColumn> & { key: string })[]): void {
     this.columns = columns.map((c) => ({ title: c.key, align: 'left', sort: 'auto', ...c }));
     this.rebuild();
   }
 
-  /** 換掉所有資料 */
+  /**
+   * 換掉所有資料
+   * @param rows 資料：每一列是一個物件
+   */
   setRows(rows: readonly TableRow[]): void {
     this.rows = rows.map((r) => ({ ...r }));
     if (this.selectedRow && !this.rows.includes(this.selectedRow)) this.selectedRow = null;
@@ -521,7 +562,11 @@ export class UITable extends UIElement {
     });
   }
 
-  /** 依某欄排序（再呼叫一次同一欄會反過來；dir 指定方向） */
+  /**
+   * 依某欄排序（再呼叫一次同一欄會反過來；dir 指定方向）
+   * @param key 欄位的 key
+   * @param dir 1 由小到大、-1 由大到小；省略時同一欄再呼叫會反過來
+   */
   sortBy(key: string | null, dir?: 1 | -1): void {
     if (key === null) this.sortKey = null;
     else {
@@ -532,7 +577,10 @@ export class UITable extends UIElement {
     this.emit('sort', { value: { key: this.sortKey, dir: this.sortDir } });
   }
 
-  /** 選取顯示順序中的第幾列（-1 取消選取；不會觸發事件） */
+  /**
+   * 選取顯示順序中的第幾列（-1 取消選取；不會觸發事件）
+   * @param index 顯示順序中的第幾列；-1 取消選取
+   */
   select(index: number): void {
     this.selectedRow = this.displayRows[index] ?? null;
     this.styleRows();
@@ -653,6 +701,12 @@ export class UIFpsMeter extends UILabel {
   private frames = 0;
   private since = 0;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   * @param text 一開始的文字
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, text = '') {
     super(ctx, type, raw, text || 'FPS --');
     ctx.animate?.(this);
@@ -705,4 +759,17 @@ export class UIFpsMeter extends UILabel {
 }
 
 /** 進階元件第二批（UI2D 會自動註冊） */
-export const WIDGET2_COMPONENTS = { UIStackView, UITabs, UITab, UITable, UIRichText, UIFpsMeter } as const;
+export const WIDGET2_COMPONENTS = {
+  /** 頁面堆疊：一次只顯示一頁，切換有動畫 */
+  UIStackView,
+  /** 分頁：上方標籤、下方內容 */
+  UITabs,
+  /** 分頁的一頁（放在 UITabs 裡） */
+  UITab,
+  /** 表格：標題列＋可捲動的資料列，可以排序、選取 */
+  UITable,
+  /** 多樣式文字：粗體、顏色、大小、圖示混用 */
+  UIRichText,
+  /** FPS 顯示 */
+  UIFpsMeter,
+} as const;

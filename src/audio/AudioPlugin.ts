@@ -31,6 +31,9 @@ export class AudioPlugin implements Plugin {
   /** 取消登記場景檔存讀規則 */
   private offCodecs: () => void = () => {};
 
+  /**
+   * @param options AudioContext、音量群組、同時播放的上限、遊戲暫停時是否一起暫停
+   */
   constructor(private readonly options: AudioPluginOptions = {}) {}
 
   /** 音效管理器（也可以用 world.requireResource(AudioKey) 取得） */
@@ -39,6 +42,9 @@ export class AudioPlugin implements Plugin {
     return this._audio;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     const assets = engine.getPlugin<AssetPlugin>('assets')!.assets;

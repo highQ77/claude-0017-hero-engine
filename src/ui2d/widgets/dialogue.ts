@@ -43,6 +43,12 @@ export class UIDialogue extends UIElement {
   private blink = 0;
   private blinkOn = true;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   * @param text 一開始的文字
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, text = '') {
     super(ctx, type, raw);
     this.portrait = new UIImage(ctx, 'UIImage', { width: '88', height: '88', fit: 'cover', radius: '10' });
@@ -77,7 +83,10 @@ export class UIDialogue extends UIElement {
     };
   }
 
-  /** XML 裡的 <UIChoice> */
+  /**
+   * XML 裡的 <UIChoice>
+   * @param node XML 子節點
+   */
   override consumeChild(node: XmlNode): boolean {
     if (node.tag !== 'UIChoice') return false;
     this.choices.push({
@@ -122,8 +131,20 @@ export class UIDialogue extends UIElement {
 
   /**
    * 說一段話（逐字顯示）。choices 會在文字顯示完後出現。
+   * @param text 要說的話（支援多樣式文字標記）
+   * @param options 說話的人、頭像、選項
    */
-  say(text: string, options: { speaker?: string; portrait?: string; choices?: DialogChoice[] } = {}): void {
+  say(
+    text: string,
+    options: {
+      /** 說話的人（顯示在名字欄） */
+      speaker?: string;
+      /** 頭像圖片網址 */
+      portrait?: string;
+      /** 選項：文字顯示完後出現 */
+      choices?: DialogChoice[];
+    } = {},
+  ): void {
     if (options.speaker !== undefined) this.raw.speaker = options.speaker;
     if (options.portrait !== undefined) this.raw.portrait = options.portrait;
     this.choices = options.choices ? options.choices.map((c) => ({ ...c })) : [];
@@ -233,6 +254,12 @@ let legacyDialogWarned = false;
  * @deprecated 請改用 UIDialogue
  */
 export class UIDialog extends UIDialogue {
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   * @param text 一開始的文字
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, text = '') {
     super(ctx, type, raw, text);
     if (!legacyDialogWarned) {

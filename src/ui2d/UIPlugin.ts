@@ -304,6 +304,9 @@ export class UIPlugin implements Plugin {
 
   private constructor(/** 介面（也可以用 world.requireResource(UIKey) 取得） */ readonly ui: UI2D) {}
 
+  /**
+   * @param options 大小、像素比、事件處理函式、斷點、量文字的方式等設定
+   */
   static async create(options: UIPluginOptions = {}): Promise<UIPlugin> {
     // 先以無畫面模式建立（可以先載入介面），安裝到引擎時才接上顯示層
     const ui = await UI2D.create({ ...options, container: null, renderer: null });
@@ -311,6 +314,9 @@ export class UIPlugin implements Plugin {
     return new UIPlugin(ui);
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const render = engine.getPlugin<RenderPlugin>('render')!;
     const ui = this.ui;

@@ -114,6 +114,14 @@ function path(d: string): Path2D | null {
 
 /**
  * 在 (x, y, w, h) 範圍中央畫圖示。
+ * @param ctx 2D 繪圖環境
+ * @param name 圖示名稱（見 ICON_NAMES）
+ * @param x 左
+ * @param y 上
+ * @param w 寬
+ * @param h 高
+ * @param color 顏色
+ * @param strokeWidth 線寬
  * @returns 是否有這個圖示
  */
 export function drawIcon(

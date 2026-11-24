@@ -35,6 +35,9 @@ export class ScriptPlugin implements Plugin {
   /** 由 ScriptList 掛上的腳本（移除 ScriptList 時一起移除） */
   private readonly fromList = new Map<Entity, Script[]>();
 
+  /**
+   * @param options 腳本錯誤時直接拋出（rethrow，測試用）
+   */
   constructor(private readonly options: ScriptRunnerOptions = {}) {}
 
   /** 腳本執行器（也可以用 world.requireResource(ScriptsKey) 取得） */
@@ -43,6 +46,9 @@ export class ScriptPlugin implements Plugin {
     return this._runner;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     this.ecs = ecs;

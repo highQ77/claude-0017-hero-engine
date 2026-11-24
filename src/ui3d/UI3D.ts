@@ -166,6 +166,10 @@ export class UI3DController {
   private nextToken = 1;
   private readonly _q = new THREE.Quaternion();
 
+  /**
+   * @param world ECS 世界
+   * @param options 共用的事件處理函式、面板畫完時的回呼、貼圖複製器、建立介面的方式
+   */
   constructor(
     private readonly world: World,
     private readonly options: UI3DControllerOptions = {},
@@ -191,6 +195,7 @@ export class UI3DController {
   /**
    * 重新載入面板的介面（介面檔改了，例如編輯器收到 UI 編輯器的修改）。
    * match 給的話只重新載入 src 符合的面板；不給時全部重新載入。下一次 update 時生效。
+   * @param match 判斷要不要重新載入：拿到面板的 src；省略時全部重新載入
    */
   reloadPanels(match?: (src: string) => boolean): void {
     for (const [e, st] of this.panels) {
@@ -199,7 +204,10 @@ export class UI3DController {
     }
   }
 
-  /** 每次繪製前：billboard 面板轉向攝影機 */
+  /**
+   * 每次繪製前：billboard 面板轉向攝影機
+   * @param camera 目前的攝影機
+   */
   faceCamera(camera: THREE.Camera | undefined): void {
     if (!camera) return;
     camera.getWorldQuaternion(this._q);

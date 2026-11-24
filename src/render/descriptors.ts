@@ -22,6 +22,10 @@ export type Vec3Like =
   | readonly [number, number, number]
   | { readonly x: number; readonly y: number; readonly z: number };
 
+/**
+ * @param v [x, y, z] 或有 x、y、z 的物件
+ * @param out 寫入結果的向量
+ */
 export function toVector3(v: Vec3Like, out = new THREE.Vector3()): THREE.Vector3 {
   return Array.isArray(v)
     ? out.set(v[0], v[1], v[2])
@@ -47,24 +51,68 @@ export function toVector3(v: Vec3Like, out = new THREE.Vector3()): THREE.Vector3
  * 和 offset: [x, y, z]：再移動幾何，例如以底部為中心縮放的方塊 { box: 1, offset: [0, 0.5, 0] }
  */
 export type GeometryDesc = (
-  | { readonly box: number | readonly number[] }
-  | { readonly sphere: number | readonly number[] }
-  | { readonly plane: number | readonly number[] }
-  | { readonly circle: number | readonly number[] }
-  | { readonly cylinder: readonly number[] }
-  | { readonly cone: readonly number[] }
-  | { readonly capsule: readonly number[] }
-  | { readonly torus: readonly number[] }
-  | { readonly torusKnot: readonly number[] }
-  | { readonly dodecahedron: number | readonly number[] }
-  | { readonly icosahedron: number | readonly number[] }
-  | { readonly octahedron: number | readonly number[] }
-  | { readonly tetrahedron: number | readonly number[] }
   | {
+      /** 方塊：邊長，或 [寬, 高, 深]，例如 { box: 1 }、{ box: [2, 1, 0.5] } */
+      readonly box: number | readonly number[];
+    }
+  | {
+      /** 球：半徑，或 [半徑, 經線數, 緯線數] */
+      readonly sphere: number | readonly number[];
+    }
+  | {
+      /** 平面：邊長，或 [寬, 高, 橫向分段, 縱向分段]（面向 +Z；當地板時把 Transform 轉 -90° 繞 X 軸） */
+      readonly plane: number | readonly number[];
+    }
+  | {
+      /** 圓盤：半徑，或 [半徑, 分段數]（預設 48） */
+      readonly circle: number | readonly number[];
+    }
+  | {
+      /** 圓柱：[半徑, 高]，或 [半徑, 高, 分段數]（預設 32） */
+      readonly cylinder: readonly number[];
+    }
+  | {
+      /** 圓錐：[半徑, 高]，或 [半徑, 高, 分段數]（預設 32） */
+      readonly cone: readonly number[];
+    }
+  | {
+      /** 膠囊：[半徑, 中間的長度]（總高度 = 長度 + 2 × 半徑） */
+      readonly capsule: readonly number[];
+    }
+  | {
+      /** 甜甜圈：[半徑, 管子半徑] */
+      readonly torus: readonly number[];
+    }
+  | {
+      /** 環結：[半徑, 管子半徑] */
+      readonly torusKnot: readonly number[];
+    }
+  | {
+      /** 正十二面體：半徑，或 [半徑, 細分] */
+      readonly dodecahedron: number | readonly number[];
+    }
+  | {
+      /** 正二十面體：半徑，或 [半徑, 細分]（細分越多越接近球） */
+      readonly icosahedron: number | readonly number[];
+    }
+  | {
+      /** 正八面體：半徑，或 [半徑, 細分] */
+      readonly octahedron: number | readonly number[];
+    }
+  | {
+      /** 正四面體：半徑，或 [半徑, 細分] */
+      readonly tetrahedron: number | readonly number[];
+    }
+  | {
+      /** 自己給頂點：[x, y, z, x, y, z, …]，每三個頂點一個三角形（逆時針是正面） */
       readonly vertices: readonly number[];
+      /** 頂點編號，三個一組一個三角形（共用頂點時用） */
       readonly indices?: readonly number[];
+      /** 頂點顏色 [r, g, b, …]（0~1），搭配材質 vertexColors: true */
       readonly colors?: readonly number[];
+      /** 貼圖座標 [u, v, …] */
       readonly uvs?: readonly number[];
+      /** 法線 [x, y, z, …]；沒給時自動計算 */
       readonly normals?: readonly number[];
     }
 ) & {
@@ -140,6 +188,9 @@ function customGeometry(desc: Extract<GeometryDesc, { readonly vertices: unknown
   return g;
 }
 
+/**
+ * @param desc 幾何描述，例如 { box: 1 }、{ sphere: [0.5, 32, 16] }
+ */
 export function createGeometry(desc: GeometryDesc): THREE.BufferGeometry {
   const g = shape(desc);
   if (desc.rotation) {
@@ -199,9 +250,13 @@ export type WrapName = keyof typeof WRAPS;
  * - repeat：貼圖重複幾次（數字或 [橫, 縱]），有設定時預設 wrap: 'repeat'
  */
 export type MaterialParams<P> = Omit<P, 'side' | 'blending' | TextureKey> & {
+  /** 畫哪一面：'front'（預設）、'back'、'double' */
   readonly side?: keyof typeof SIDES | THREE.Side;
+  /** 混合方式：'normal'（預設）、'additive'（疊加發光）、'subtractive'、'multiply'、'none' */
   readonly blending?: BlendingName | THREE.Blending;
+  /** 貼圖重複幾次：數字或 [橫, 縱]；有設定時預設 wrap: 'repeat' */
   readonly repeat?: number | readonly [number, number];
+  /** 貼圖超出 0～1 時：'repeat' 重複、'clamp' 延伸邊緣、'mirror' 鏡像重複 */
   readonly wrap?: WrapName;
 } & { readonly [K in TextureKey & keyof P]?: string | THREE.Texture | null };
 
@@ -220,14 +275,38 @@ export type MaterialParams<P> = Omit<P, 'side' | 'blending' | TextureKey> & {
 export type MaterialDesc =
   | string
   | number
-  | { readonly standard: MaterialParams<THREE.MeshStandardMaterialParameters> }
-  | { readonly physical: MaterialParams<THREE.MeshPhysicalMaterialParameters> }
-  | { readonly basic: MaterialParams<THREE.MeshBasicMaterialParameters> }
-  | { readonly lambert: MaterialParams<THREE.MeshLambertMaterialParameters> }
-  | { readonly phong: MaterialParams<THREE.MeshPhongMaterialParameters> }
-  | { readonly toon: MaterialParams<THREE.MeshToonMaterialParameters> }
-  | { readonly normal: MaterialParams<THREE.MeshNormalMaterialParameters> }
-  | { readonly shaderGraph: string };
+  | {
+      /** 一般的 PBR 材質（color、roughness、metalness、emissive、map…），大多數情況用這個 */
+      readonly standard: MaterialParams<THREE.MeshStandardMaterialParameters>;
+    }
+  | {
+      /** 進階 PBR：另外有 clearcoat（亮光漆）、transmission（玻璃透光）、sheen（絨布）等 */
+      readonly physical: MaterialParams<THREE.MeshPhysicalMaterialParameters>;
+    }
+  | {
+      /** 不受光照：顏色就是看到的顏色（介面、特效、天空） */
+      readonly basic: MaterialParams<THREE.MeshBasicMaterialParameters>;
+    }
+  | {
+      /** 較便宜的光照：只有漫反射，沒有高光 */
+      readonly lambert: MaterialParams<THREE.MeshLambertMaterialParameters>;
+    }
+  | {
+      /** 較便宜的光照：漫反射＋高光（shininess、specular） */
+      readonly phong: MaterialParams<THREE.MeshPhongMaterialParameters>;
+    }
+  | {
+      /** 卡通風格：明暗一階一階的 */
+      readonly toon: MaterialParams<THREE.MeshToonMaterialParameters>;
+    }
+  | {
+      /** 依表面方向上色（不需要燈光；除錯、示範用） */
+      readonly normal: MaterialParams<THREE.MeshNormalMaterialParameters>;
+    }
+  | {
+      /** 著色器編輯器的節點圖檔網址，例如 'shaders/lava.shader.json'（需要安裝 ShaderPlugin；載入前物件不顯示） */
+      readonly shaderGraph: string;
+    };
 
 /** 描述對應的材質類別（create.material({ standard: … }) 回傳 MeshStandardMaterial） */
 export type MaterialOf<D> = D extends { readonly shaderGraph: unknown }
@@ -327,6 +406,8 @@ const materialFactories = new Map<string, MaterialFactory>();
 /**
  * 登記一種自訂的材質描述（其他模組擴充材質描述用，例如 ShaderPlugin 登記 shaderGraph）。
  * 回傳取消登記的函式。
+ * @param key 描述的鍵（例如 'shaderGraph'）
+ * @param factory 建立材質的函式：拿到鍵的值與整個描述
  * @example
  * const off = registerMaterialType('shaderGraph', (url) => makeGraphMaterial(String(url)));
  */
@@ -337,6 +418,10 @@ export function registerMaterialType(key: string, factory: MaterialFactory): () 
   };
 }
 
+/**
+ * @param desc 材質描述，例如 '#f80'、{ standard: { color: '#f80', roughness: 0.4 } }
+ * @param textures 載入貼圖的方式（測試可替換）
+ */
 export function createMaterial<D extends MaterialDesc>(desc: D, textures: TextureSource = loadTexture): MaterialOf<D> {
   const d = desc as MaterialDesc;
   let m: THREE.Material;
@@ -394,15 +479,24 @@ export class RenderResources {
   private readonly materials = new Map<string, Entry<THREE.Material>>();
   private readonly textures = new Map<string, Entry<THREE.Texture>>();
 
-  /** 載入貼圖的方式（測試可替換） */
+  /**
+   * 載入貼圖的方式（測試可替換）
+   * @param load 載入貼圖的方式（測試可替換）
+   */
   constructor(private readonly load: (url: string, options: TextureOptions) => THREE.Texture = loadTexture) {}
 
-  /** 取得描述對應的幾何（共用；用完要 release） */
+  /**
+   * 取得描述對應的幾何（共用；用完要 release）
+   * @param desc 幾何描述
+   */
   acquireGeometry(desc: GeometryDesc): { key: string; value: THREE.BufferGeometry } {
     return this.acquire(this.geometries, `g${stableKey(desc)}`, () => createGeometry(desc));
   }
 
-  /** 取得描述對應的材質（共用；用完要 release） */
+  /**
+   * 取得描述對應的材質（共用；用完要 release）
+   * @param desc 材質描述
+   */
   acquireMaterial(desc: MaterialDesc): { key: string; value: THREE.Material } {
     const key = `m${stableKey(desc)}`;
     const found = this.materials.get(key);
@@ -420,7 +514,10 @@ export class RenderResources {
     return { key, value };
   }
 
-  /** 歸還（參考次數減一；沒人用的在下一次 sweep 釋放） */
+  /**
+   * 歸還（參考次數減一；沒人用的在下一次 sweep 釋放）
+   * @param key acquire 時拿到的鍵
+   */
   release(key: string): void {
     const map = key[0] === 'g' ? this.geometries : key[0] === 't' ? this.textures : this.materials;
     const entry = map.get(key) as Entry<unknown> | undefined;
@@ -440,7 +537,14 @@ export class RenderResources {
   }
 
   /** 目前的數量（除錯、測試用） */
-  get stats(): { geometries: number; materials: number; textures: number } {
+  get stats(): {
+    /** 幾何數量 */
+    geometries: number;
+    /** 材質數量 */
+    materials: number;
+    /** 貼圖數量 */
+    textures: number;
+  } {
     return { geometries: this.geometries.size, materials: this.materials.size, textures: this.textures.size };
   }
 

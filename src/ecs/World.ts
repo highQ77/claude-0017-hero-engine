@@ -42,6 +42,7 @@ export class World {
 
   /**
    * 建立實體並一次加上多個元件。
+   * @param components 元件（例如 Player）、元件加初始值（Transform.with({ … })）、或 [元件, 初始值]
    * @example
    * world.spawn(Player, [Transform, { position: new Vector3(0, 1, 0) }], Health.with({ hp: 100 }));
    */
@@ -54,7 +55,10 @@ export class World {
     return e;
   }
 
-  /** 銷毀實體，移除它所有元件。回傳是否真的有銷毀 */
+  /**
+   * 銷毀實體，移除它所有元件。回傳是否真的有銷毀
+   * @param e 實體
+   */
   destroy(e: Entity): boolean {
     if (!this.pool.isAlive(e) || this.destroying.has(e)) return false;
     this.destroying.add(e);
@@ -72,7 +76,10 @@ export class World {
     return true;
   }
 
-  /** 實體是否還存在（沒有被銷毀） */
+  /**
+   * 實體是否還存在（沒有被銷毀）
+   * @param e 實體
+   */
   isAlive(e: Entity): boolean {
     return this.pool.isAlive(e);
   }
@@ -91,6 +98,9 @@ export class World {
 
   /**
    * 加上元件並回傳資料。若已有此元件，會把 init 合併進現有資料（不觸發 onAdd）。
+   * @param e 實體
+   * @param type 元件
+   * @param init 初始值（其他欄位用預設值）
    */
   add<T>(e: Entity, type: ComponentType<T>, init?: Partial<T>): T {
     if (!this.pool.isAlive(e)) throw new Error(`無法對已銷毀的實體加上「${type.name}」`);
@@ -109,7 +119,11 @@ export class World {
     return value;
   }
 
-  /** 移除元件，回傳是否真的有移除 */
+  /**
+   * 移除元件，回傳是否真的有移除
+   * @param e 實體
+   * @param type 元件
+   */
   remove<T>(e: Entity, type: ComponentType<T>): boolean {
     const store = this.stores[type.id];
     const value = store?.delete(e);
@@ -118,12 +132,20 @@ export class World {
     return true;
   }
 
-  /** 取得元件資料（沒有時是 undefined） */
+  /**
+   * 取得元件資料（沒有時是 undefined）
+   * @param e 實體
+   * @param type 元件
+   */
   get<T>(e: Entity, type: ComponentType<T>): T | undefined {
     return (this.stores[type.id] as ComponentStore<T> | undefined)?.get(e);
   }
 
-  /** 取得一定存在的元件；沒有時拋出清楚的錯誤（不用寫 world.get(e, T)!） */
+  /**
+   * 取得一定存在的元件；沒有時拋出清楚的錯誤（不用寫 world.get(e, T)!）
+   * @param e 實體
+   * @param type 元件
+   */
   require<T>(e: Entity, type: ComponentType<T>): T {
     const value = this.get(e, type);
     if (value === undefined)
@@ -133,7 +155,11 @@ export class World {
     return value;
   }
 
-  /** 是否有這個元件 */
+  /**
+   * 是否有這個元件
+   * @param e 實體
+   * @param type 元件
+   */
   has(e: Entity, type: ComponentType<unknown>): boolean {
     return this.stores[type.id]?.has(e) ?? false;
   }
@@ -142,6 +168,8 @@ export class World {
 
   /**
    * 取得查詢（同樣條件會共用同一個快取）。
+   * @param all 要有的元件
+   * @param options 不能有的元件（none）
    * @example
    * const movers = world.query([Transform, Velocity], { none: [Frozen] });
    */
@@ -178,23 +206,37 @@ export class World {
 
   // ───────── 事件掛鉤 ─────────
 
-  /** 元件加上後觸發（可用來建立對應的 three.js 物件） */
+  /**
+   * 元件加上後觸發（可用來建立對應的 three.js 物件）
+   * @param type 元件
+   * @param hook 元件加上後呼叫：實體、資料
+   */
   onAdd<T>(type: ComponentType<T>, hook: ComponentHook<T>): () => void {
     return subscribe(this.addHooks, type.id, hook);
   }
 
-  /** 元件移除後觸發，帶著被移除的資料（可用來釋放資源） */
+  /**
+   * 元件移除後觸發，帶著被移除的資料（可用來釋放資源）
+   * @param type 元件
+   * @param hook 元件移除後呼叫：實體、被移除的資料
+   */
   onRemove<T>(type: ComponentType<T>, hook: ComponentHook<T>): () => void {
     return subscribe(this.removeHooks, type.id, hook);
   }
 
-  /** 有實體建立時通知，回傳取消監聽的函式 */
+  /**
+   * 有實體建立時通知，回傳取消監聽的函式
+   * @param hook 實體建立時呼叫
+   */
   onCreate(hook: EntityHook): () => void {
     this.createHooks.add(hook);
     return () => this.createHooks.delete(hook);
   }
 
-  /** 實體銷毀前觸發（此時元件都還在） */
+  /**
+   * 實體銷毀前觸發（此時元件都還在）
+   * @param hook 實體銷毀前呼叫
+   */
   onDestroy(hook: EntityHook): () => void {
     this.destroyHooks.add(hook);
     return () => this.destroyHooks.delete(hook);
@@ -202,30 +244,46 @@ export class World {
 
   // ───────── 資源 ─────────
 
-  /** 設定資源 */
+  /**
+   * 設定資源
+   * @param key 資源的鍵（define.resource 定義的）
+   * @param value 資源
+   */
   setResource<T>(key: ResourceKey<T>, value: T): void {
     this.resources.set(key, value);
   }
 
-  /** 取得資源（沒有時是 undefined） */
+  /**
+   * 取得資源（沒有時是 undefined）
+   * @param key 資源的鍵
+   */
   getResource<T>(key: ResourceKey<T>): T | undefined {
     return this.resources.get(key) as T | undefined;
   }
 
-  /** 取得資源（沒有時拋出錯誤，說明要安裝哪個外掛） */
+  /**
+   * 取得資源（沒有時拋出錯誤，說明要安裝哪個外掛）
+   * @param key 資源的鍵
+   */
   requireResource<T>(key: ResourceKey<T>): T {
     if (!this.resources.has(key)) throw new Error(`找不到資源「${key.name}」`);
     return this.resources.get(key) as T;
   }
 
-  /** 移除資源，回傳是否真的有移除 */
+  /**
+   * 移除資源，回傳是否真的有移除
+   * @param key 資源的鍵
+   */
   removeResource(key: ResourceKey<unknown>): boolean {
     return this.resources.delete(key);
   }
 
   // ───────── 延後執行 ─────────
 
-  /** 排入延後執行，等目前階段的系統都跑完後才執行（適合在走訪中銷毀實體） */
+  /**
+   * 排入延後執行，等目前階段的系統都跑完後才執行（適合在走訪中銷毀實體）
+   * @param fn 要延後執行的函式
+   */
   defer(fn: () => void): void {
     this.deferred.push(fn);
   }

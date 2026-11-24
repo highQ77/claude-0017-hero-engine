@@ -6,11 +6,23 @@ import { Transform } from '../scene';
 export interface BindingSpec<T, O extends Object3D> {
   /** 對應的元件 */
   readonly type: ComponentType<T>;
-  /** 元件加上時建立對應的 three.js 物件；回傳 null 代表暫不建立 */
+  /**
+   * 元件加上時建立對應的 three.js 物件；回傳 null 代表暫不建立
+   * @param data 元件的資料
+   * @param entity 實體
+   */
   create(data: T, entity: Entity): O | null;
-  /** 每幀同步資料；回傳新物件代表要替換（例如燈光種類改變） */
+  /**
+   * 每幀同步資料；回傳新物件代表要替換（例如燈光種類改變）
+   * @param object 目前的 three.js 物件
+   * @param data 元件的資料
+   * @param entity 實體
+   */
   update(object: O, data: T, entity: Entity): O | null | void;
-  /** 物件被移除或替換時呼叫 */
+  /**
+   * 物件被移除或替換時呼叫
+   * @param object 要釋放的 three.js 物件
+   */
   dispose?(object: O): void;
 }
 
@@ -25,6 +37,11 @@ export class Binding<T, O extends Object3D> {
   private readonly objects = new Map<Entity, O>();
   private readonly offs: (() => void)[] = [];
 
+  /**
+   * @param world ECS 世界
+   * @param root three.js 場景（物件加在這裡）
+   * @param spec 元件與建立、更新、釋放物件的函式
+   */
   constructor(
     private readonly world: World,
     private readonly root: Scene,
@@ -38,7 +55,10 @@ export class Binding<T, O extends Object3D> {
     for (const e of world.query([spec.type]).entities) this.attach(e, world.get(e, spec.type)!);
   }
 
-  /** 實體對應的 three.js 物件 */
+  /**
+   * 實體對應的 three.js 物件
+   * @param e 實體
+   */
   get(e: Entity): O | undefined {
     return this.objects.get(e);
   }

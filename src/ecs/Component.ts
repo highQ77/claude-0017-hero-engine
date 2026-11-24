@@ -13,6 +13,7 @@ export interface ComponentType<T> {
   /**
    * 指定初始值（其他欄位用預設值），給 world.spawn 用：
    * world.spawn(Camera.with({ fov: 50 }), Transform)
+   * @param init 要指定的欄位（其他欄位用預設值）
    */
   with(init: Partial<T>): readonly [ComponentType<T>, Partial<T>];
 }
@@ -21,6 +22,8 @@ let nextComponentId = 0;
 
 /**
  * 定義元件。
+ * @param name 元件名稱（場景檔、除錯時顯示）
+ * @param create 建立預設資料的函式（每個實體各一份）
  * @example
  * const Velocity = define.component('Velocity', () => ({ x: 0, y: 0, z: 0 }));
  */
@@ -34,7 +37,10 @@ export function defineComponent<T extends object>(name: string, create: () => T)
   return type;
 }
 
-/** 定義標籤元件（沒有資料，只用來分類，例如 Player、Enemy） */
+/**
+ * 定義標籤元件（沒有資料，只用來分類，例如 Player、Enemy）
+ * @param name 標籤名稱
+ */
 export function defineTag(name: string): ComponentType<Readonly<Record<string, never>>> {
   const empty = Object.freeze({}) as Readonly<Record<string, never>>;
   return defineComponent(name, () => empty);
@@ -56,19 +62,29 @@ export class ComponentStore<T> {
     return this.entities.length;
   }
 
-  /** 這個實體是否有資料 */
+  /**
+   * 這個實體是否有資料
+   * @param e 實體
+   */
   has(e: Entity): boolean {
     const i = this.sparse[entityIndex(e)];
     return i !== undefined && this.entities[i] === e;
   }
 
-  /** 取得實體的資料 */
+  /**
+   * 取得實體的資料
+   * @param e 實體
+   */
   get(e: Entity): T | undefined {
     const i = this.sparse[entityIndex(e)];
     return i !== undefined && this.entities[i] === e ? this.values[i] : undefined;
   }
 
-  /** 設定實體的資料 */
+  /**
+   * 設定實體的資料
+   * @param e 實體
+   * @param value 資料
+   */
   set(e: Entity, value: T): void {
     const index = entityIndex(e);
     const i = this.sparse[index];
@@ -81,7 +97,10 @@ export class ComponentStore<T> {
     this.values.push(value);
   }
 
-  /** 移除並回傳舊值；不存在時回傳 undefined */
+  /**
+   * 移除並回傳舊值；不存在時回傳 undefined
+   * @param e 實體
+   */
   delete(e: Entity): T | undefined {
     const index = entityIndex(e);
     const i = this.sparse[index];

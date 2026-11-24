@@ -6,7 +6,7 @@ import {
   attribute,
   cameraProjectionMatrix,
   cos,
-  float,
+  type float,
   length,
   materialReference,
   modelViewMatrix,
@@ -135,7 +135,10 @@ function createParticleNodeMaterial(): ParticleMaterial {
   return material as unknown as ParticleMaterial;
 }
 
-/** 建立實例化的面片幾何與每個粒子的屬性 */
+/**
+ * 建立實例化的面片幾何與每個粒子的屬性
+ * @param max 最多幾個粒子
+ */
 export function createParticleGeometry(max: number) {
   const geometry = new THREE.InstancedBufferGeometry();
   geometry.setAttribute(

@@ -54,7 +54,14 @@ export interface NetworkClientOptions {
   /** 多久沒收到某位玩家的訊息就當作離線（毫秒），預設 5000 */
   peerTimeout?: number;
   /** 斷線自動重連，預設開啟；等待時間會從 minDelay 逐次加倍到 maxDelay */
-  reconnect?: boolean | { minDelay?: number; maxDelay?: number };
+  reconnect?:
+    | boolean
+    | {
+        /** 第一次重連前等多久（毫秒） */
+        minDelay?: number;
+        /** 等待時間加倍到這裡為止（毫秒） */
+        maxDelay?: number;
+      };
   /** 斷線期間最多暫存幾則訊息，重連後補送，預設 100 */
   queueLimit?: number;
   /** 時間來源（測試用） */
@@ -84,7 +91,16 @@ export class NetworkClient {
   /** 其他玩家 */
   readonly peers = new Map<string, Peer>();
   /** 流量統計 */
-  readonly stats = { messagesSent: 0, messagesReceived: 0, bytesSent: 0, bytesReceived: 0 };
+  readonly stats = {
+    /** 送出的訊息數 */
+    messagesSent: 0,
+    /** 收到的訊息數 */
+    messagesReceived: 0,
+    /** 送出的位元組數 */
+    bytesSent: 0,
+    /** 收到的位元組數 */
+    bytesReceived: 0,
+  };
 
   private _status: ConnectionStatus = 'disconnected';
   private readonly handlers = new Map<string, Set<MessageHandler<unknown>>>();
@@ -118,6 +134,9 @@ export class NetworkClient {
   private readonly now: () => number;
   private unloadListener: (() => void) | null = null;
 
+  /**
+   * @param options 傳輸方式、自己的編號與資料、心跳間隔、離線判定、斷線重連、暫存上限
+   */
   constructor(options: NetworkClientOptions) {
     this.transport = options.transport;
     this.peerId = options.peerId ?? randomId();
@@ -176,19 +195,28 @@ export class NetworkClient {
     }
   }
 
-  /** 連線狀態改變時通知，回傳取消監聽的函式 */
+  /**
+   * 連線狀態改變時通知，回傳取消監聽的函式
+   * @param listener 狀態改變時呼叫：disconnected、connecting、connected
+   */
   onStatus(listener: (status: ConnectionStatus) => void): () => void {
     this.statusListeners.add(listener);
     return () => this.statusListeners.delete(listener);
   }
 
-  /** 有玩家加入時通知，回傳取消監聽的函式 */
+  /**
+   * 有玩家加入時通知，回傳取消監聽的函式
+   * @param listener 玩家加入時呼叫
+   */
   onPeerJoin(listener: (peer: Peer) => void): () => void {
     this.joinListeners.add(listener);
     return () => this.joinListeners.delete(listener);
   }
 
-  /** 有玩家離開時通知，回傳取消監聽的函式 */
+  /**
+   * 有玩家離開時通知，回傳取消監聽的函式
+   * @param listener 玩家離開時呼叫
+   */
   onPeerLeave(listener: (peer: Peer) => void): () => void {
     this.leaveListeners.add(listener);
     return () => this.leaveListeners.delete(listener);
@@ -199,13 +227,27 @@ export class NetworkClient {
   /**
    * 送出訊息。to 不給為廣播給所有人。
    * 斷線期間會暫存（最多 queueLimit 則），重連後補送。
+   * @param type 訊息類型（不能用 $ 開頭）
+   * @param data 訊息內容（要能轉成 JSON）
+   * @param options 只送給某位玩家（to）
    */
-  send(type: string, data?: unknown, options: { to?: string } = {}): void {
+  send(
+    type: string,
+    data?: unknown,
+    options: {
+      /** 只送給這位玩家（玩家編號）；省略時送給房間裡所有人 */
+      to?: string;
+    } = {},
+  ): void {
     if (type.startsWith('$')) throw new Error(`訊息類型不能用 $ 開頭（保留給系統）：${type}`);
     this.write({ t: type, d: data, f: this.peerId, to: options.to }, true);
   }
 
-  /** 接收某種訊息 */
+  /**
+   * 接收某種訊息
+   * @param type 訊息類型
+   * @param handler 收到時呼叫：內容、送出的玩家
+   */
   on<T = unknown>(type: string, handler: MessageHandler<T>): () => void {
     let set = this.handlers.get(type);
     if (!set) this.handlers.set(type, (set = new Set()));
@@ -215,9 +257,21 @@ export class NetworkClient {
 
   /**
    * 送出請求並等待回應。
+   * @param type 請求類型
+   * @param data 請求內容（要能轉成 JSON）
+   * @param options 問哪位玩家（to）、逾時毫秒數（timeout）
    * @example const score = await net.request<number>('getScore', null, { to: hostId });
    */
-  request<R = unknown>(type: string, data?: unknown, options: { to?: string; timeout?: number } = {}): Promise<R> {
+  request<R = unknown>(
+    type: string,
+    data?: unknown,
+    options: {
+      /** 問這位玩家（玩家編號）；省略時問房間裡所有人，用第一個回應 */
+      to?: string;
+      /** 等多久沒回應就失敗（毫秒），預設 5000 */
+      timeout?: number;
+    } = {},
+  ): Promise<R> {
     if (!this.connected) return Promise.reject(new Error('尚未連線'));
     const id = this.nextRequestId++;
     return new Promise<R>((resolve, reject) => {
@@ -230,7 +284,11 @@ export class NetworkClient {
     });
   }
 
-  /** 處理請求：回傳值（或 Promise）會送回給請求者 */
+  /**
+   * 處理請求：回傳值（或 Promise）會送回給請求者
+   * @param type 請求類型
+   * @param handler 收到請求時呼叫：回傳值（或 Promise）送回給請求者
+   */
   handle<T = unknown, R = unknown>(type: string, handler: RequestHandler<T, R>): () => void {
     this.requestHandlers.set(type, handler as RequestHandler<unknown, unknown>);
     return () => {

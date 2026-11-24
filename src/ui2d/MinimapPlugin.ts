@@ -64,8 +64,14 @@ export class MinimapPlugin implements Plugin {
   private ecs: EcsPlugin | null = null;
   private acc = 0;
 
+  /**
+   * @param options 介面裡小地圖的 id、中心跟著哪個實體、每秒更新幾次
+   */
   constructor(private readonly options: MinimapPluginOptions) {}
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = (this.ecs = engine.getPlugin<EcsPlugin>('ecs')!);
     const ui = engine.getPlugin<UIPlugin>('ui2d')!.ui;

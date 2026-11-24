@@ -28,13 +28,25 @@ export interface LogEntry {
 export interface Logger {
   /** 模組名稱 */
   readonly module: string;
-  /** 除錯訊息（預設不顯示） */
+  /**
+   * 除錯訊息（預設不顯示）
+   * @param args 要記錄的內容（和 console.log 一樣）
+   */
   debug(...args: unknown[]): void;
-  /** 一般訊息 */
+  /**
+   * 一般訊息
+   * @param args 要記錄的內容（和 console.log 一樣）
+   */
   info(...args: unknown[]): void;
-  /** 警告 */
+  /**
+   * 警告
+   * @param args 要記錄的內容（和 console.log 一樣）
+   */
   warn(...args: unknown[]): void;
-  /** 錯誤 */
+  /**
+   * 錯誤
+   * @param args 要記錄的內容（和 console.log 一樣）
+   */
   error(...args: unknown[]): void;
 }
 
@@ -42,7 +54,10 @@ const ORDER: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3, 
 let current: LogLevel = 'info';
 const listeners = new Set<(entry: LogEntry) => void>();
 
-/** 設定要顯示的最低等級（全域） */
+/**
+ * 設定要顯示的最低等級（全域）
+ * @param level 最低等級：debug、info、warn、error、silent
+ */
 export function setLogLevel(level: LogLevel): void {
   if (!(level in ORDER)) throw new Error(`不認識的記錄等級「${level}」（可用：debug、info、warn、error、silent）`);
   current = level;
@@ -53,7 +68,10 @@ export function getLogLevel(): LogLevel {
   return current;
 }
 
-/** 收到每一則（達到等級的）記錄；回傳取消的函式 */
+/**
+ * 收到每一則（達到等級的）記錄；回傳取消的函式
+ * @param listener 每則記錄都會呼叫（等級、模組、內容）
+ */
 export function onLog(listener: (entry: LogEntry) => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -69,7 +87,10 @@ function write(level: LogEntry['level'], module: string, args: unknown[]): void 
   console[level](...out);
 }
 
-/** 建立一個模組的記錄器（模組名稱會出現在每則訊息前面） */
+/**
+ * 建立一個模組的記錄器（模組名稱會出現在每則訊息前面）
+ * @param module 模組名稱（顯示在每則訊息前面）
+ */
 export function createLogger(module: string): Logger {
   return {
     module,

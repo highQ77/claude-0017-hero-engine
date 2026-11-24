@@ -70,8 +70,22 @@ export interface SceneTransitionProgress {
 
 /** 轉場的狀態改變：開始（start）或進入場景（enter） */
 export type SceneTransitionChange =
-  | { type: 'start'; from: string | null; to: string }
-  | { type: 'enter'; from: string | null; to: string };
+  | {
+      /** 開始轉場（載入頁面出現、開始下載） */
+      type: 'start';
+      /** 原本的場景（第一次是 null） */
+      from: string | null;
+      /** 要去的場景 */
+      to: string;
+    }
+  | {
+      /** 已經進入新場景 */
+      type: 'enter';
+      /** 原本的場景（第一次是 null） */
+      from: string | null;
+      /** 進入的場景 */
+      to: string;
+    };
 
 /** go() 的選項 */
 export interface GoOptions {
@@ -87,9 +101,22 @@ export interface SceneTransitionOptions {
   /** 介面（載入頁面、場景介面放在這裡） */
   ui: UI2D;
   /** 切換 3D 場景（SceneManager 或任何有 load(name) 的物件） */
-  scenes?: { load(name: string): void } | null;
+  scenes?: {
+    /**
+     * 切換到這個 3D 場景
+     * @param name 場景名稱
+     */
+    load(name: string): void;
+  } | null;
   /** 下載資源（AssetManager 或任何有 load(url, type) 的物件） */
-  assets?: { load(url: string, type?: string): Promise<unknown> } | null;
+  assets?: {
+    /**
+     * 下載一個資源
+     * @param url 資源網址
+     * @param type 資源類型；省略時依副檔名判斷
+     */
+    load(url: string, type?: string): Promise<unknown>;
+  } | null;
   /** 預設的載入頁面 XML 網址（沒給時用內建的） */
   loading?: string | null;
   /** 轉場效果：fade（預設，淡出淡入）或 none */
@@ -144,17 +171,27 @@ export class SceneTransition {
   /** 轉場中必須在最上面的圖層（由下到上） */
   private onTop: string[] = [];
 
+  /**
+   * @param options 介面、場景管理器、資源管理器、載入頁面、轉場效果、時間、顏色等設定
+   */
   constructor(private readonly options: SceneTransitionOptions) {}
 
   // ───────── 設定 ─────────
 
-  /** 定義一個場景 */
+  /**
+   * 定義一個場景
+   * @param name 場景名稱
+   * @param def 場景的定義：3D 場景、介面、要下載的資源、提示文字、進入離開時呼叫的函式
+   */
   define(name: string, def: SceneDefinition = {}): this {
     this.defs.set(name, def);
     return this;
   }
 
-  /** 一次定義多個場景 */
+  /**
+   * 一次定義多個場景
+   * @param map 場景名稱 → 定義
+   */
   defineAll(map: Record<string, SceneDefinition>): this {
     for (const [name, def] of Object.entries(map)) this.define(name, def);
     return this;
@@ -165,7 +202,10 @@ export class SceneTransition {
     return [...this.defs.keys()];
   }
 
-  /** 場景的定義（沒有時是 undefined） */
+  /**
+   * 場景的定義（沒有時是 undefined）
+   * @param name 場景名稱
+   */
   info(name: string): Readonly<SceneDefinition> | undefined {
     return this.defs.get(name);
   }
@@ -185,13 +225,19 @@ export class SceneTransition {
     return this.running !== null;
   }
 
-  /** 載入進度改變時通知，回傳取消監聽的函式 */
+  /**
+   * 載入進度改變時通知，回傳取消監聽的函式
+   * @param listener 進度改變時呼叫
+   */
   onProgress(listener: (p: SceneTransitionProgress) => void): () => void {
     this.progressListeners.add(listener);
     return () => this.progressListeners.delete(listener);
   }
 
-  /** 開始轉場、進入場景時通知，回傳取消監聽的函式 */
+  /**
+   * 開始轉場、進入場景時通知，回傳取消監聽的函式
+   * @param listener 開始轉場、進入場景時呼叫
+   */
   onChange(listener: (c: SceneTransitionChange) => void): () => void {
     this.changeListeners.add(listener);
     return () => this.changeListeners.delete(listener);
@@ -202,6 +248,8 @@ export class SceneTransition {
   /**
    * 進入場景：淡出 → 載入頁面（下載資源）→ 切換 → 淡入。
    * 轉場中再呼叫：等目前的轉場結束後進入最後要求的場景。
+   * @param name 場景名稱（define 定義的）
+   * @param options 淡入前要做的事（beforeReveal）
    */
   go(name: string, options: GoOptions = {}): Promise<void> {
     if (!this.defs.has(name))

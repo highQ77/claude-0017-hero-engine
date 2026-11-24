@@ -45,7 +45,13 @@ export interface UIRenderStats {
 
 /** 局部更新要用的繪製器功能（three.js 的 WebGPURenderer 有） */
 export interface UITextureCopier {
-  /** 把 src 的一塊（srcRegion，貼圖像素）複製到 dst 的 dstPosition */
+  /**
+   * 把 src 的一塊（srcRegion，貼圖像素）複製到 dst 的 dstPosition
+   * @param src 來源貼圖
+   * @param dst 目的貼圖
+   * @param srcRegion 來源的範圍（貼圖像素）
+   * @param dstPosition 放到目的的哪裡（貼圖像素）
+   */
   copyTextureToTexture(src: THREE.Texture, dst: THREE.Texture, srcRegion: THREE.Box2, dstPosition: THREE.Vector2): void;
 }
 
@@ -123,7 +129,10 @@ export class UITextureRenderer implements UIRenderer {
     this.texture.generateMipmaps = false;
   }
 
-  /** 連接到介面 */
+  /**
+   * 連接到介面
+   * @param ui 介面
+   */
   attach(ui: UI2D): void {
     this.ui = ui;
     this.painter = new UIPainter((url) => ui.imageSource(url));

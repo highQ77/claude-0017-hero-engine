@@ -68,7 +68,11 @@ export class UICanvas extends UIElement {
     WebGL2D.install();
   }
 
-  /** 對任意 &lt;canvas&gt; 取得 WebGL2D context（介面以外的畫布用；UICanvas 請用 getContext()）；同一個 canvas 回傳同一個物件 */
+  /**
+   * 對任意 &lt;canvas&gt; 取得 WebGL2D context（介面以外的畫布用；UICanvas 請用 getContext()）；同一個 canvas 回傳同一個物件
+   * @param canvas 畫布
+   * @param options 是否透明、反鋸齒、像素比、WebGL 2、共用別人的 WebGL（external）等
+   */
   static contextOf(canvas: HTMLCanvasElement, options?: WebGL2DOptions): WebGL2DRenderingContext {
     return WebGL2D.getContext(canvas, options);
   }
@@ -76,6 +80,8 @@ export class UICanvas extends UIElement {
   /**
    * 對任意 &lt;canvas&gt; 建立高解析度的 WebGL2D context：backing store = CSS 尺寸 × devicePixelRatio，
    * 繪圖座標仍是 CSS 像素（離屏圖層、快取用）
+   * @param canvas 畫布
+   * @param options 繪圖座標的寬高、像素比、是否設定 CSS 大小、反鋸齒等
    */
   static contextOfHiDPI(canvas: HTMLCanvasElement, options?: WebGL2DHiDPIOptions): WebGL2DRenderingContext {
     return WebGL2D.getContextHiDPI(canvas, options);
@@ -165,7 +171,12 @@ export class UICanvas extends UIElement {
    * 共用模式直接用 WebGL2D 的輸出貼圖，不另外轉成給 3D 用的格式（省下每幀一次複製與 mipmap）：
    * encoded 為 true，表示顏色是預乘 alpha 的 sRGB 值，要在著色器裡還原
    */
-  get layerTexture(): { texture: Texture; encoded: boolean } {
+  get layerTexture(): {
+    /** 畫布的貼圖 */
+    texture: Texture;
+    /** true：顏色是預乘 alpha 的 sRGB 值，要在著色器裡還原 */
+    encoded: boolean;
+  } {
     const ctx = this.getContext();
     if (this.target && ctx.outputTexture) {
       if (!this.outputTex) {
@@ -206,6 +217,7 @@ export class UICanvas extends UIElement {
    * 取得繪圖 context（和 CanvasRenderingContext2D 用法相同）。
    * 第一次呼叫時建立 WebGL context，之後回傳同一個物件；options 只在第一次有效。
    * 呼叫繪圖方法後介面會自動重畫。
+   * @param options 第一次建立時的設定：WebGL 2、反鋸齒、透明…
    */
   getContext(options: Omit<WebGL2DOptions, 'pixelRatio' | 'external'> = {}): WebGL2DRenderingContext {
     if (this.gl2d) return this.gl2d;
@@ -225,7 +237,11 @@ export class UICanvas extends UIElement {
     return ctx;
   }
 
-  /** 改變繪圖座標的大小（同 set('width')、set('height')）；內容會清空並觸發 resize 事件 */
+  /**
+   * 改變繪圖座標的大小（同 set('width')、set('height')）；內容會清空並觸發 resize 事件
+   * @param width 繪圖座標的寬
+   * @param height 繪圖座標的高
+   */
   resize(width: number, height: number): this {
     this.set('width', width);
     return this.set('height', height);
@@ -236,7 +252,11 @@ export class UICanvas extends UIElement {
     this.markDirty();
   }
 
-  /** 介面座標 → 繪圖座標（畫布顯示的大小和繪圖座標不同時也正確） */
+  /**
+   * 介面座標 → 繪圖座標（畫布顯示的大小和繪圖座標不同時也正確）
+   * @param x X（介面座標）
+   * @param y Y（介面座標）
+   */
   toCanvasPoint(x: number, y: number): { x: number; y: number } {
     const r = this.absoluteRect;
     return {
@@ -250,7 +270,11 @@ export class UICanvas extends UIElement {
     return this.attrs.pointerEvents !== 'none';
   }
 
-  /** 按下時接管指標：之後的移動、放開都送給這個畫布（拖出範圍也一樣） */
+  /**
+   * 按下時接管指標：之後的移動、放開都送給這個畫布（拖出範圍也一樣）
+   * @param x X（介面座標）
+   * @param y Y（介面座標）
+   */
   override pointerDown(x: number, y: number): PointerCapture | null {
     if (this.attrs.pointerEvents === 'none') return null;
     this.emit('pointerdown', { value: this.toCanvasPoint(x, y) });
@@ -261,7 +285,11 @@ export class UICanvas extends UIElement {
     };
   }
 
-  /** 把畫布內容輸出成圖片網址（例如截圖、存檔） */
+  /**
+   * 把畫布內容輸出成圖片網址（例如截圖、存檔）
+   * @param type 圖片格式（預設 'image/png'）
+   * @param quality 品質 0~1（jpeg、webp）
+   */
   toDataURL(type?: string, quality?: number): string {
     return this.canvas.toDataURL(type, quality);
   }

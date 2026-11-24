@@ -51,6 +51,9 @@ export class ScriptRunner {
   private offPhysics: (() => void) | null = null;
   private readonly offs: (() => void)[] = [];
 
+  /**
+   * @param options 腳本錯誤時直接拋出（rethrow，測試用）
+   */
   constructor(
     /** ECS 世界 */
     readonly world: World,
@@ -85,6 +88,7 @@ export class ScriptRunner {
   /**
    * 用名稱登記腳本類別：場景檔（ScriptList）用這個名稱找到類別。
    * 用物件的鍵當名稱（不是類別的 name：打包壓縮後類別名稱會變）。
+   * @param classes 名稱 → 腳本類別
    * @example
    * scripts.register({ Coin, Rotator });
    */
@@ -96,7 +100,10 @@ export class ScriptRunner {
     return this;
   }
 
-  /** 依名稱取得登記的腳本類別（沒有時是 undefined） */
+  /**
+   * 依名稱取得登記的腳本類別（沒有時是 undefined）
+   * @param name 登記的名稱
+   */
   registered(name: string): ScriptClass | undefined {
     return this.registry.get(name);
   }
@@ -110,6 +117,8 @@ export class ScriptRunner {
 
   /**
    * 把腳本加到實體上，回傳腳本實例。
+   * @param entity 實體
+   * @param cls 腳本類別
    * @param props 在 onAwake 之前設定的欄位值（像 Unity Inspector 的參數）
    */
   add<T extends Script>(entity: Entity, cls: ScriptClass<T>, props: Partial<Omit<T, keyof Script>> = {}): T {
@@ -134,17 +143,28 @@ export class ScriptRunner {
     return script;
   }
 
-  /** 取得實體上第一個屬於某類別的腳本 */
+  /**
+   * 取得實體上第一個屬於某類別的腳本
+   * @param entity 實體
+   * @param cls 腳本類別
+   */
   get<T extends Script>(entity: Entity, cls: ScriptClass<T>): T | undefined {
     return this.world.get(entity, Scripts)?.list.find((s): s is T => s instanceof cls);
   }
 
-  /** 實體身上的所有腳本 */
+  /**
+   * 實體身上的所有腳本
+   * @param entity 實體
+   */
   getAll(entity: Entity): readonly Script[] {
     return this.world.get(entity, Scripts)?.list ?? [];
   }
 
-  /** 移除腳本（傳實例，或類別以移除該類別的第一個） */
+  /**
+   * 移除腳本（傳實例，或類別以移除該類別的第一個）
+   * @param entity 實體
+   * @param target 腳本實例，或腳本類別（移除該類別的第一個）
+   */
   remove(entity: Entity, target: Script | ScriptClass): boolean {
     const data = this.world.get(entity, Scripts);
     if (!data) return false;
@@ -155,7 +175,10 @@ export class ScriptRunner {
     return true;
   }
 
-  /** 依名稱找實體（Name 元件） */
+  /**
+   * 依名稱找實體（Name 元件）
+   * @param name 實體名稱
+   */
   find(name: string): Entity | undefined {
     for (const e of this.world.query([Name]).entities) {
       if (this.world.get(e, Name)!.value === name) return e;
@@ -163,7 +186,12 @@ export class ScriptRunner {
     return undefined;
   }
 
-  /** 呼叫實體身上所有腳本的同名方法（例如 sendMessage(e, 'onHit', 10)） */
+  /**
+   * 呼叫實體身上所有腳本的同名方法（例如 sendMessage(e, 'onHit', 10)）
+   * @param entity 實體
+   * @param method 方法名稱
+   * @param args 傳給方法的參數
+   */
   sendMessage(entity: Entity, method: string, ...args: unknown[]): void {
     for (const s of [...this.getAll(entity)]) {
       const fn = (s as unknown as Record<string, unknown>)[method];
@@ -173,7 +201,10 @@ export class ScriptRunner {
 
   // ───────── 每幀流程（由 ScriptPlugin 呼叫） ─────────
 
-  /** update 階段：結算等待 → onStart → 點擊／滑鼠事件 → onUpdate */
+  /**
+   * update 階段：結算等待 → onStart → 點擊／滑鼠事件 → onUpdate
+   * @param dt 這一幀的時間（秒）
+   */
   update(dt: number): void {
     this.subscribePhysics();
     this.processWaiters(dt);
@@ -182,14 +213,20 @@ export class ScriptRunner {
     this.run('onUpdate', dt);
   }
 
-  /** 執行所有腳本的 onFixedUpdate（由外掛呼叫） */
+  /**
+   * 執行所有腳本的 onFixedUpdate（由外掛呼叫）
+   * @param dt 固定步長（秒）
+   */
   fixedUpdate(dt: number): void {
     this.subscribePhysics();
     this.startPending();
     this.run('onFixedUpdate', dt);
   }
 
-  /** 執行所有腳本的 onLateUpdate（由外掛呼叫） */
+  /**
+   * 執行所有腳本的 onLateUpdate（由外掛呼叫）
+   * @param dt 這一幀的時間（秒）
+   */
   lateUpdate(dt: number): void {
     this.run('onLateUpdate', dt);
   }

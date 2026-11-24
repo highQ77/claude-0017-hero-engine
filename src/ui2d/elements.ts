@@ -71,31 +71,58 @@ export interface UIContext {
   skins: Map<string, Attrs>;
   /** 載入圖片的函式 */
   loadImage: ImageLoader;
-  /** 相對路徑 → 網址；from 是寫這個路徑的元件（以它所在的介面檔為基準） */
+  /**
+   * 相對路徑 → 網址；from 是寫這個路徑的元件（以它所在的介面檔為基準）
+   * @param src 相對路徑或網址
+   * @param from 寫這個路徑的元件
+   */
   resolveUrl(src: string, from?: UIElement): string;
   /** 事件處理函式：XML 的 onClick="名稱" 對應這裡的同名函式 */
   handlers: Record<string, UIHandler>;
-  /** 要求重新排版；reapply 為 true 時重新套用所有屬性 */
+  /**
+   * 要求重新排版；reapply 為 true 時重新套用所有屬性
+   * @param reapply true 時重新套用所有屬性（樣式、斷點改變時）
+   */
   requestLayout(reapply?: boolean): void;
-  /** 開關下拉選單（由 UI2D 管理；null 為關閉） */
+  /**
+   * 開關下拉選單（由 UI2D 管理；null 為關閉）
+   * @param select 要展開的下拉選單；null 關閉
+   */
   openPopup?(select: UISelect | null): void;
   /** 只要求重畫（外觀改變、排版不變）；需要重畫的範圍請先用 damage 標記 */
   invalidate?(): void;
-  /** 標記某個元件的範圍需要重畫（局部重畫用）；pad 為額外的邊界（陰影、提示） */
+  /**
+   * 標記某個元件的範圍需要重畫（局部重畫用）；pad 為額外的邊界（陰影、提示）
+   * @param el 元件
+   * @param pad 額外的邊界（陰影、提示，像素）
+   */
   damage?(el: UIElement, pad?: number): void;
   /** 預設樣式的空白節點（重設樣式用） */
   blankNode: YogaNode;
-  /** 讓元件每幀收到 tick(dt)（動畫用），tick 回傳 false 時停止 */
+  /**
+   * 讓元件每幀收到 tick(dt)（動畫用），tick 回傳 false 時停止
+   * @param el 要收到 tick 的元件
+   */
   animate?(el: UIElement): void;
-  /** 標記任意範圍需要重畫（拖曳中的圖示、浮動說明等不屬於任何元件的東西） */
+  /**
+   * 標記任意範圍需要重畫（拖曳中的圖示、浮動說明等不屬於任何元件的東西）
+   * @param rect 要重畫的範圍（介面座標）
+   */
   damageRect?(rect: Rect): void;
-  /** 設定或移除畫在最上層的東西（key 用來識別；painter 為 null 時移除） */
+  /**
+   * 設定或移除畫在最上層的東西（key 用來識別；painter 為 null 時移除）
+   * @param key 識別用的物件（同一個 key 會取代）
+   * @param painter 繪製函式；null 移除
+   */
   setOverlay?(key: object, painter: OverlayPainter | null): void;
   /** 介面目前的尺寸 */
   viewport?(): { width: number; height: number };
   /** 編輯器模式：空的容器顯示成虛線框（有最小尺寸），才看得到、拖得進去 */
   editorHints?: boolean;
-  /** 已載入的圖片（元件自己繪製圖片時用） */
+  /**
+   * 已載入的圖片（元件自己繪製圖片時用）
+   * @param url 圖片網址
+   */
   imageSource?(url: string): CanvasImageSource | undefined;
   /** 顯示層把 UICanvas 分開疊上去（引擎內的介面才有）：畫布內容不用複製進介面畫布 */
   canvasLayers?(): UICanvasLayers | null;
@@ -107,9 +134,15 @@ export interface UIContext {
  * 顯示層會改回複製進介面（才能維持上下順序）。
  */
 export interface UICanvasLayers {
-  /** 這個畫布現在是不是分層顯示（是的話介面只畫它的背景與邊框） */
+  /**
+   * 這個畫布現在是不是分層顯示（是的話介面只畫它的背景與邊框）
+   * @param el 畫布元件
+   */
   isLayered(el: UIElement): boolean;
-  /** 分層顯示的畫布畫了新內容（它的貼圖已經標記要更新）：介面不用重畫，只要再畫一幀 */
+  /**
+   * 分層顯示的畫布畫了新內容（它的貼圖已經標記要更新）：介面不用重畫，只要再畫一幀
+   * @param el 畫布元件
+   */
   contentChanged(el: UIElement): void;
   /**
    * 3D 畫面用 WebGL 2 繪製時（瀏覽器不支援 WebGPU 的備援）：借用它的 WebGL，畫布直接畫進它的貼圖，
@@ -123,9 +156,19 @@ export type OverlayPainter = (ctx: CanvasRenderingContext2D | OffscreenCanvasRen
 
 /** 元件接管指標：按下後，移動與放開都交給它（拖曳搖桿、移動視窗、拖曳物品） */
 export interface PointerCapture {
-  /** target 為目前滑鼠下的元件 */
+  /**
+   * target 為目前滑鼠下的元件
+   * @param x 指標 X（介面座標）
+   * @param y 指標 Y（介面座標）
+   * @param target 目前指標下的元件
+   */
   move(x: number, y: number, target: UIElement | null): void;
-  /** target 為放開時滑鼠下的元件 */
+  /**
+   * target 為放開時滑鼠下的元件
+   * @param x 指標 X（介面座標）
+   * @param y 指標 Y（介面座標）
+   * @param target 放開時指標下的元件
+   */
   up(x: number, y: number, target: UIElement | null): void;
   /** 被中斷（沒收到放開：視窗失去焦點、觸控被瀏覽器取消）：還原狀態，不要當成放開 */
   cancel?(): void;
@@ -152,6 +195,9 @@ export function isFitDim(v: string | undefined): boolean {
   return v !== undefined && v.trim() === 'fit';
 }
 
+/**
+ * @param v 尺寸文字："100"（像素）、"50%"、"auto"
+ */
 export function parseDim(v: string | undefined): Dim | undefined {
   if (v === undefined || v === '') return undefined;
   const s = v.trim();
@@ -164,7 +210,10 @@ export function parseDim(v: string | undefined): Dim | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-/** CSS 式的四邊簡寫："8"、"8 16"、"8 16 4"、"8 16 4 2"（上 右 下 左） */
+/**
+ * CSS 式的四邊簡寫："8"、"8 16"、"8 16 4"、"8 16 4 2"（上 右 下 左）
+ * @param v 簡寫文字，例如 "8 16"
+ */
 export function parseEdges(v: string): [Dim, Dim, Dim, Dim] | undefined {
   const parts = v
     .trim()
@@ -247,7 +296,12 @@ export class UIElement {
    * 樣式範圍：疊加圖層（另一份 XML）自己的 <UIStyle>、<UISkin> 只套用在圖層裡，
    * 不會影響其他畫面。設在圖層的根元件上。
    */
-  styleScope: { styles: Map<string, Attrs>; skins: Map<string, Attrs> } | null = null;
+  styleScope: {
+    /** 這個範圍的 <UIStyle>：名稱 → 屬性 */
+    styles: Map<string, Attrs>;
+    /** 這個範圍的 <UISkin>：名稱 → 屬性 */
+    skins: Map<string, Attrs>;
+  } | null = null;
   /** 由 <UIComponent src> 內嵌進來的元件：來源檔案的網址（line 是那個檔案的行號）；自己文件裡的元件是 null */
   includedFrom: string | null = null;
   /** 執行中的透明度倍率與位移（動畫用，不影響排版；位移會連同子元件一起移動） */
@@ -261,13 +315,23 @@ export class UIElement {
   /** 已經要求載入的背景圖片 */
   private readonly bgRequested = new Set<string>();
 
-  /** 動畫：每幀呼叫（需先 ctx.animate(this)），回傳 false 代表動畫結束 */
+  /**
+   * 動畫：每幀呼叫（需先 ctx.animate(this)），回傳 false 代表動畫結束
+   * @param dt 這一幀的時間（秒）
+   */
   tick?(dt: number): boolean;
 
-  /** 按下時接管指標（回傳 null 走一般的點擊流程） */
+  /**
+   * 按下時接管指標（回傳 null 走一般的點擊流程）
+   * @param x 指標 X（介面座標）
+   * @param y 指標 Y（介面座標）
+   */
   pointerDown?(x: number, y: number): PointerCapture | null;
 
-  /** XML 子節點的特殊處理（例如對話框的選項），回傳 true 代表已處理 */
+  /**
+   * XML 子節點的特殊處理（例如對話框的選項），回傳 true 代表已處理
+   * @param node XML 子節點
+   */
   consumeChild?(node: XmlNode): boolean;
 
   /** XML 子元件都加入後呼叫 */
@@ -302,6 +366,11 @@ export class UIElement {
   /**
    * 自訂繪製（選擇性）：在背景與邊框之後、子元件之前呼叫，
    * 讓自訂元件畫出圖表等內容。座標為介面座標（已換算像素比）。
+   * @param ctx 2D 繪圖環境
+   * @param x 元件左邊（介面座標）
+   * @param y 元件上邊
+   * @param width 元件寬
+   * @param height 元件高
    */
   paintContent?(
     ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -318,6 +387,9 @@ export class UIElement {
     else this.ctx.requestLayout();
   }
 
+  /**
+   * @param raw XML 寫的屬性
+   */
   constructor(
     /** 所屬介面的環境（排版引擎、樣式、圖片載入…） */
     readonly ctx: UIContext,
@@ -337,12 +409,19 @@ export class UIElement {
 
   // ───────── 屬性 ─────────
 
-  /** 取得屬性目前的值（套用樣式、外觀、斷點之後），沒有時是 undefined */
+  /**
+   * 取得屬性目前的值（套用樣式、外觀、斷點之後），沒有時是 undefined
+   * @param name 屬性名稱
+   */
   get(name: string): string | undefined {
     return this.attrs[name];
   }
 
-  /** 修改屬性（會重新排版）。value 為 null 時移除 */
+  /**
+   * 修改屬性（會重新排版）。value 為 null 時移除
+   * @param name 屬性名稱
+   * @param value 新的值；null 移除
+   */
   set(name: string, value: string | number | null): this {
     // 值沒變就不重新排版（每幀呼叫 set 時，避免每幀整張介面重畫）
     if ((value === null ? undefined : String(value)) === this.raw[name]) return this;
@@ -568,7 +647,11 @@ export class UIElement {
 
   // ───────── 樹狀結構 ─────────
 
-  /** 加入子元件（index：插入位置，預設最後） */
+  /**
+   * 加入子元件（index：插入位置，預設最後）
+   * @param child 子元件
+   * @param index 插入位置（預設最後）
+   */
   add(child: UIElement, index?: number): void {
     if (child.parent) child.parent.removeChild(child);
     // 移除之後才計算位置（可能是從自己這裡移到最後）
@@ -578,7 +661,10 @@ export class UIElement {
     this.node.insertChild(child.node, index);
   }
 
-  /** 移除子元件（不會銷毀它） */
+  /**
+   * 移除子元件（不會銷毀它）
+   * @param child 子元件
+   */
   removeChild(child: UIElement): void {
     const i = this.children.indexOf(child);
     if (i === -1) return;
@@ -618,7 +704,10 @@ export class UIElement {
     return { x, y, width: this.layout.width, height: this.layout.height };
   }
 
-  /** 尋找子孫元件 */
+  /**
+   * 尋找子孫元件
+   * @param id 元件的 id
+   */
   find(id: string): UIElement | undefined {
     for (const c of this.children) {
       if (c.id === id) return c;
@@ -628,7 +717,10 @@ export class UIElement {
     return undefined;
   }
 
-  /** 走訪自己與所有子孫 */
+  /**
+   * 走訪自己與所有子孫
+   * @param fn 每個元件呼叫一次
+   */
   walk(fn: (el: UIElement) => void): void {
     fn(this);
     for (const c of this.children) c.walk(fn);
@@ -636,7 +728,11 @@ export class UIElement {
 
   // ───────── 事件 ─────────
 
-  /** 監聽事件（例如 'click'、'change'），回傳取消監聽的函式 */
+  /**
+   * 監聽事件（例如 'click'、'change'），回傳取消監聽的函式
+   * @param type 事件名稱（例如 'click'、'change'）
+   * @param handler 事件處理函式
+   */
   on(type: string, handler: UIHandler): () => void {
     let set = this.listeners.get(type);
     if (!set) this.listeners.set(type, (set = new Set()));
@@ -644,7 +740,11 @@ export class UIElement {
     return () => set!.delete(handler);
   }
 
-  /** 觸發事件：先呼叫監聽的函式，再往上傳給父元件（冒泡） */
+  /**
+   * 觸發事件：先呼叫監聽的函式，再往上傳給父元件（冒泡）
+   * @param type 事件名稱
+   * @param extra 事件的其他欄位（value、checked、item…）
+   */
   emit(type: string, extra: Partial<UIEvent> = {}): void {
     // select="頁面堆疊id:頁"：點擊時切換 UIStackView 的頁面（不用寫程式）
     if (type === 'click' && this.attrs.select) {
@@ -727,6 +827,11 @@ export class UIComponent extends UILayout {
   /** 外部檔案的 XML（匯入的樣式晚到時重新收集用） */
   sourceTree: XmlNode | null = null;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, _text = '') {
     super(ctx, type, withoutComponentSize(raw));
     this.ownAttrs = { ...this.raw };
@@ -767,6 +872,12 @@ export class UILabel extends UIElement {
   /** 只顯示前幾個字（打字機效果；排版仍以完整文字計算，不會跳動） */
   revealed = Infinity;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   * @param text 一開始的文字
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, text = '') {
     super(ctx, type, raw);
     this.text = raw.text ?? text;
@@ -802,7 +913,10 @@ export class UILabel extends UIElement {
     }
   }
 
-  /** 設定文字內容，回傳自己（可以串接） */
+  /**
+   * 設定文字內容，回傳自己（可以串接）
+   * @param text 文字（數字會轉成文字）
+   */
   setText(text: string | number): this {
     const t = String(text);
     if (t === this.text) return this;
@@ -846,7 +960,10 @@ export class UIImage extends UIElement {
     return this.attrs.src ? this.ctx.resolveUrl(this.attrs.src, this) : '';
   }
 
-  /** 換圖片，回傳自己（可以串接） */
+  /**
+   * 換圖片，回傳自己（可以串接）
+   * @param src 圖片網址
+   */
   setSrc(src: string): this {
     return this.set('src', src);
   }
@@ -896,6 +1013,12 @@ export class UIButton extends UIElement {
   /** 按鈕上的文字元件（沒有文字時是 null） */
   label: UILabel | null = null;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   * @param text 一開始的文字
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, text = '') {
     super(ctx, type, raw);
     const t = raw.text ?? text;
@@ -928,7 +1051,10 @@ export class UIButton extends UIElement {
     this.set('disabled', v ? 'true' : null);
   }
 
-  /** 設定按鈕文字，回傳自己（可以串接） */
+  /**
+   * 設定按鈕文字，回傳自己（可以串接）
+   * @param text 按鈕文字
+   */
   setText(text: string | number): this {
     this.label = setChildLabel(this, this.label, text);
     return this;
@@ -968,6 +1094,12 @@ export class UICheckBox extends UIElement {
   /** 旁邊的文字元件（沒有文字時是 null） */
   label: UILabel | null = null;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   * @param text 一開始的文字
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, text = '') {
     super(ctx, type, raw);
     this.indicator = new UICheckIndicator(ctx, 'UICheckIndicator');
@@ -1009,7 +1141,10 @@ export class UICheckBox extends UIElement {
     this.set('disabled', v ? 'true' : null);
   }
 
-  /** 設定旁邊的文字，回傳自己（可以串接） */
+  /**
+   * 設定旁邊的文字，回傳自己（可以串接）
+   * @param text 旁邊的文字
+   */
   setText(text: string | number): this {
     this.label = setChildLabel(this, this.label, text);
     return this;
@@ -1101,6 +1236,11 @@ export class UISelect extends UIElement {
   /** 展開的選單捲動到哪裡（像素） */
   popupScroll = 0;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}) {
     super(ctx, type, raw);
     this.label = new UILabel(ctx, 'UILabel', {}, '');
@@ -1156,7 +1296,10 @@ export class UISelect extends UIElement {
     this.set('disabled', v ? 'true' : null);
   }
 
-  /** 設定選項，回傳自己（可以串接） */
+  /**
+   * 設定選項，回傳自己（可以串接）
+   * @param options 選項（顯示文字與值）
+   */
   setOptions(options: SelectOption[]): this {
     this.options = options.map((o) => ({ ...o }));
     this.refreshLabel();
@@ -1164,7 +1307,10 @@ export class UISelect extends UIElement {
     return this;
   }
 
-  /** 使用者選了某個選項 */
+  /**
+   * 使用者選了某個選項
+   * @param index 選項的索引
+   */
   choose(index: number): void {
     const option = this.options[index];
     if (!option) return;
@@ -1182,7 +1328,10 @@ export class UISelect extends UIElement {
     this.label.setText(this.selectedOption?.label ?? this.raw.placeholder ?? '');
   }
 
-  /** 展開後的選單位置（介面座標）；下方空間不夠時往上展開 */
+  /**
+   * 展開後的選單位置（介面座標）；下方空間不夠時往上展開
+   * @param viewportHeight 介面的高度
+   */
   popupLayout(viewportHeight: number): {
     x: number;
     y: number;
@@ -1212,7 +1361,12 @@ export class UISelect extends UIElement {
     };
   }
 
-  /** 某一點對應的選項索引（不在選單內為 -1） */
+  /**
+   * 某一點對應的選項索引（不在選單內為 -1）
+   * @param x X（介面座標）
+   * @param y Y（介面座標）
+   * @param viewportHeight 介面的高度
+   */
   optionAt(x: number, y: number, viewportHeight: number): number {
     const p = this.popupLayout(viewportHeight);
     if (x < p.x || x > p.x + p.width || y < p.y + p.padding || y > p.y + p.height - p.padding) return -1;
@@ -1317,7 +1471,10 @@ export class UISlider extends UIElement {
     this.set('disabled', v ? 'true' : null);
   }
 
-  /** 把數值限制在範圍內並對齊 step */
+  /**
+   * 把數值限制在範圍內並對齊 step
+   * @param v 數值
+   */
   normalize(v: number): number {
     const { min, max, step } = this;
     let x = Math.min(max, Math.max(min, Number.isFinite(v) ? v : min));
@@ -1379,7 +1536,11 @@ export class UISlider extends UIElement {
     return { x0: r.x + half, y0: cy, x1: r.x + r.width - half, y1: cy };
   }
 
-  /** 某一點對應的數值 */
+  /**
+   * 某一點對應的數值
+   * @param x X（介面座標）
+   * @param y Y（介面座標）
+   */
   valueAt(x: number, y: number): number {
     const t = this.trackRange();
     const ratio = this.vertical ? (y - t.y0) / (t.y1 - t.y0 || 1) : (x - t.x0) / (t.x1 - t.x0 || 1);
@@ -1520,17 +1681,29 @@ export class UIList extends UIScrollView {
 
 /** 內建元件 */
 export const BUILTIN_COMPONENTS = {
+  /** 根元件：填滿整個畫面，直向排列 */
   UI: UIRoot,
+  /** 排版容器：dir="v"（垂直，預設）或 dir="h"（水平） */
   UILayout,
+  /** 內嵌外部介面檔：<UIComponent src="card.xml"/> */
   UIComponent,
+  /** 文字：會依寬度自動換行 */
   UILabel,
+  /** 圖片 */
   UIImage,
+  /** 按鈕：可以包含其他元件 */
   UIButton,
+  /** 列表：捲動區＋排列方式＋資料樣板 */
   UIList,
+  /** 捲動區：內容超出範圍時可以捲動 */
   UIScrollView,
+  /** 勾選框 */
   UICheckBox,
+  /** 單選按鈕：同一個 group 裡只能選一個 */
   UIRadioButton,
+  /** 下拉選單 */
   UISelect,
+  /** 滑桿 */
   UISlider,
 } as const;
 

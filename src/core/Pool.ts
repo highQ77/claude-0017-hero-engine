@@ -17,13 +17,22 @@
 export interface PoolOptions<T> {
   /** 建立新物件（池子空了時呼叫） */
   create(): T;
-  /** 拿出來時呼叫（重設、顯示） */
+  /**
+   * 拿出來時呼叫（重設、顯示）
+   * @param item 拿出來的物件
+   */
   onAcquire?(item: T): void;
-  /** 放回去時呼叫（隱藏、停用） */
+  /**
+   * 放回去時呼叫（隱藏、停用）
+   * @param item 放回去的物件
+   */
   onRelease?(item: T): void;
   /** 池子裡最多留幾個閒置的（多的會交給 destroy）；預設不限制 */
   max?: number;
-  /** 丟掉物件（超過 max、或 clear 時）；例如 (e) => world.destroy(e) */
+  /**
+   * 丟掉物件（超過 max、或 clear 時）；例如 (e) => world.destroy(e)
+   * @param item 要丟掉的物件
+   */
   destroy?(item: T): void;
 }
 
@@ -36,6 +45,9 @@ export class Pool<T> {
   private readonly idle: T[] = [];
   private readonly used = new Set<T>();
 
+  /**
+   * @param options 建立、拿出、放回、丟掉物件的函式與數量上限
+   */
   constructor(private readonly options: PoolOptions<T>) {}
 
   /** 拿一個物件（有閒置的就用閒置的，沒有就建立新的） */
@@ -46,7 +58,10 @@ export class Pool<T> {
     return item;
   }
 
-  /** 放回去（不是從這個池子拿出來的、或已經放回去的會被忽略並回傳 false） */
+  /**
+   * 放回去（不是從這個池子拿出來的、或已經放回去的會被忽略並回傳 false）
+   * @param item 要放回去的物件
+   */
   release(item: T): boolean {
     if (!this.used.delete(item)) return false;
     this.options.onRelease?.(item);
@@ -56,7 +71,10 @@ export class Pool<T> {
     return true;
   }
 
-  /** 先建立幾個閒置的物件（遊戲開始前做，避免中途建立時卡一下） */
+  /**
+   * 先建立幾個閒置的物件（遊戲開始前做，避免中途建立時卡一下）
+   * @param count 要建立幾個
+   */
   prewarm(count: number): void {
     for (let i = 0; i < count; i++) {
       const item = this.options.create();
@@ -88,7 +106,10 @@ export class Pool<T> {
   }
 }
 
-/** 建立物件池 */
+/**
+ * 建立物件池
+ * @param options 建立、拿出、放回、丟掉物件的函式與數量上限
+ */
 export function createPool<T>(options: PoolOptions<T>): Pool<T> {
   return new Pool(options);
 }

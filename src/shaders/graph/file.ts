@@ -33,7 +33,10 @@ export interface ShaderGraphFile {
   /** 圖片：編號 → data URL */
   assets?: Record<string, string>;
   /** 編輯器的預覽設定（遊戲不用） */
-  preview?: { mesh?: string };
+  preview?: {
+    /** 預覽網格：sphere、cube、torus、plane、quad */
+    mesh?: string;
+  };
 }
 
 /** 節點圖檔的格式名稱 */
@@ -71,7 +74,10 @@ export function normalizeShaderGraph(g: unknown): ShaderGraph {
   return { nodes, links, nextId: Math.max(0, ...nodes.map((n) => n.id)) + 1 };
 }
 
-/** 讀取節點圖檔的內容（JSON 文字或已經解析的物件）；也接受 Shader Composer 匯出的格式 */
+/**
+ * 讀取節點圖檔的內容（JSON 文字或已經解析的物件）；也接受 Shader Composer 匯出的格式
+ * @param input JSON 文字或已經解析的物件
+ */
 export function parseShaderGraphFile(input: string | unknown): ShaderGraphFile {
   const data = typeof input === 'string' ? (JSON.parse(input) as unknown) : input;
   if (!isObject(data)) throw new Error('節點圖檔要是 JSON 物件');
@@ -89,7 +95,10 @@ export function parseShaderGraphFile(input: string | unknown): ShaderGraphFile {
   };
 }
 
-/** 節點圖檔轉成文字（只保留用到的圖片） */
+/**
+ * 節點圖檔轉成文字（只保留用到的圖片）
+ * @param file 節點圖檔
+ */
 export function stringifyShaderGraphFile(file: ShaderGraphFile): string {
   const used: Record<string, string> = {};
   for (const n of file.graph.nodes) {
@@ -149,7 +158,11 @@ export function builtinUVGrid(): HTMLCanvasElement {
 export class ShaderGraphTextures {
   private readonly cache = new Map<string, THREE.Texture>();
 
-  /** 取得貼圖；url 空白時是內建 UV 格線；圖片載入完成前是空的貼圖 */
+  /**
+   * 取得貼圖；url 空白時是內建 UV 格線；圖片載入完成前是空的貼圖
+   * @param url 圖片網址或 data URL；空白時用內建 UV 格線
+   * @param wrap 超出 0～1 時：'repeat' 重複、'clamp' 延伸邊緣、'mirror' 鏡像重複
+   */
   get(url: string, wrap: string): THREE.Texture {
     const key = `${url || 'builtin'}|${wrap}`;
     const hit = this.cache.get(key);
@@ -176,7 +189,12 @@ let sharedTextures: ShaderGraphTextures | null = null;
 /** shaderGraphDefinition 的選項 */
 export interface ShaderGraphDefinitionOptions {
   /** 只預覽某個節點的某個輸出（編輯器的節點縮圖用） */
-  target?: { nodeId: number; port: string };
+  target?: {
+    /** 節點編號 */
+    nodeId: number;
+    /** 輸出的名稱 */
+    port: string;
+  };
   /** 貼圖快取（省略時用共用的） */
   textures?: ShaderGraphTextures;
   /**
@@ -219,6 +237,9 @@ function graphUniforms(
  * uniform：uMouse（vec2，預設 0.5, 0.5）、uAspect（float，預設 1）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>、
  * 每個參數節點（Parameter、Color Parameter）的名稱；
  * 建立材質後可以修改，例如 material.uniforms.uLightDir.value.copy(sun.direction)、material.uniforms.progress.value = 0.5。
+ * @param file 節點圖檔
+ * @param name 著色器名稱
+ * @param options 只預覽某個節點、貼圖快取、當成畫面的圖、Time 節點的值（編輯器用）
  * @example
  * shaders.define(shaderGraphDefinition(parseShaderGraphFile(json), 'lava'));
  */
@@ -274,6 +295,9 @@ export function shaderGraphDefinition(
  * 再用 shaders.createEffect 建立、postfx.addPass(effect, 'display') 加進後製（或寫在 postfx.settings.effects）。
  * uniform：uMouse（vec2）、uLightDir（vec3）、每個貼圖節點的 uTex<編號>、每個參數節點的名稱
  * （effect.uniforms.名稱.value，或寫在後製設定 effects 的 uniforms）；寬高比由畫面大小算出。
+ * @param file 節點圖檔
+ * @param name 效果名稱
+ * @param options 貼圖快取
  * @example
  * shaders.defineEffect(shaderGraphEffectDefinition(parseShaderGraphFile(json), 'crt'));
  * postfx.addPass(shaders.createEffect('crt'), 'display');
@@ -296,6 +320,7 @@ export function shaderGraphEffectDefinition(
 
 /**
  * 載入全螢幕效果的節點圖檔，轉成效果的定義。
+ * @param url 節點圖檔的網址（相對於 public，例如 'shaders/crt.shader.json'）
  * @param name 效果名稱（省略時用檔名，例如 shaders/crt.shader.json → crt）
  * @example
  * shaders.defineEffect(await loadShaderGraphEffect('shaders/crt.shader.json'));
@@ -323,6 +348,7 @@ async function fetchGraphFile(url: string): Promise<{ file: ShaderGraphFile; fil
 
 /**
  * 載入節點圖檔，轉成自訂著色器的定義。
+ * @param url 節點圖檔的網址（相對於 public，例如 'shaders/lava.shader.json'）
  * @param name 著色器名稱（省略時用檔名，例如 shaders/lava.shader.json → lava）
  * @example
  * shaders.define(await loadShaderGraph('shaders/lava.shader.json'));

@@ -27,6 +27,9 @@ export interface TextMetrics {
 /** 量測單段文字寬度的函式（瀏覽器用 canvas，測試可以替換） */
 export type MeasureTextWidth = (text: string, font: FontSpec) => number;
 
+/**
+ * @param font 字型：大小、字體、粗細、行高
+ */
 export function fontString(font: FontSpec): string {
   return `${font.weight} ${font.size}px ${font.family}`;
 }
@@ -34,7 +37,10 @@ export function fontString(font: FontSpec): string {
 /** 中日韓文字：每個字之間都可以換行 */
 const CJK = /[⺀-鿿가-힯豈-﫿＀-￯　-〿]/;
 
-/** 切成可換行的片段：英文以單字（含後面的空白）、中日韓以單字 */
+/**
+ * 切成可換行的片段：英文以單字（含後面的空白）、中日韓以單字
+ * @param text 文字
+ */
 export function tokenize(text: string): string[] {
   const tokens: string[] = [];
   let word = '';
@@ -56,6 +62,10 @@ export function tokenize(text: string): string[] {
 
 /**
  * 依最大寬度換行。支援 \n 強制換行；單一片段超過寬度時逐字切開。
+ * @param text 文字
+ * @param font 字型
+ * @param maxWidth 最大寬度（像素）
+ * @param measure 量文字寬度的函式
  */
 export function wrapText(text: string, font: FontSpec, maxWidth: number, measure: MeasureTextWidth): TextMetrics {
   const lines: string[] = [];
@@ -114,7 +124,10 @@ export function createCanvasMeasurer(): MeasureTextWidth {
   };
 }
 
-/** 測試用：每個字元固定寬度（中日韓字為兩倍） */
+/**
+ * 測試用：每個字元固定寬度（中日韓字為兩倍）
+ * @param charWidthRatio 一個字元的寬度是字型大小的幾倍（預設 0.5）
+ */
 export function createFixedMeasurer(charWidthRatio = 0.5): MeasureTextWidth {
   return (text, font) => {
     let w = 0;

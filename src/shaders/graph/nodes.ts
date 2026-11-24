@@ -265,7 +265,10 @@ export const PALETTES: Record<string, { label: string; a: number[]; b: number[];
 /** 所有節點（type → 定義） */
 export const NODE_DEFS: Record<string, NodeDef> = {};
 
-/** 新增一種節點（已經有同名的會取代） */
+/**
+ * 新增一種節點（已經有同名的會取代）
+ * @param d 節點定義：種類、標題、分類、輸入、輸出、參數、tsl 函式
+ */
 export function defineShaderNode(d: NodeDefInput): NodeDef {
   const def: NodeDef = { inputs: [], outputs: [], params: [], ...d };
   NODE_DEFS[def.type] = def;

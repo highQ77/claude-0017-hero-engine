@@ -120,6 +120,9 @@ function dirOf(url: string): string {
   return url.includes('/') ? url.slice(0, url.lastIndexOf('/') + 1) : '';
 }
 
+/**
+ * @param path 路徑（處理 ./ 與 ../）
+ */
 export function normalizePath(path: string): string {
   const [pathname, rest = ''] = path.split(/(?=[?#])/, 2);
   const out: string[] = [];
@@ -222,6 +225,10 @@ export class UI2D {
   /** 標籤名稱 → 元件類別（內建元件；套件在 UI2D 載入前註冊的同名元件優先） */
   static readonly components = addBuiltins(uiComponents);
 
+  /**
+   * @param tag XML 標籤名稱
+   * @param component 元件類別
+   */
   static register(tag: string, component: ComponentConstructor): void {
     registerUIComponent(tag, component);
   }
@@ -231,6 +238,8 @@ export class UI2D {
 
   /**
    * 設定某種元件的外觀（預設屬性），例如整個遊戲的按鈕顏色。
+   * @param tag 元件的 XML 標籤（例如 'UIButton'）
+   * @param attrs 預設屬性
    * @example UI2D.setSkin('UIButton', { background: '#9acd32', color: '#141a07', radius: '12' })
    */
   static setSkin(tag: string, attrs: Attrs | null): void {
@@ -241,6 +250,9 @@ export class UI2D {
 
   private static skinVersion = 0;
 
+  /**
+   * @param options 放在哪個元素、大小、事件處理函式、斷點、繪製方式、像素比等設定
+   */
   static async create(options: UI2DOptions = {}): Promise<UI2D> {
     return new UI2D(await loadLayoutEngine(), options);
   }
@@ -367,7 +379,10 @@ export class UI2D {
 
   // ───────── 載入 ─────────
 
-  /** 讀取 XML 檔案（圖片等相對路徑以 XML 檔的位置為基準）；<UIComponent src> 內嵌的檔案會先讀好，載入後內容馬上就在 */
+  /**
+   * 讀取 XML 檔案（圖片等相對路徑以 XML 檔的位置為基準）；<UIComponent src> 內嵌的檔案會先讀好，載入後內容馬上就在
+   * @param url XML 檔的網址
+   */
   async load(url: string): Promise<UIElement> {
     const xml = await fetchUIXml(url);
     const base = url.includes('/') ? url.slice(0, url.lastIndexOf('/') + 1) : '';
@@ -380,6 +395,9 @@ export class UI2D {
    * 讀好之後 loadString、addLayer 會同步放入內容（ui.get 馬上找得到裡面的元件）；
    * 沒有先讀的話，內容會在背景讀取後才出現（可以 await ui.whenComponentsLoaded()）。
    * 讀不到的檔案這裡不會丟出錯誤，建立時會在元件裡顯示錯誤訊息。
+   * @param xml XML 文字
+   * @param baseUrl 相對路徑的基準
+   * @param sourceUrl 這份 XML 自己的網址
    */
   async preloadComponents(xml: string, baseUrl = this.baseUrl, sourceUrl?: string): Promise<void> {
     const visit = async (text: string, chain: string[]): Promise<void> => {
@@ -443,6 +461,9 @@ export class UI2D {
   /**
    * 從 XML 字串建立介面（取代目前的介面）。
    * sourceUrl：這份 XML 自己的網址（有的話，<UIComponent> 內嵌回自己時可以馬上發現循環）
+   * @param xml XML 文字
+   * @param baseUrl 相對路徑（圖片等）的基準
+   * @param sourceUrl 這份 XML 自己的網址（偵測內嵌循環用）
    */
   loadString(xml: string, baseUrl = '', sourceUrl?: string): UIElement {
     const tree = parseXml(xml, { voidTags: VOID_TAGS });
@@ -478,8 +499,20 @@ export class UI2D {
    * 圖層填滿整個畫面；透明的地方會讓點擊穿透到下面的介面。
    * 圖層裡的 <UIStyle>、<UISkin> 只套用在這個圖層（不會影響其他畫面）。回傳圖層的根元件。
    * options.order 為 'bottom' 時放在所有圖層的最下面（例如場景介面：要在視窗、選單等畫面的下面）。
+   * @param name 圖層名稱
+   * @param xml XML 文字
+   * @param sourceUrl 這份 XML 自己的網址
+   * @param options 放在最上面（top，預設）或最下面（bottom）
    */
-  addLayer(name: string, xml: string, sourceUrl?: string, options: { order?: 'top' | 'bottom' } = {}): UIElement {
+  addLayer(
+    name: string,
+    xml: string,
+    sourceUrl?: string,
+    options: {
+      /** 'top'（預設）放在最上面；'bottom' 放在所有圖層的最下面 */
+      order?: 'top' | 'bottom';
+    } = {},
+  ): UIElement {
     if (!this.root) throw new Error('請先載入介面（loadString / load）才能加入圖層');
     this.removeLayer(name);
     const tree = parseXml(xml, { voidTags: VOID_TAGS });
@@ -512,7 +545,10 @@ export class UI2D {
     return layer;
   }
 
-  /** 把圖層移到最上層（例如轉場的黑幕：轉場中才打開的視窗也不能蓋過它） */
+  /**
+   * 把圖層移到最上層（例如轉場的黑幕：轉場中才打開的視窗也不能蓋過它）
+   * @param name 圖層名稱
+   */
   raiseLayer(name: string): boolean {
     const layer = this.layers.get(name);
     if (!layer || !this.root) return false;
@@ -524,7 +560,10 @@ export class UI2D {
     return true;
   }
 
-  /** 移除圖層 */
+  /**
+   * 移除圖層
+   * @param name 圖層名稱
+   */
   removeLayer(name: string): boolean {
     const layer = this.layers.get(name);
     if (!layer) return false;
@@ -547,7 +586,10 @@ export class UI2D {
     return [...this.layers.keys()];
   }
 
-  /** 取得疊加圖層（addLayer 的名稱） */
+  /**
+   * 取得疊加圖層（addLayer 的名稱）
+   * @param name 圖層名稱
+   */
   getLayer(name: string): UIElement | undefined {
     return this.layers.get(name);
   }
@@ -566,25 +608,38 @@ export class UI2D {
 
   // ───────── 查詢與操作 ─────────
 
-  /** 依 id 找元件（沒有時是 undefined） */
+  /**
+   * 依 id 找元件（沒有時是 undefined）
+   * @param id 元件的 id
+   */
   get<T extends UIElement = UIElement>(id: string): T | undefined {
     if (!this.root) return undefined;
     return (this.root.id === id ? this.root : this.root.find(id)) as T | undefined;
   }
 
-  /** 依 id 找元件（沒有時拋出錯誤） */
+  /**
+   * 依 id 找元件（沒有時拋出錯誤）
+   * @param id 元件的 id
+   */
   require<T extends UIElement = UIElement>(id: string): T {
     const el = this.get<T>(id);
     if (!el) throw new Error(`找不到介面元件「${id}」`);
     return el;
   }
 
-  /** 註冊或替換事件處理函式（XML 裡用 onClick="名稱" 呼叫） */
+  /**
+   * 註冊或替換事件處理函式（XML 裡用 onClick="名稱" 呼叫）
+   * @param name 函式名稱（XML 裡 onClick="名稱"）
+   * @param handler 事件處理函式
+   */
   setHandler(name: string, handler: UIHandler): void {
     this.handlers[name] = handler;
   }
 
-  /** 一次註冊多個事件處理函式：ui.setHandlers({ start: () => …, quit: () => … }) */
+  /**
+   * 一次註冊多個事件處理函式：ui.setHandlers({ start: () => …, quit: () => … })
+   * @param handlers 名稱 → 事件處理函式
+   */
   setHandlers(handlers: Record<string, UIHandler>): void {
     Object.assign(this.handlers, handlers);
   }
@@ -592,6 +647,8 @@ export class UI2D {
   /**
    * 用資料產生列表項目（需要列表裡有 <UITemplate>）。
    * 樣板裡的 {欄位} 會換成資料值，{$index} 為索引。
+   * @param listId 列表的 id
+   * @param items 資料：每一筆產生一個項目
    * @example ui.setItems('inventory', [{ name: '劍', icon: 'sword.png' }])
    */
   setItems(listId: string, items: readonly unknown[]): void {
@@ -623,7 +680,10 @@ export class UI2D {
     return (this.renderer as { uploadStats?: import('./UITexture').UIRenderStats } | null)?.uploadStats ?? null;
   }
 
-  /** 設定顯示層（取代原本的） */
+  /**
+   * 設定顯示層（取代原本的）
+   * @param renderer 顯示層
+   */
   setRenderer(renderer: UIRenderer | null): void {
     this.renderer?.dispose();
     this.renderer = renderer;
@@ -646,7 +706,10 @@ export class UI2D {
     return this.openSelect;
   }
 
-  /** 開關下拉選單 */
+  /**
+   * 開關下拉選單
+   * @param select 要展開的下拉選單；null 關閉
+   */
   setOpenSelect(select: UISelect | null): void {
     if (this.openSelect === select) return;
     this.openSelect = select;
@@ -660,7 +723,10 @@ export class UI2D {
     this.invalidate();
   }
 
-  /** 某一組單選按鈕目前選取的值（都沒選為 null） */
+  /**
+   * 某一組單選按鈕目前選取的值（都沒選為 null）
+   * @param group 單選按鈕的 group
+   */
   getRadioValue(group: string): string | null {
     let value: string | null = null;
     this.root?.walk((el) => {
@@ -669,7 +735,11 @@ export class UI2D {
     return value;
   }
 
-  /** 選取某一組單選按鈕中 value 相符的那一個（不會觸發 change 事件） */
+  /**
+   * 選取某一組單選按鈕中 value 相符的那一個（不會觸發 change 事件）
+   * @param group 單選按鈕的 group
+   * @param value 要選取的值
+   */
   setRadioValue(group: string, value: string): void {
     let target: UIRadioButton | null = null;
     this.root?.walk((el) => {
@@ -689,7 +759,11 @@ export class UI2D {
     return merged;
   }
 
-  /** 這份介面的外觀（不含全域），改了之後會重新套用 */
+  /**
+   * 這份介面的外觀（不含全域），改了之後會重新套用
+   * @param tag 元件的 XML 標籤
+   * @param attrs 預設屬性
+   */
   setDocumentSkin(tag: string, attrs: Attrs | null): void {
     if (attrs) this.docSkins.set(tag, { ...attrs });
     else this.docSkins.delete(tag);
@@ -698,12 +772,19 @@ export class UI2D {
     this.invalidate();
   }
 
-  /** 已載入的圖片（給繪圖器用） */
+  /**
+   * 已載入的圖片（給繪圖器用）
+   * @param url 圖片網址
+   */
   imageSource(url: string): CanvasImageSource | undefined {
     return loadedImages.get(url);
   }
 
-  /** 註冊圖片（自訂圖片載入時，讓繪圖器也能取得圖片） */
+  /**
+   * 註冊圖片（自訂圖片載入時，讓繪圖器也能取得圖片）
+   * @param url 圖片網址
+   * @param image 圖片
+   */
   static setImage(url: string, image: CanvasImageSource): void {
     loadedImages.set(url, image);
   }
@@ -711,6 +792,7 @@ export class UI2D {
   /**
    * 要求重畫（外觀改變但排版不變）。
    * 不帶參數時整張重畫；帶元件時只重畫那些元件的範圍（局部重畫，省下重畫與上傳 GPU 的成本）。
+   * @param elements 要重畫的元件；不給時整張重畫
    */
   invalidate(...elements: (UIElement | null | undefined)[]): void {
     if (elements.length === 0) this.damageAll = true;
@@ -718,7 +800,11 @@ export class UI2D {
     this.scheduleRender();
   }
 
-  /** 標記元件範圍需要重畫（目前位置與上一次排版的位置都算） */
+  /**
+   * 標記元件範圍需要重畫（目前位置與上一次排版的位置都算）
+   * @param el 元件
+   * @param pad 額外的邊界（陰影、提示，像素）
+   */
   damage(el: UIElement, pad = 16): void {
     if (this.damageAll) return;
     pad = Math.max(pad, el.paintBleed);
@@ -781,6 +867,8 @@ export class UI2D {
   /**
    * 找出某一點最上層、會攔截滑鼠的元件（有互動、有背景的元件或列表）。
    * 透明且沒有互動的地方回傳 null，點擊會穿透到遊戲畫面。
+   * @param x X（介面座標）
+   * @param y Y（介面座標）
    */
   hitTest(x: number, y: number): UIElement | null {
     if (!this.root) return null;
@@ -858,7 +946,12 @@ export class UI2D {
     this.invalidate(pressed);
   }
 
-  /** 處理指標事件（UIPlugin 自動呼叫；自己的畫布要手動轉發），回傳是否點到介面 */
+  /**
+   * 處理指標事件（UIPlugin 自動呼叫；自己的畫布要手動轉發），回傳是否點到介面
+   * @param type down、move、up、leave
+   * @param x X（介面座標，CSS 像素）
+   * @param y Y（介面座標，CSS 像素）
+   */
   handlePointer(type: 'down' | 'move' | 'up' | 'leave', x: number, y: number): boolean {
     if (type !== 'move') this.hideTooltip();
     // 上一次的拖曳沒收到放開（例如在視窗外放開）：先結束它，這次的按下照常處理
@@ -1015,7 +1108,13 @@ export class UI2D {
     return true;
   }
 
-  /** 處理滾輪：捲動滑鼠所在的列表。回傳 true 代表被介面用掉 */
+  /**
+   * 處理滾輪：捲動滑鼠所在的列表。回傳 true 代表被介面用掉
+   * @param dx 橫向捲動量
+   * @param dy 縱向捲動量
+   * @param x 指標 X（介面座標）
+   * @param y 指標 Y（介面座標）
+   */
   handleWheel(dx: number, dy: number, x: number, y: number): boolean {
     const open = this.openSelect;
     if (open) {
@@ -1042,7 +1141,10 @@ export class UI2D {
 
   // ───────── 動畫、最上層圖層、浮動說明 ─────────
 
-  /** 讓元件每幀收到 tick(dt)，直到它回傳 false */
+  /**
+   * 讓元件每幀收到 tick(dt)，直到它回傳 false
+   * @param el 要收到 tick 的元件
+   */
   animate(el: UIElement): void {
     if (!el.tick) return;
     this.animating.add(el);
@@ -1051,6 +1153,7 @@ export class UI2D {
 
   /**
    * 推進動畫 dt 秒（預設由 requestAnimationFrame 自動呼叫；autoTick: false 時自己呼叫）。
+   * @param dt 經過的時間（秒）
    */
   tick(dt: number): void {
     for (const el of [...this.animating]) {
@@ -1082,14 +1185,21 @@ export class UI2D {
     this.animFrame = requestAnimationFrame(loop);
   }
 
-  /** 設定或移除最上層的圖層 */
+  /**
+   * 設定或移除最上層的圖層
+   * @param key 識別用的物件（同一個 key 會取代）
+   * @param painter 繪製函式；null 移除
+   */
   setOverlay(key: object, painter: OverlayPainter | null): void {
     if (painter) this.overlays.set(key, painter);
     else this.overlays.delete(key);
     this.scheduleRender();
   }
 
-  /** 標記任意範圍需要重畫 */
+  /**
+   * 標記任意範圍需要重畫
+   * @param r 要重畫的範圍（介面座標）
+   */
   damageArea(r: Rect): void {
     if (!this.damageAll) this.damageRects.push(expand(r, 2));
     this.scheduleRender();
@@ -1097,6 +1207,8 @@ export class UI2D {
 
   /**
    * 顯示提示訊息（需要介面裡有 <UIToast>；沒有時自動在最上層加一個）。
+   * @param text 訊息文字
+   * @param options 圖示、顏色、顯示幾秒、背景顏色
    * @example ui.toast('獲得金幣 ×10', { icon: 'coin', color: '#ffd75e' })
    */
   toast(text: string, options: ToastOptions = {}): void {
@@ -1212,7 +1324,12 @@ export class UI2D {
     return this.sliderDrag?.slider ?? null;
   }
 
-  /** 捲動列表到指定位置（會限制在內容範圍內） */
+  /**
+   * 捲動列表到指定位置（會限制在內容範圍內）
+   * @param list 列表或捲動區
+   * @param left 橫向捲動位置（像素）
+   * @param top 縱向捲動位置（像素）
+   */
   scrollTo(list: UIScrollView, left: number, top: number): void {
     const maxLeft = Math.max(0, list.contentWidth - list.layout.width);
     const maxTop = Math.max(0, list.contentHeight - list.layout.height);
@@ -1242,7 +1359,10 @@ export class UI2D {
     this.prevRects = rects;
   }
 
-  /** 每次載入新的介面後通知（套件可以在這裡把自己的元件加回去） */
+  /**
+   * 每次載入新的介面後通知（套件可以在這裡把自己的元件加回去）
+   * @param listener 載入後呼叫，拿到新的根元件
+   */
   onLoad(listener: (root: UIElement) => void): () => void {
     this.loadListeners.add(listener);
     return () => this.loadListeners.delete(listener);
@@ -1250,6 +1370,9 @@ export class UI2D {
 
   /**
    * 用程式建立元件（之後用 parent.add(el) 加進介面）。
+   * @param tag XML 標籤（例如 'UILabel'）
+   * @param attrs 屬性
+   * @param text 文字內容
    * @example const badge = ui.createElement('UILabel', { color: '#f00' }, 'NEW');
    */
   createElement<T extends UIElement = UIElement>(tag: string, attrs: Attrs = {}, text = ''): T {
@@ -1262,7 +1385,10 @@ export class UI2D {
     return el;
   }
 
-  /** 每次排版完成後通知 */
+  /**
+   * 每次排版完成後通知
+   * @param listener 排版完成後呼叫
+   */
   onLayout(listener: () => void): () => void {
     this.layoutListeners.add(listener);
     return () => this.layoutListeners.delete(listener);
@@ -1278,7 +1404,11 @@ export class UI2D {
     return { ...this.viewport };
   }
 
-  /** 設定介面尺寸（無畫面模式用；有容器時會自動跟隨容器） */
+  /**
+   * 設定介面尺寸（無畫面模式用；有容器時會自動跟隨容器）
+   * @param width 寬（CSS 像素）
+   * @param height 高（CSS 像素）
+   */
   resize(width: number, height: number): void {
     this.viewport = { width, height };
     this.damageAll = true;
@@ -1288,7 +1418,10 @@ export class UI2D {
 
   // ───────── 排版 ─────────
 
-  /** 要求重新排版（同一輪內多次要求只會排一次） */
+  /**
+   * 要求重新排版（同一輪內多次要求只會排一次）
+   * @param reapply true 時重新套用所有屬性（樣式、斷點改變時）
+   */
   requestLayout(reapply = false): void {
     if (reapply) this.needsReapply = true;
     if (this.scheduled) return;

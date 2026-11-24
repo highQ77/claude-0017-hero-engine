@@ -17,11 +17,21 @@ const log = createLogger('save');
 
 /** 存檔用的儲存空間（localStorage 的子集；測試或其他平台可以自己提供） */
 export interface SaveStorage {
-  /** 讀取（沒有時回傳 null） */
+  /**
+   * 讀取（沒有時回傳 null）
+   * @param key 鍵
+   */
   getItem(key: string): string | null;
-  /** 寫入 */
+  /**
+   * 寫入
+   * @param key 鍵
+   * @param value 要寫入的文字
+   */
   setItem(key: string, value: string): void;
-  /** 刪除 */
+  /**
+   * 刪除
+   * @param key 鍵
+   */
   removeItem(key: string): void;
   /** 所有的鍵（list 用） */
   keys(): string[];
@@ -33,9 +43,16 @@ export interface SaveOptions<T> {
   name: string;
   /** 存檔格式的版本（預設 1）；改了格式就加 1 */
   version?: number;
-  /** 讀到舊版本的存檔時轉換成目前的格式（沒有提供時，舊版本的存檔會讀取失敗） */
+  /**
+   * 讀到舊版本的存檔時轉換成目前的格式（沒有提供時，舊版本的存檔會讀取失敗）
+   * @param data 讀到的舊版資料
+   * @param fromVersion 存檔的版本
+   */
   migrate?(data: unknown, fromVersion: number): T;
-  /** 檢查讀到的資料（回傳 false 或丟出錯誤代表資料不對） */
+  /**
+   * 檢查讀到的資料（回傳 false 或丟出錯誤代表資料不對）
+   * @param data 讀到的資料
+   */
   validate?(data: unknown): boolean;
   /** 儲存空間（預設 localStorage） */
   storage?: SaveStorage;
@@ -53,6 +70,9 @@ export interface SaveInfo {
 
 /** 讀取存檔失敗（存檔壞掉、版本不對、資料不通過檢查） */
 export class SaveError extends Error {
+  /**
+   * @param message 錯誤訊息
+   */
   constructor(
     message: string,
     /** 存檔欄位 */
@@ -114,6 +134,9 @@ export class SaveFile<T> {
   private readonly storage: SaveStorage;
   private readonly prefix: string;
 
+  /**
+   * @param options 存檔名稱、版本、轉換舊版、檢查資料、儲存位置
+   */
   constructor(private readonly options: SaveOptions<T>) {
     if (!options.name) throw new Error('createSave：要給遊戲名稱 name');
     this.version = options.version ?? 1;
@@ -127,7 +150,11 @@ export class SaveFile<T> {
     return this.prefix + slot;
   }
 
-  /** 寫入存檔（資料要能轉成 JSON） */
+  /**
+   * 寫入存檔（資料要能轉成 JSON）
+   * @param slot 存檔欄位名稱（例如 'slot1'、'auto'）
+   * @param data 要存的資料（要能轉成 JSON）
+   */
   write(slot: string, data: T): void {
     const record: Record = { format: 'hero-save', version: this.version, savedAt: Date.now(), data };
     let text: string;
@@ -143,7 +170,10 @@ export class SaveFile<T> {
     }
   }
 
-  /** 讀取存檔；沒有這個存檔時回傳 null，存檔有問題時丟出 SaveError */
+  /**
+   * 讀取存檔；沒有這個存檔時回傳 null，存檔有問題時丟出 SaveError
+   * @param slot 存檔欄位名稱
+   */
   read(slot: string): T | null {
     const record = this.readRecord(slot);
     if (!record) return null;
@@ -172,12 +202,18 @@ export class SaveFile<T> {
     return data as T;
   }
 
-  /** 有沒有這個存檔 */
+  /**
+   * 有沒有這個存檔
+   * @param slot 存檔欄位名稱
+   */
   has(slot: string): boolean {
     return this.storage.getItem(this.key(slot)) !== null;
   }
 
-  /** 刪除存檔 */
+  /**
+   * 刪除存檔
+   * @param slot 存檔欄位名稱
+   */
   remove(slot: string): void {
     this.storage.removeItem(this.key(slot));
   }
@@ -217,7 +253,10 @@ export class SaveFile<T> {
   }
 }
 
-/** 建立存檔（一個遊戲一個，裡面可以有多個存檔欄位） */
+/**
+ * 建立存檔（一個遊戲一個，裡面可以有多個存檔欄位）
+ * @param options 存檔名稱、版本、轉換舊版、檢查資料、儲存位置
+ */
 export function createSave<T>(options: SaveOptions<T>): SaveFile<T> {
   return new SaveFile(options);
 }

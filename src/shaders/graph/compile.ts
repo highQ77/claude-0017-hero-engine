@@ -133,6 +133,7 @@ export interface CompiledShaderGraph {
   /**
    * 組出顏色（vec4）：材質是線性的顏色（已從 sRGB 轉換）；全螢幕效果是畫面上的顏色。
    * 只預覽一個節點（target）時是那個輸出的顏色（sRGB，還沒轉換）
+   * @param env uniform 節點、畫面座標與讀取畫面的函式（全螢幕效果）、時間
    */
   color(env: GraphEnv): ShaderNode;
   /** 組出頂點位置（物件座標，vec3）；沒有 Vertex Output 時是 null */
@@ -144,7 +145,12 @@ export interface CompiledShaderGraph {
 /** compileShaderGraph 的選項 */
 export interface CompileOptions {
   /** 只預覽某個節點的某個輸出（編輯器的節點縮圖用）；省略時從 Fragment Output 產生完整的著色器 */
-  target?: { nodeId: number; port: string };
+  target?: {
+    /** 節點編號 */
+    nodeId: number;
+    /** 輸出的名稱 */
+    port: string;
+  };
 }
 
 /** 節點圖自己的 uniform 名稱（貼圖另外是 uTex<編號>） */
@@ -343,6 +349,8 @@ const hdrToLinear = (rgb: ShaderNode) => {
 
 /**
  * 節點圖編譯成組節點的函式。圖有錯誤（循環連線、沒有 Fragment Output、未知節點）時丟出錯誤。
+ * @param graph 節點圖
+ * @param options 只預覽某個節點的輸出（target）
  * @example
  * // 一般用 shaderGraphDefinition（file.ts）：會補上 uniform、貼圖、材質參數
  * const c = compileShaderGraph(parseShaderGraphFile(json).graph);

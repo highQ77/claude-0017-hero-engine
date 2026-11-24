@@ -43,6 +43,9 @@ export class AnimationPlugin implements Plugin {
     return this._animators;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     const render = engine.getPlugin<RenderPlugin>('render')!;

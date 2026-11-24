@@ -15,7 +15,10 @@ export const HierarchyKey = defineResource<Hierarchy>('Hierarchy');
  * 物理用它從網格建立 convexHull、trimesh 碰撞體，不需要知道繪製的細節。temporary 為 true 時用完要 dispose()。
  */
 export interface MeshGeometrySource {
-  /** 實體的網格幾何（沒有網格時是 null） */
+  /**
+   * 實體的網格幾何（沒有網格時是 null）
+   * @param entity 實體
+   */
   geometryOf(entity: Entity): { geometry: BufferGeometry; temporary: boolean } | null;
 }
 

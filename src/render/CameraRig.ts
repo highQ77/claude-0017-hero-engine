@@ -78,6 +78,10 @@ export const CameraShake = defineComponent<CameraShakeData>('CameraShake', () =>
 /**
  * 讓攝影機晃一下：amount 0~1（0.2 輕微、0.5 爆炸、1 很大）。可以疊加（最多到 1），會自己慢慢停下來。
  * 攝影機還沒有 CameraShake 時自動加上；options 可以改晃動的設定。
+ * @param world ECS 世界
+ * @param camera 攝影機的實體
+ * @param amount 晃動強度 0~1（0.2 輕微、0.5 爆炸、1 很大）
+ * @param options 衰減速度、最大位移與角度、晃動頻率
  */
 export function shakeCamera(world: World, camera: Entity, amount = 0.5, options: Partial<CameraShakeData> = {}): void {
   const s = world.get(camera, CameraShake) ?? world.add(camera, CameraShake);
@@ -133,16 +137,25 @@ export class CameraRig {
   private elapsed = 0;
   private readonly offs: (() => void)[];
 
+  /**
+   * @param world ECS 世界
+   */
   constructor(private readonly world: World) {
     this.offs = [world.onDestroy((e) => this.placed.delete(e))];
   }
 
-  /** 讓攝影機下一幀直接跳到跟隨位置（例如傳送、切換場景之後） */
+  /**
+   * 讓攝影機下一幀直接跳到跟隨位置（例如傳送、切換場景之後）
+   * @param camera 攝影機的實體
+   */
   snap(camera: Entity): void {
     this.placed.delete(camera);
   }
 
-  /** 跟隨（lateUpdate，在 Transform 系統之前） */
+  /**
+   * 跟隨（lateUpdate，在 Transform 系統之前）
+   * @param dt 這一幀的時間（秒）
+   */
   updateFollow(dt: number): void {
     this.world.query([Transform, CameraFollow]).each((cam, t, f) => {
       if (!f.enabled || f.target === null || !this.world.isAlive(f.target)) return;
@@ -192,6 +205,8 @@ export class CameraRig {
   /**
    * 晃動（render 階段：攝影機從 Transform 同步之後、繪製之前），只改繪製用的攝影機物件。
    * getCamera：實體 → three.js 攝影機
+   * @param dt 這一幀的時間（秒）
+   * @param getCamera 實體 → three.js 攝影機
    */
   updateShake(dt: number, getCamera: (e: Entity) => THREE.Object3D | undefined): void {
     this.elapsed += dt;

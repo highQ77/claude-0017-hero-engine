@@ -7,9 +7,16 @@ import type { AssetTypeMap } from './types';
 export interface AssetLoader<T = unknown> {
   /** 對應的副檔名（含點，小寫），例如 ['.png', '.jpg']；可用多段副檔名如 '.typeface.json' */
   readonly extensions: readonly string[];
-  /** 載入一個資源 */
+  /**
+   * 載入一個資源
+   * @param url 資源網址
+   * @param manager 資源管理器（載入其他資源用）
+   */
   load(url: string, manager: AssetManager): Promise<T>;
-  /** 參考計數歸零時呼叫 */
+  /**
+   * 參考計數歸零時呼叫
+   * @param asset 要釋放的資源
+   */
   dispose?(asset: T): void;
 }
 
@@ -64,34 +71,53 @@ export class AssetManager {
   private idleResolvers: (() => void)[] = [];
   private batch: AssetProgress = { loaded: 0, total: 0, failed: 0 };
 
+  /**
+   * @param options 網址前綴（baseUrl）等設定
+   */
   constructor(options: AssetManagerOptions = {}) {
     this.baseUrl = options.baseUrl ?? '';
   }
 
   // ───────── 載入器 ─────────
 
-  /** 註冊或覆蓋某類型的載入器 */
+  /**
+   * 註冊或覆蓋某類型的載入器
+   * @param type 資源類型名稱（例如 'texture'、'gltf'）
+   * @param loader 載入器
+   */
   registerLoader<K extends AssetType>(type: K, loader: AssetLoader<AssetOf<K>>): this {
     this.loaders.set(type, loader);
     return this;
   }
 
-  /** 是否有這種資源的載入器 */
+  /**
+   * 是否有這種資源的載入器
+   * @param type 資源類型名稱
+   */
   hasLoader(type: string): boolean {
     return this.loaders.has(type);
   }
 
-  /** 取得載入器 */
+  /**
+   * 取得載入器
+   * @param type 資源類型名稱
+   */
   getLoader(type: string): AssetLoader<unknown> | undefined {
     return this.loaders.get(type);
   }
 
-  /** 移除載入器 */
+  /**
+   * 移除載入器
+   * @param type 資源類型名稱
+   */
   unregisterLoader(type: string): boolean {
     return this.loaders.delete(type);
   }
 
-  /** 依副檔名判斷資源類型（多段副檔名優先，例如 .typeface.json 優先於 .json） */
+  /**
+   * 依副檔名判斷資源類型（多段副檔名優先，例如 .typeface.json 優先於 .json）
+   * @param url 資源網址
+   */
   resolveType(url: string): string {
     const path = url.split(/[?#]/)[0].toLowerCase();
     let best: string | null = null;
@@ -108,7 +134,10 @@ export class AssetManager {
     return best;
   }
 
-  /** 把相對網址換成完整網址（依 baseUrl） */
+  /**
+   * 把相對網址換成完整網址（依 baseUrl）
+   * @param url 相對或完整的網址
+   */
   resolveUrl(url: string): string {
     if (!this.baseUrl || /^([a-z][a-z\d+.-]*:|\/\/|\/)/i.test(url)) return url;
     return this.baseUrl.replace(/\/?$/, '/') + url;
@@ -118,6 +147,8 @@ export class AssetManager {
 
   /**
    * 載入資源，參考計數加一。用完請呼叫 release()。
+   * @param url 資源網址
+   * @param type 資源類型；省略時依副檔名判斷
    * @example
    * const gltf = await assets.load('models/hero.glb');
    * const tex = await assets.load('textures/wall.png', 'texture');
@@ -127,23 +158,39 @@ export class AssetManager {
     return entry.promise as Promise<AssetOf<K>>;
   }
 
-  /** 取得已載入完成的資源（不改變參考計數），尚未載入完成時回傳 undefined */
+  /**
+   * 取得已載入完成的資源（不改變參考計數），尚未載入完成時回傳 undefined
+   * @param url 資源網址
+   * @param type 資源類型；省略時依副檔名判斷
+   */
   get<K extends AssetType>(url: string, type?: K): AssetOf<K> | undefined {
     const entry = this.entries.get(this.keyOf(url, type));
     return entry?.state === 'loaded' ? (entry.asset as AssetOf<K>) : undefined;
   }
 
-  /** 是否已經載入完成 */
+  /**
+   * 是否已經載入完成
+   * @param url 資源網址
+   * @param type 資源類型；省略時依副檔名判斷
+   */
   isLoaded(url: string, type?: AssetType): boolean {
     return this.entries.get(this.keyOf(url, type))?.state === 'loaded';
   }
 
-  /** 被引用的次數（release 會減少，0 時釋放） */
+  /**
+   * 被引用的次數（release 會減少，0 時釋放）
+   * @param url 資源網址
+   * @param type 資源類型；省略時依副檔名判斷
+   */
   refCount(url: string, type?: AssetType): number {
     return this.entries.get(this.keyOf(url, type))?.refs ?? 0;
   }
 
-  /** 參考計數減一；歸零時釋放（若還在載入，會在載入完成後釋放） */
+  /**
+   * 參考計數減一；歸零時釋放（若還在載入，會在載入完成後釋放）
+   * @param url 資源網址
+   * @param type 資源類型；省略時依副檔名判斷
+   */
   release(url: string, type?: AssetType): void {
     const entry = this.entries.get(this.keyOf(url, type));
     if (!entry || entry.refs === 0) return;
@@ -153,6 +200,7 @@ export class AssetManager {
 
   /**
    * 一次載入多個資源（每個參考計數加一）。任一失敗則整體失敗。
+   * @param items 網址，或 { url, type }
    */
   async preload(items: readonly (string | { url: string; type?: AssetType })[]): Promise<void> {
     await Promise.all(
@@ -186,7 +234,10 @@ export class AssetManager {
     return this.batch.total > this.batch.loaded;
   }
 
-  /** 監聽載入進度（每個資源完成或失敗時觸發） */
+  /**
+   * 監聽載入進度（每個資源完成或失敗時觸發）
+   * @param listener 進度改變時呼叫（已完成、總數）
+   */
   onProgress(listener: ProgressListener): () => void {
     this.progressListeners.add(listener);
     return () => this.progressListeners.delete(listener);
@@ -267,9 +318,16 @@ export class AssetManager {
 export class AssetGroup {
   private readonly items: { url: string; type?: AssetType }[] = [];
 
+  /**
+   * @param manager 資源管理器
+   */
   constructor(private readonly manager: AssetManager) {}
 
-  /** 載入資源（群組會記住，releaseAll 一起釋放） */
+  /**
+   * 載入資源（群組會記住，releaseAll 一起釋放）
+   * @param url 資源網址
+   * @param type 資源類型；省略時依副檔名判斷
+   */
   load<K extends AssetType>(url: string, type?: K): Promise<AssetOf<K>> {
     const promise = this.manager.load(url, type);
     this.items.push({ url, type });

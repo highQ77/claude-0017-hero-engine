@@ -55,16 +55,26 @@ export class UI3DPlugin implements Plugin {
   /** 所有面板共用的事件處理函式（隨時修改都會生效） */
   private readonly handlers: Record<string, UIHandler>;
 
+  /**
+   * @param options 共用的事件處理函式、是否用滑鼠操作面板
+   */
   constructor(private readonly options: UI3DPluginOptions = {}) {
     this.handlers = { ...options.handlers };
   }
 
-  /** 註冊或替換所有面板共用的事件處理函式（XML 裡用 onClick="名稱" 呼叫；面板自己的優先） */
+  /**
+   * 註冊或替換所有面板共用的事件處理函式（XML 裡用 onClick="名稱" 呼叫；面板自己的優先）
+   * @param name 函式名稱（XML 裡 onClick="名稱"）
+   * @param handler 事件處理函式
+   */
   setHandler(name: string, handler: UIHandler): void {
     this.handlers[name] = handler;
   }
 
-  /** 一次註冊多個所有面板共用的事件處理函式：ui3d.setHandlers({ buy: () => …, close: () => … }) */
+  /**
+   * 一次註冊多個所有面板共用的事件處理函式：ui3d.setHandlers({ buy: () => …, close: () => … })
+   * @param handlers 名稱 → 事件處理函式
+   */
   setHandlers(handlers: Record<string, UIHandler>): void {
     Object.assign(this.handlers, handlers);
   }
@@ -75,11 +85,17 @@ export class UI3DPlugin implements Plugin {
     return this._controller;
   }
 
-  /** 取得實體上面板的介面 */
+  /**
+   * 取得實體上面板的介面
+   * @param entity 有面板的實體
+   */
   uiOf(entity: Entity): UI2D | null {
     return this._controller?.panels.get(entity)?.ui ?? null;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = (this.ecs = engine.getPlugin<EcsPlugin>('ecs')!);
     const render = (this.render = engine.getPlugin<RenderPlugin>('render')!);
@@ -118,6 +134,8 @@ export class UI3DPlugin implements Plugin {
   /**
    * 從畫面座標（-1~1）找最近、沒被擋住的面板。
    * 使用上一次繪製時的位置，也就是玩家眼睛看到的畫面。
+   * @param ndcX 畫面 X（-1 左、1 右）
+   * @param ndcY 畫面 Y（-1 下、1 上）
    */
   hitTest(ndcX: number, ndcY: number): UI3DHit | null {
     const ray = this.rayFrom(ndcX, ndcY);
@@ -136,6 +154,9 @@ export class UI3DPlugin implements Plugin {
   /**
    * 送出指標事件（滑鼠以外的操作方式也可以用，例如畫面中央的準心：pointer('down', 0, 0)）。
    * 回傳 true 表示面板用掉了這個事件（遊戲不該再處理）。
+   * @param type down、move、up
+   * @param ndcX 畫面 X（-1 左、1 右）
+   * @param ndcY 畫面 Y（-1 下、1 上）
    */
   pointer(type: PointerKind, ndcX: number, ndcY: number): boolean {
     if (!this._controller) return false;
@@ -159,7 +180,13 @@ export class UI3DPlugin implements Plugin {
     return used;
   }
 
-  /** 滾輪：捲動滑鼠下的面板列表 */
+  /**
+   * 滾輪：捲動滑鼠下的面板列表
+   * @param deltaX 橫向捲動量
+   * @param deltaY 縱向捲動量
+   * @param ndcX 畫面 X（-1 左、1 右）
+   * @param ndcY 畫面 Y（-1 下、1 上）
+   */
   wheel(deltaX: number, deltaY: number, ndcX: number, ndcY: number): boolean {
     const hit = this.hitTest(ndcX, ndcY);
     if (!hit) return false;

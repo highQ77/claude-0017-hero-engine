@@ -41,6 +41,10 @@ const toVector = (p: PathPoint): Vector3 =>
 export class Path {
   private readonly curve: CatmullRomCurve3;
 
+  /**
+   * @param points 經過的點：[x, y, z] 或 Vector3（至少兩個）
+   * @param options 是否頭尾相連（closed）、彎曲程度（tension）
+   */
   constructor(points: readonly PathPoint[], options: CurvePathOptions = {}) {
     if (points.length < 2) throw new Error('Path：至少要兩個點');
     const vs = points.map(toVector);
@@ -67,22 +71,37 @@ export class Path {
     return this.curve.getLength();
   }
 
-  /** 位置：t 從 0 到 1，依實際距離（速度均勻）；給 target 時寫進它（不建立新物件） */
+  /**
+   * 位置：t 從 0 到 1，依實際距離（速度均勻）；給 target 時寫進它（不建立新物件）
+   * @param t 進度 0~1（依實際距離）
+   * @param target 寫入結果的向量（省略時建立新的）
+   */
   pointAt(t: number, target = new Vector3()): Vector3 {
     return this.curve.getPointAt(this.wrap(t), target);
   }
 
-  /** 前進方向（單位向量）：t 從 0 到 1 */
+  /**
+   * 前進方向（單位向量）：t 從 0 到 1
+   * @param t 進度 0~1（依實際距離）
+   * @param target 寫入結果的向量（省略時建立新的）
+   */
   tangentAt(t: number, target = new Vector3()): Vector3 {
     return this.curve.getTangentAt(this.wrap(t), target);
   }
 
-  /** 走了 distance 的位置（超過全長時：closed 繞回來，否則停在終點） */
+  /**
+   * 走了 distance 的位置（超過全長時：closed 繞回來，否則停在終點）
+   * @param distance 從起點走了多遠
+   * @param target 寫入結果的向量（省略時建立新的）
+   */
   pointAtDistance(distance: number, target = new Vector3()): Vector3 {
     return this.pointAt(distance / Math.max(this.length, 1e-9), target);
   }
 
-  /** 均勻取 count 個點（包含頭尾） */
+  /**
+   * 均勻取 count 個點（包含頭尾）
+   * @param count 取幾個點
+   */
   sample(count: number): Vector3[] {
     return this.curve.getSpacedPoints(Math.max(1, count - 1));
   }

@@ -16,11 +16,21 @@ export interface System {
   readonly phase?: Phase;
   /** 同階段中的順序，越小越先，預設 0 */
   readonly priority?: number;
-  /** 加入時呼叫一次（可在這裡建立查詢、註冊掛鉤） */
+  /**
+   * 加入時呼叫一次（可在這裡建立查詢、註冊掛鉤）
+   * @param world ECS 世界
+   */
   init?(world: World): void;
-  /** 每幀執行 */
+  /**
+   * 每幀執行
+   * @param world ECS 世界
+   * @param time 時間（time.delta 是這一幀的秒數）
+   */
   run(world: World, time: Time): void;
-  /** 移除時呼叫 */
+  /**
+   * 移除時呼叫
+   * @param world ECS 世界
+   */
   dispose?(world: World): void;
 }
 
@@ -45,10 +55,16 @@ export class EcsPlugin implements Plugin {
   private readonly flushOffs: (() => void)[] = [];
   private offTimers: () => void = () => {};
 
+  /**
+   * @param world ECS 世界
+   */
   constructor(world = new World()) {
     this.world = world;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     this.engine = engine;
     // 綁定實體的計時器：實體銷毀時自動取消
@@ -75,12 +91,21 @@ export class EcsPlugin implements Plugin {
    *   ecs.each('spin', [Transform, Spin], (e, t, s, time) => math.rotate(t, [0, s.speed * time.delta, 0]));
    *
    * options：phase（階段，預設 update）、priority（順序）、none（排除有這些元件的實體）。比較複雜的系統用 addSystem。
+   * @param name 系統名稱（removeSystem、setEnabled 用）
+   * @param types 要有的元件
+   * @param fn 每個實體呼叫一次：實體、各元件的資料、時間
+   * @param options 階段、順序、排除有這些元件的實體（none）
    */
   each<const Cs extends readonly ComponentType<unknown>[]>(
     name: string,
     types: Cs,
     fn: (entity: Entity, ...args: [...ComponentValues<Cs>, Time]) => void,
-    options: { phase?: Phase; priority?: number } & QueryOptions = {},
+    options: {
+      /** 在哪個階段執行，預設 update */
+      phase?: Phase;
+      /** 同一階段內的順序：小的先執行，預設 0 */
+      priority?: number;
+    } & QueryOptions = {},
   ): this {
     const { phase, priority, ...query } = options;
     return this.addSystem({
@@ -94,7 +119,10 @@ export class EcsPlugin implements Plugin {
     });
   }
 
-  /** 加入系統（可以指定階段、順序、init／dispose；最常見的「查詢 + 逐一處理」用 each 比較短） */
+  /**
+   * 加入系統（可以指定階段、順序、init／dispose；最常見的「查詢 + 逐一處理」用 each 比較短）
+   * @param system 系統：名稱、階段、順序、run（每幀執行）、init、dispose
+   */
   addSystem(system: System): this {
     if (this.systems.has(system.name)) throw new Error(`系統「${system.name}」已存在`);
     const entry: SystemEntry = { system, enabled: true };
@@ -103,7 +131,10 @@ export class EcsPlugin implements Plugin {
     return this;
   }
 
-  /** 移除系統 */
+  /**
+   * 移除系統
+   * @param name 系統名稱
+   */
   removeSystem(name: string): this {
     const entry = this.systems.get(name);
     if (!entry) return this;
@@ -115,12 +146,19 @@ export class EcsPlugin implements Plugin {
     return this;
   }
 
-  /** 是否有這個系統 */
+  /**
+   * 是否有這個系統
+   * @param name 系統名稱
+   */
   hasSystem(name: string): boolean {
     return this.systems.has(name);
   }
 
-  /** 暫停或恢復單一系統 */
+  /**
+   * 暫停或恢復單一系統
+   * @param name 系統名稱
+   * @param enabled false 暫停、true 恢復
+   */
   setEnabled(name: string, enabled: boolean): this {
     const entry = this.systems.get(name);
     if (!entry) throw new Error(`找不到系統「${name}」`);
@@ -128,7 +166,10 @@ export class EcsPlugin implements Plugin {
     return this;
   }
 
-  /** 系統是否啟用 */
+  /**
+   * 系統是否啟用
+   * @param name 系統名稱
+   */
   isEnabled(name: string): boolean {
     return this.systems.get(name)?.enabled ?? false;
   }

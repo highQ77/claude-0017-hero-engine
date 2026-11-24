@@ -101,7 +101,10 @@ export interface CodecContext {
   readonly entity: string;
   /** 目前的元件名稱 */
   readonly component: string;
-  /** 記錄警告（不會中斷讀檔） */
+  /**
+   * 記錄警告（不會中斷讀檔）
+   * @param message 警告訊息
+   */
   warn(message: string): void;
 }
 
@@ -112,11 +115,16 @@ export interface CodecContext {
 export interface ComponentCodec<T> {
   /** 元件類型（檔案裡的元件名稱是 type.name） */
   readonly type: ComponentType<T>;
-  /** 檔案資料 → 元件初始值（格式錯誤時拋出錯誤，訊息會加上實體與元件名稱） */
+  /**
+   * 檔案資料 → 元件初始值（格式錯誤時拋出錯誤，訊息會加上實體與元件名稱）
+   * @param data 場景檔裡這個元件的資料
+   * @param ctx 讀到哪個實體、哪個元件，以及記錄警告的函式
+   */
   read(data: unknown, ctx: CodecContext): Partial<T>;
   /**
    * 元件 → 檔案資料（要能轉成 JSON）。回傳 undefined 代表這個元件不能存
    * （例如網格用的是程式建立的 three.js 物件），存檔時會略過並警告。
+   * @param value 元件的資料
    */
   write(value: T): unknown;
 }
@@ -125,7 +133,10 @@ export interface ComponentCodec<T> {
 export interface SettingContext {
   /** 場景所在的 world */
   readonly world: World;
-  /** 記錄警告（不會中斷） */
+  /**
+   * 記錄警告（不會中斷）
+   * @param message 警告訊息
+   */
   warn(message: string): void;
 }
 
@@ -136,7 +147,11 @@ export interface SettingContext {
 export interface SceneSettingHandler {
   /** settings 裡的鍵 */
   readonly key: string;
-  /** 套用設定（格式錯誤時拋出錯誤）；回傳恢復原狀的函式 */
+  /**
+   * 套用設定（格式錯誤時拋出錯誤）；回傳恢復原狀的函式
+   * @param value 場景檔裡這個設定的值
+   * @param ctx ECS 世界、記錄警告的函式
+   */
   apply(value: unknown, ctx: SettingContext): (() => void) | undefined;
 }
 
@@ -144,7 +159,10 @@ export interface SceneSettingHandler {
 export class SceneCodecs {
   private readonly settingsByKey = new Map<string, SceneSettingHandler[]>();
 
-  /** 登記場景設定的處理方式；同一個鍵後登記的優先，取消後恢復前一個 */
+  /**
+   * 登記場景設定的處理方式；同一個鍵後登記的優先，取消後恢復前一個
+   * @param handler 設定的鍵與套用的函式
+   */
   registerSetting(handler: SceneSettingHandler): () => void {
     const list = this.settingsByKey.get(handler.key) ?? [];
     list.push(handler);
@@ -158,7 +176,10 @@ export class SceneCodecs {
     };
   }
 
-  /** 依鍵取得場景設定的處理方式 */
+  /**
+   * 依鍵取得場景設定的處理方式
+   * @param key 設定的鍵（例如 'postfx'）
+   */
   setting(key: string): SceneSettingHandler | undefined {
     return this.settingsByKey.get(key)?.at(-1);
   }
@@ -171,7 +192,10 @@ export class SceneCodecs {
   /** 同一個元件可以登記多次：用最後登記的；取消登記時恢復前一個 */
   private readonly byName = new Map<string, { codec: ComponentCodec<unknown> }[]>();
 
-  /** 登記存讀規則；同名的會暫時取代。回傳取消登記的函式（取消後恢復前一個） */
+  /**
+   * 登記存讀規則；同名的會暫時取代。回傳取消登記的函式（取消後恢復前一個）
+   * @param codec 元件的存讀規則
+   */
   register<T>(codec: ComponentCodec<T>): () => void {
     const entry = { codec: codec as ComponentCodec<unknown> };
     const name = codec.type.name;
@@ -187,7 +211,10 @@ export class SceneCodecs {
     };
   }
 
-  /** 依元件名稱取得存讀規則 */
+  /**
+   * 依元件名稱取得存讀規則
+   * @param name 元件名稱
+   */
   get(name: string): ComponentCodec<unknown> | undefined {
     return this.byName.get(name)?.at(-1)?.codec;
   }
@@ -198,7 +225,11 @@ export class SceneCodecs {
   }
 }
 
-/** 外掛安裝時登記自己的場景設定（有安裝場景外掛時才登記）。回傳取消登記的函式 */
+/**
+ * 外掛安裝時登記自己的場景設定（有安裝場景外掛時才登記）。回傳取消登記的函式
+ * @param world ECS 世界
+ * @param handlers 場景設定的處理方式
+ */
 export function registerSceneSettings(world: World, handlers: readonly SceneSettingHandler[]): () => void {
   const registry = world.getResource(SceneCodecsKey);
   if (!registry) return () => {};
@@ -211,6 +242,9 @@ export function registerSceneSettings(world: World, handlers: readonly SceneSett
 /**
  * 套用場景設定。回傳恢復原狀的函式（依相反順序恢復）與警告（沒有處理方式的鍵）。
  * 設定格式錯誤時拋出錯誤（已套用的會先恢復）。
+ * @param world ECS 世界
+ * @param settings 場景檔的 settings
+ * @param codecs 存讀規則（裡面有場景設定的處理方式）
  */
 export function applySceneSettings(
   world: World,
@@ -242,6 +276,8 @@ export function applySceneSettings(
 
 /**
  * 外掛安裝時登記自己元件的存讀規則（有安裝場景外掛時才登記）。回傳取消登記的函式（解除安裝時呼叫）。
+ * @param world ECS 世界
+ * @param codecs 元件的存讀規則
  */
 export function registerSceneCodecs(world: World, codecs: readonly ComponentCodec<never>[]): () => void {
   const registry = world.getResource(SceneCodecsKey);
@@ -254,14 +290,21 @@ export function registerSceneCodecs(world: World, codecs: readonly ComponentCode
 
 // ───────── 檢查格式 ─────────
 
-/** 讀取 [x, y, z]（三個有限的數字） */
+/**
+ * 讀取 [x, y, z]（三個有限的數字）
+ * @param v 檔案裡的值
+ * @param field 欄位名稱（錯誤訊息用）
+ */
 export function readVec3(v: unknown, field: string): [number, number, number] {
   if (!Array.isArray(v) || v.length !== 3 || !v.every((n) => typeof n === 'number' && Number.isFinite(n)))
     throw new Error(`${field} 要是三個數字 [x, y, z]，收到 ${JSON.stringify(v)}`);
   return [v[0], v[1], v[2]];
 }
 
-/** 去掉 -0 與浮點誤差（存檔時讓數字好讀，例如 0.30000000000000004 → 0.3） */
+/**
+ * 去掉 -0 與浮點誤差（存檔時讓數字好讀，例如 0.30000000000000004 → 0.3）
+ * @param n 數字
+ */
 export function tidy(n: number): number {
   const r = Math.round(n * 1e6) / 1e6;
   return r === 0 ? 0 : r;
@@ -269,6 +312,7 @@ export function tidy(n: number): number {
 
 /**
  * 檢查並轉換場景檔內容（JSON 或 XML 文字，或已解析的物件）。格式錯誤時拋出錯誤，說明是哪個實體、哪個欄位。
+ * @param input JSON 或 XML 文字，或已解析的物件
  */
 export function parseSceneFile(input: string | unknown): SceneFileData {
   let data: unknown = input;
@@ -365,7 +409,10 @@ export function parseSceneFile(input: string | unknown): SceneFileData {
 
 // ───────── 預製物件 ─────────
 
-/** 場景檔（包含用到的預製物件裡）需要的所有預製物件路徑 */
+/**
+ * 場景檔（包含用到的預製物件裡）需要的所有預製物件路徑
+ * @param data 場景檔
+ */
 export function prefabPaths(data: SceneFileData): string[] {
   const out = new Set<string>();
   const visit = (d: SceneFileData) => {
@@ -380,7 +427,11 @@ export function prefabPaths(data: SceneFileData): string[] {
   return [...out];
 }
 
-/** 預製物件檔的根節點（預製物件檔要剛好有一個最上層的實體） */
+/**
+ * 預製物件檔的根節點（預製物件檔要剛好有一個最上層的實體）
+ * @param prefab 預製物件檔
+ * @param path 預製物件檔的路徑（錯誤訊息用）
+ */
 export function prefabRoot(prefab: SceneFileData, path = '預製物件'): SceneFileEntity {
   const roots = prefab.entities.filter((e) => e.parent === undefined);
   if (roots.length !== 1) throw new Error(`${path} 要剛好有一個最上層的實體（現在有 ${roots.length} 個）`);
@@ -403,8 +454,16 @@ export interface ExpandedScene {
  * - 實例的 name、parent 取代根節點的；實例的 components 逐一覆蓋根節點的同名元件
  * - 預製物件裡可以再用預製物件（不能互相包含）
  * missing：'error'（預設）找不到內容時拋出錯誤；'skip' 只留下實例本身（編輯器載入中用）
+ * @param data 場景檔（prefabs 要先填好，loadSceneFile 會處理）
+ * @param options 找不到預製物件時拋出錯誤或略過
  */
-export function expandPrefabs(data: SceneFileData, options: { missing?: 'error' | 'skip' } = {}): ExpandedScene {
+export function expandPrefabs(
+  data: SceneFileData,
+  options: {
+    /** 找不到預製物件的內容時：'error'（預設）拋出錯誤；'skip' 只留下實例本身 */
+    missing?: 'error' | 'skip';
+  } = {},
+): ExpandedScene {
   const missing = new Set<string>();
   const warnings: string[] = [];
   const out: SceneFileEntity[] = [];
@@ -489,6 +548,9 @@ export interface SpawnedScene {
   /**
    * 替場景檔裡某個 id 的實體加上元件（遊戲邏輯），回傳那個實體。
    * 找不到這個 id 時（例如在編輯器裡改了 id、刪掉了）印出警告並略過，回傳 undefined。
+   * @param id 場景檔裡的實體 id
+   * @param type 元件
+   * @param init 初始值（其他欄位用預設值）
    * @example
    * spawned.add('box', Spin, { speed: 0.8 });
    */
@@ -499,6 +561,9 @@ export interface SpawnedScene {
  * 依場景檔建立實體。存讀規則預設用 world 的資源 SceneCodecsKey（安裝場景外掛時建立）。
  * 父子關係需要 Hierarchy（場景外掛提供）；沒有時用暫時的 Hierarchy 設定。
  * 元件資料錯誤會拋出錯誤，已建立的實體會先銷毀，不會留下一半的場景。
+ * @param world ECS 世界
+ * @param file 場景檔
+ * @param codecs 存讀規則（預設用 world 的資源 SceneCodecsKey）
  */
 export function spawnSceneFile(world: World, file: SceneFileData, codecs?: SceneCodecs): SpawnedScene {
   const registry = codecs ?? world.getResource(SceneCodecsKey);
@@ -574,6 +639,9 @@ export interface WriteSceneOptions {
 /**
  * 把實體存成場景檔。父節點不在清單裡的實體會存成最上層。
  * 只存有存讀規則的元件；SceneMember、Parent、Name 由檔案格式本身處理。
+ * @param world ECS 世界
+ * @param entities 要存的實體
+ * @param options 存讀規則、實體的 id、記錄警告的函式
  */
 export function writeSceneFile(
   world: World,
@@ -623,7 +691,10 @@ export function writeSceneFile(
   return { format: SCENE_FILE_FORMAT, version: SCENE_FILE_VERSION, entities: out };
 }
 
-/** 場景檔轉成 JSON 文字（兩格縮排，結尾換行）；XML 用 stringifySceneXml */
+/**
+ * 場景檔轉成 JSON 文字（兩格縮排，結尾換行）；XML 用 stringifySceneXml
+ * @param data 場景檔
+ */
 export function stringifySceneFile(data: SceneFileData): string {
   const { prefabs: _, ...rest } = data;
   return `${JSON.stringify(rest, null, 2)}\n`;
@@ -633,9 +704,17 @@ export function stringifySceneFile(data: SceneFileData): string {
 
 /** sceneFromFile 的設定 */
 export interface SceneFromFileOptions {
-  /** 建立完場景檔的實體之後呼叫（例如加上腳本、遊戲邏輯） */
+  /**
+   * 建立完場景檔的實體之後呼叫（例如加上腳本、遊戲邏輯）
+   * @param world ECS 世界
+   * @param spawned 這次建立的實體（依 id 找）與加元件的函式 add
+   * @param scenes 場景管理器
+   */
   setup?(world: World, spawned: SpawnedScene, scenes: SceneManager): void;
-  /** 卸載時呼叫 */
+  /**
+   * 卸載時呼叫
+   * @param world ECS 世界
+   */
   teardown?(world: World): void;
   /**
    * 開發時，場景檔（或用到的預製物件）存檔後自動重新載入這個場景。
@@ -661,6 +740,7 @@ const normalizeFilePath = (path: string) => path.replace(/^(\.\/|\/)+/, '');
 /**
  * 通知場景檔改了（path 相對於 public，例如 'scenes/forest.json'、'prefabs/tree.json'）：
  * 用到它的場景會重新下載、重新載入。開發伺服器存檔時會自動呼叫；測試或自訂的開發工具也可以呼叫。
+ * @param path 場景檔的路徑（相對於 public，例如 'scenes/forest.json'）
  */
 export function notifySceneFileChanged(path: string): void {
   const normalized = normalizeFilePath(path);
@@ -679,9 +759,26 @@ export const SCENE_PREVIEW_CHANNEL = 'hero-scene-editor';
  * - request：預覽的遊戲剛開啟，請編輯器送出還沒存檔的內容
  */
 export type ScenePreviewMessage =
-  | { type: 'draft'; path: string; data: SceneFileData }
-  | { type: 'saved'; path: string; reload?: boolean }
-  | { type: 'request' };
+  | {
+      /** 還沒存檔的內容 */
+      type: 'draft';
+      /** 場景檔的路徑 */
+      path: string;
+      /** 場景檔的內容 */
+      data: SceneFileData;
+    }
+  | {
+      /** 存檔或放棄修改：改回讀磁碟上的檔案 */
+      type: 'saved';
+      /** 場景檔的路徑 */
+      path: string;
+      /** false：剛存檔，開發伺服器會另外通知重新載入 */
+      reload?: boolean;
+    }
+  | {
+      /** 預覽的遊戲剛開啟，請編輯器送出還沒存檔的內容 */
+      type: 'request';
+    };
 
 /** 網址參數：3D 場景編輯器的「預覽」用 ?heroPreview=scenes/forest.xml 打開遊戲 */
 const PREVIEW_PARAM = 'heroPreview';
@@ -740,6 +837,9 @@ if (import.meta.hot) {
  *   scenes.register(create.sceneFromFile('forest', data)).load('forest');
  *
  * 讀檔警告會用記錄器顯示（[scene] 開頭的警告）。
+ * @param name 場景名稱（scenes.load 用）
+ * @param file 場景檔（load.sceneFile 載入的）
+ * @param options 建立後、卸載時呼叫的函式、開發時自動重新載入
  */
 export function sceneFromFile(name: string, file: SceneFileData, options: SceneFromFileOptions = {}): Scene {
   let data = parseSceneFile(file);
@@ -807,6 +907,7 @@ async function fetchSceneFile(url: string, label: string): Promise<SceneFileData
  * 下載並檢查場景檔，連同用到的預製物件（填進 prefabs）。
  * 網址相對於頁面：'scenes/forest.xml' 對應專案的 public/scenes/forest.xml；預製物件的路徑也一樣（'prefabs/tree.xml'）。
  * JSON、XML 都可以（依內容自動判斷）。
+ * @param url 場景檔的網址（相對於頁面，例如 'scenes/forest.xml'）
  */
 export async function loadSceneFile(url: string): Promise<SceneFileData> {
   const data = await fetchSceneFile(url, '場景檔');
@@ -887,6 +988,8 @@ const typeName = (t: string) => (t === 'number' ? '數字' : t === 'string' ? '�
  * 欄位名稱與型別依元件的預設值檢查；存檔時省略和預設值一樣的欄位。
  *
  *   sceneCodecs.register(plainCodec(Health));   // { max: 100, current: 100 }
+ * @param type 元件
+ * @param options 角度、顏色、限定值、可為 null、{ x, y, z } 欄位，以及不存的欄位
  */
 export function plainCodec<T extends object>(
   type: ComponentType<T>,

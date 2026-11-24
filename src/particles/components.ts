@@ -120,7 +120,11 @@ export const ParticleEmitter = defineComponent<ParticleEmitterData>('ParticleEmi
   aliveCount: 0,
 }));
 
-/** 一次發射 count 個粒子（例如爆炸、撞擊火花） */
+/**
+ * 一次發射 count 個粒子（例如爆炸、撞擊火花）
+ * @param emitter 發射器元件的資料
+ * @param count 發射幾個
+ */
 export function burst(emitter: ParticleEmitterData, count: number): void {
   emitter.burstCount += count;
 }

@@ -16,21 +16,30 @@ export type NodeInput = ShaderNode | number;
 
 const n = (v: NodeInput): ShaderNode => (typeof v === 'number' ? float(v) : v);
 
-/** 2D → 0..1 的雜湊（偽亂數） */
+/**
+ * 2D → 0..1 的雜湊（偽亂數）
+ * @param p 2D 座標（vec2）
+ */
 export function hash12(p: ShaderNode): ShaderNode {
   let p3 = fract(vec3(p.x, p.y, p.x).mul(0.1031));
   p3 = p3.add(dot(p3, vec3(p3.y, p3.z, p3.x).add(33.33)));
   return fract(p3.x.add(p3.y).mul(p3.z));
 }
 
-/** 3D → 0..1 的雜湊（偽亂數） */
+/**
+ * 3D → 0..1 的雜湊（偽亂數）
+ * @param p 3D 座標（vec3）
+ */
 export function hash13(p: ShaderNode): ShaderNode {
   let p3 = fract(p.mul(0.1031));
   p3 = p3.add(dot(p3, vec3(p3.z, p3.y, p3.x).add(31.32)));
   return fract(p3.x.add(p3.y).mul(p3.z));
 }
 
-/** 2D 值雜訊（0..1，平滑） */
+/**
+ * 2D 值雜訊（0..1，平滑）
+ * @param p 2D 座標（vec2）：乘上越大的數字，花紋越細
+ */
 export function noise2(p: ShaderNode): ShaderNode {
   const i = floor(p);
   const f = fract(p);
@@ -42,7 +51,10 @@ export function noise2(p: ShaderNode): ShaderNode {
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-/** 3D 值雜訊（0..1，平滑） */
+/**
+ * 3D 值雜訊（0..1，平滑）
+ * @param p 3D 座標（vec3）：乘上越大的數字，花紋越細
+ */
 export function noise3(p: ShaderNode): ShaderNode {
   const i = floor(p);
   const f = fract(p);
@@ -55,7 +67,11 @@ export function noise3(p: ShaderNode): ShaderNode {
   );
 }
 
-/** 2D 碎形雜訊（4 層值雜訊疊加，0..1） */
+/**
+ * 2D 碎形雜訊（4 層值雜訊疊加，0..1）
+ * @param p 2D 座標（vec2）
+ * @param octaves 疊幾層（預設 4，越多越細緻也越耗效能）
+ */
 export function fbm2(p: ShaderNode, octaves = 4): ShaderNode {
   let v: ShaderNode = float(0);
   let a = 0.5;
@@ -70,7 +86,11 @@ export function fbm2(p: ShaderNode, octaves = 4): ShaderNode {
   return v.div(total);
 }
 
-/** 3D 碎形雜訊（4 層值雜訊疊加，0..1） */
+/**
+ * 3D 碎形雜訊（4 層值雜訊疊加，0..1）
+ * @param p 3D 座標（vec3）
+ * @param octaves 疊幾層（預設 4，越多越細緻也越耗效能）
+ */
 export function fbm3(p: ShaderNode, octaves = 4): ShaderNode {
   let v: ShaderNode = float(0);
   let a = 0.5;
@@ -85,7 +105,11 @@ export function fbm3(p: ShaderNode, octaves = 4): ShaderNode {
   return v.div(total);
 }
 
-/** Voronoi（細胞）：到最近細胞中心的距離；t 讓中心移動（例如傳時間） */
+/**
+ * Voronoi（細胞）：到最近細胞中心的距離；t 讓中心移動（例如傳時間）
+ * @param p 2D 座標（vec2）：乘上越大的數字，細胞越小
+ * @param t 讓細胞中心移動的值（例如時間）
+ */
 export function voronoi(p: ShaderNode, t: NodeInput = 0): ShaderNode {
   const i = floor(p);
   const f = fract(p);
@@ -103,7 +127,14 @@ export function voronoi(p: ShaderNode, t: NodeInput = 0): ShaderNode {
   return d;
 }
 
-/** 數值重新映射：inMin..inMax → outMin..outMax */
+/**
+ * 數值重新映射：inMin..inMax → outMin..outMax
+ * @param v 要映射的值
+ * @param inMin 原本範圍的最小值
+ * @param inMax 原本範圍的最大值
+ * @param outMin 新範圍的最小值
+ * @param outMax 新範圍的最大值
+ */
 export function remap(
   v: NodeInput,
   inMin: NodeInput,
@@ -114,25 +145,41 @@ export function remap(
   return n(v).sub(inMin).mul(n(outMax).sub(outMin)).div(n(inMax).sub(inMin)).add(outMin);
 }
 
-/** 菲涅耳（邊緣光）：視線與法線越垂直越接近 1 */
+/**
+ * 菲涅耳（邊緣光）：視線與法線越垂直越接近 1
+ * @param viewDir 指向攝影機的方向（vec3）
+ * @param normal 法線（vec3）
+ * @param power 次方：越大邊緣光越窄（預設 2）
+ */
 export function fresnel(viewDir: ShaderNode, normal: ShaderNode, power: NodeInput = 2): ShaderNode {
   return pow(float(1).sub(clamp(dot(normalize(viewDir), normalize(normal)), 0, 1)), power);
 }
 
-/** 旋轉 2D 向量（弧度） */
+/**
+ * 旋轉 2D 向量（弧度）
+ * @param p 2D 向量（vec2）
+ * @param angle 角度（弧度）
+ */
 export function rotate2(p: ShaderNode, angle: NodeInput): ShaderNode {
   const c = cos(n(angle));
   const s = sin(n(angle));
   return vec2(c.mul(p.x).sub(s.mul(p.y)), s.mul(p.x).add(c.mul(p.y)));
 }
 
-/** 矩形的距離（中心在原點、半寬高 b；裡面是負的） */
+/**
+ * 矩形的距離（中心在原點、半寬高 b；裡面是負的）
+ * @param p 2D 座標（vec2）
+ * @param b 半寬、半高（vec2）
+ */
 export function sdBox(p: ShaderNode, b: ShaderNode): ShaderNode {
   const d = abs(p).sub(b);
   return length(max(d, 0)).add(min(max(d.x, d.y), 0));
 }
 
-/** HSV（色相 0..1、飽和度、明度）→ RGB */
+/**
+ * HSV（色相 0..1、飽和度、明度）→ RGB
+ * @param c vec3(色相 0..1, 飽和度 0..1, 明度 0..1)
+ */
 export function hsv2rgb(c: ShaderNode): ShaderNode {
   const p = abs(
     fract(vec3(c.x, c.x, c.x).add(vec3(0, 2 / 3, 1 / 3)))
@@ -142,7 +189,14 @@ export function hsv2rgb(c: ShaderNode): ShaderNode {
   return mix(vec3(1), clamp(p.sub(1), 0, 1), c.y).mul(c.z);
 }
 
-/** 餘弦調色盤：a + b * cos(2π(c * t + d))（https://iquilezles.org/articles/palettes/） */
+/**
+ * 餘弦調色盤：a + b * cos(2π(c * t + d))（https://iquilezles.org/articles/palettes/）
+ * @param t 0..1 的值
+ * @param a 中心顏色（vec3）
+ * @param b 振幅（vec3）
+ * @param c 頻率（vec3）
+ * @param d 相位（vec3）
+ */
 export function palette(t: NodeInput, a: ShaderNode, b: ShaderNode, c: ShaderNode, d: ShaderNode): ShaderNode {
   return a.add(b.mul(cos(c.mul(n(t)).add(d).mul(6.28318))));
 }

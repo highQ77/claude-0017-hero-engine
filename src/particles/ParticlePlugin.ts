@@ -29,6 +29,9 @@ export class ParticlePlugin implements Plugin {
     return this._controller;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     const render = engine.getPlugin<RenderPlugin>('render')!;

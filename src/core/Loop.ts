@@ -19,9 +19,15 @@ interface Handler {
 
 /** 可替換的排程器，方便測試或在非瀏覽器環境執行 */
 export interface Scheduler {
-  /** 要求下一幀時呼叫（回傳編號） */
+  /**
+   * 要求下一幀時呼叫（回傳編號）
+   * @param cb 下一幀時呼叫（拿到目前的毫秒數）
+   */
   request(cb: (nowMs: number) => void): number;
-  /** 取消 */
+  /**
+   * 取消
+   * @param id request 回傳的編號
+   */
   cancel(id: number): void;
   /** 目前時間（毫秒） */
   now(): number;
@@ -60,6 +66,10 @@ export class Loop {
   private accumulator = 0;
   private orderCounter = 0;
 
+  /**
+   * @param time 時間（每幀更新）
+   * @param options 每幀最多幾個固定步長、最大幀時間、排程器
+   */
   constructor(time: Time, options: LoopOptions) {
     this.time = time;
     this.maxFixedSteps = options.maxFixedSteps;
@@ -76,6 +86,9 @@ export class Loop {
   /**
    * 註冊某階段的回呼。priority 越小越先執行，同優先度依註冊順序。
    * 回傳取消註冊的函式。
+   * @param phase 哪個階段：input、fixedUpdate、update、lateUpdate、render
+   * @param callback 每幀呼叫的函式
+   * @param priority 同階段內的順序：小的先執行
    */
   on(phase: Phase, callback: PhaseCallback, priority = 0): () => void {
     const list = this.handlers.get(phase)!;
@@ -109,6 +122,7 @@ export class Loop {
 
   /**
    * 手動推進一幀（秒）。暫停時逐幀除錯、或測試時使用。
+   * @param rawDelta 推進的秒數
    */
   step(rawDelta: number): void {
     const time = this.time;

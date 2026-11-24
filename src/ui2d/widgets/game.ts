@@ -30,6 +30,11 @@ export class UISlot extends UIElement {
   /** 拖曳時滑鼠下的物品格（顯示放置提示） */
   dropTarget = false;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, _text = '') {
     super(ctx, type, raw);
     this.image = new UIImage(ctx, 'UIImage', {
@@ -97,8 +102,22 @@ export class UISlot extends UIElement {
     this.alpha = this.dragging ? 0.45 : 1;
   }
 
-  /** 設定內容（null 清空） */
-  setItem(item: { icon?: string; iconName?: string; count?: number; rarity?: string } | null): void {
+  /**
+   * 設定內容（null 清空）
+   * @param item 內容：圖示、數量、稀有度；null 清空
+   */
+  setItem(
+    item: {
+      /** 圖示圖檔網址 */
+      icon?: string;
+      /** 內建圖示名稱（見 ICON_NAMES） */
+      iconName?: string;
+      /** 數量（大於 1 時顯示） */
+      count?: number;
+      /** 稀有度（外框顏色）：common、uncommon、rare、epic、legendary，或直接寫顏色 */
+      rarity?: string;
+    } | null,
+  ): void {
     for (const key of ['icon', 'iconName', 'count', 'rarity']) delete this.raw[key];
     if (item) {
       if (item.icon) this.raw.icon = item.icon;
@@ -268,7 +287,10 @@ export class UICooldown extends UIElement {
     };
   }
 
-  /** 開始冷卻 */
+  /**
+   * 開始冷卻
+   * @param seconds 冷卻幾秒
+   */
   start(seconds: number): void {
     this.duration = this.remaining = Math.max(0, seconds);
     this.ctx.damage?.(this, 2);
@@ -355,6 +377,12 @@ export class UICooldown extends UIElement {
  * @example <UIButton text="任務"><UIBadge value="3"/></UIButton>
  */
 export class UIBadge extends UILabel {
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   * @param text 一開始的文字
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, text = '') {
     super(ctx, type, raw, raw.value ?? text);
   }
@@ -386,7 +414,10 @@ export class UIBadge extends UILabel {
     return this.raw.value ?? this.text;
   }
 
-  /** 設定數字，回傳自己（可以串接） */
+  /**
+   * 設定數字，回傳自己（可以串接）
+   * @param v 數字，或文字（例如 NEW）；0 時隱藏（showZero="true" 除外）
+   */
   setValue(v: string | number): this {
     return this.set('value', String(v)) as this;
   }

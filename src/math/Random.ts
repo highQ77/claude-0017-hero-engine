@@ -34,6 +34,9 @@ export class Random {
   readonly seed: number;
   private state: number;
 
+  /**
+   * @param seed 種子：同樣的種子產生同樣的序列；省略時隨機
+   */
   constructor(seed?: number | string) {
     const s =
       seed === undefined ? Math.floor(Math.random() * 2 ** 32) : typeof seed === 'string' ? hashSeed(seed) : seed;
@@ -51,19 +54,30 @@ export class Random {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
 
-  /** min ≤ x < max */
+  /**
+   * min ≤ x < max
+   * @param min 最小值（包含）
+   * @param max 最大值（不包含）
+   */
   range(min: number, max: number): number {
     return min + (max - min) * this.next();
   }
 
-  /** 整數 min ≤ x ≤ max（包含兩端） */
+  /**
+   * 整數 min ≤ x ≤ max（包含兩端）
+   * @param min 最小值（包含）
+   * @param max 最大值（包含）
+   */
   int(min: number, max: number): number {
     const lo = Math.ceil(Math.min(min, max));
     const hi = Math.floor(Math.max(min, max));
     return lo + Math.floor(this.next() * (hi - lo + 1));
   }
 
-  /** 機率 p（0~1）時是 true */
+  /**
+   * 機率 p（0~1）時是 true
+   * @param p 機率 0~1
+   */
   chance(p: number): boolean {
     return this.next() < p;
   }
@@ -73,13 +87,19 @@ export class Random {
     return this.next() < 0.5 ? -1 : 1;
   }
 
-  /** 從陣列裡隨機選一個（空陣列時丟出錯誤） */
+  /**
+   * 從陣列裡隨機選一個（空陣列時丟出錯誤）
+   * @param items 要選的陣列
+   */
   pick<T>(items: readonly T[]): T {
     if (!items.length) throw new Error('Random.pick：陣列是空的');
     return items[Math.floor(this.next() * items.length)];
   }
 
-  /** 依權重選一個：rng.weighted([['普通', 80], ['稀有', 15], ['傳說', 5]]) */
+  /**
+   * 依權重選一個：rng.weighted([['普通', 80], ['稀有', 15], ['傳說', 5]])
+   * @param entries [值, 權重] 的陣列
+   */
   weighted<T>(entries: readonly (readonly [T, number])[]): T {
     const total = entries.reduce((sum, [, w]) => sum + Math.max(0, w), 0);
     if (!(total > 0)) throw new Error('Random.weighted：權重的總和要大於 0');
@@ -91,7 +111,10 @@ export class Random {
     return entries[entries.length - 1][0];
   }
 
-  /** 打亂陣列（直接改這個陣列，也回傳它） */
+  /**
+   * 打亂陣列（直接改這個陣列，也回傳它）
+   * @param items 要打亂的陣列（會直接修改）
+   */
   shuffle<T>(items: T[]): T[] {
     for (let i = items.length - 1; i > 0; i--) {
       const j = Math.floor(this.next() * (i + 1));

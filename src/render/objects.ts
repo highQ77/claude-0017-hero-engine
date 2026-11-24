@@ -54,6 +54,9 @@ export interface MeshOptions extends ObjectOptions {
 
 /**
  * 建立網格：幾何、材質可以是描述（{ box: 1 }、'#f80'）或 three.js 物件。
+ * @param geometry 幾何或幾何描述
+ * @param material 材質、材質描述，或材質陣列
+ * @param options 陰影、名稱、位置、旋轉、縮放
  * @example
  * const head = create.mesh({ sphere: 0.3 }, { standard: { color: '#ffd166' } }, { name: 'head', position: [0, 1.5, 0] });
  */
@@ -74,6 +77,7 @@ export function createMesh(
 /**
  * 建立群組：把好幾個物件包成一個（整個交給 SceneObject，跟著實體移動）。
  * 第一個參數可以是設定（名稱、位置），也可以直接放子物件。
+ * @param items 子物件；第一個也可以是設定（名稱、位置、旋轉、縮放）
  * @example
  * const robot = create.group({ name: 'robot' }, body, head, arm);
  */
@@ -104,6 +108,8 @@ export interface PointsOptions extends ObjectOptions {
 
 /**
  * 建立點雲：給一串位置（[x, y, z] 的陣列，或攤平的 [x, y, z, x, y, z, …]）。
+ * @param positions 位置：[x, y, z] 的陣列，或攤平的 [x, y, z, x, y, z, …]
+ * @param options 顏色（或每個點的顏色）、點的大小、是否近大遠小、透明度、混合方式、名稱、位置
  * @example
  * const stars = create.points(Array.from({ length: 500 }, () => [rand(), rand(), rand()]), { color: '#fff', size: 0.05 });
  */

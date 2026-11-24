@@ -37,10 +37,15 @@ export const NetworkIdentity = defineComponent<NetworkIdentityData>('NetworkIden
 
 /** 預製物件：用來建立同步實體的外觀（本地與遠端都會呼叫，local 區分） */
 export type PrefabBuilder = (ctx: {
+  /** ECS 世界 */
   world: World;
+  /** 已經建立好的實體：在上面加元件（外觀、碰撞…） */
   entity: Entity;
+  /** network.spawn 時給的資料（例如顏色、名字） */
   data: unknown;
+  /** true：自己建立的（可以加操作）；false：別的玩家的 */
   local: boolean;
+  /** 擁有者（別的玩家）；自己建立的是 null */
   owner: Peer | null;
 }) => void;
 
@@ -100,6 +105,9 @@ export class NetworkPlugin implements Plugin {
   private readonly delay: number;
   private readonly now: () => number;
 
+  /**
+   * @param options 每秒送出幾次位置、遠端顯示延遲（插值用）
+   */
   constructor(
     /** 連線 */
     readonly client: NetworkClient,
@@ -110,7 +118,11 @@ export class NetworkPlugin implements Plugin {
     this.now = options.now ?? (() => performance.now() / 1000);
   }
 
-  /** 註冊預製物件（本地與遠端都用這個名稱建立外觀） */
+  /**
+   * 註冊預製物件（本地與遠端都用這個名稱建立外觀）
+   * @param name 預製物件名稱（spawn 用）
+   * @param builder 建立外觀的函式（本地與遠端都會呼叫）
+   */
   registerPrefab(name: string, builder: PrefabBuilder): this {
     this.prefabs.set(name, builder);
     return this;
@@ -121,19 +133,30 @@ export class NetworkPlugin implements Plugin {
     return this.remote.size;
   }
 
-  /** 由網路編號找實體 */
+  /**
+   * 由網路編號找實體
+   * @param netId 網路編號
+   */
   entityOf(netId: string): Entity | undefined {
     return this.local.get(netId) ?? this.remote.get(netId)?.entity;
   }
 
   /**
    * 建立同步實體（自己是擁有者）。
+   * @param prefab 預製物件名稱（registerPrefab 註冊的）
+   * @param data 建立時的資料（傳給預製物件，例如顏色）
+   * @param transform 一開始的位置、旋轉
    * @example const me = network.spawn('player', { color: '#f80' }, { position: new Vector3(0, 1, 0) });
    */
   spawn(
     prefab: string,
     data: unknown = null,
-    transform: { position?: THREE.Vector3; rotation?: THREE.Quaternion } = {},
+    transform: {
+      /** 一開始的位置 */
+      position?: THREE.Vector3;
+      /** 一開始的旋轉 */
+      rotation?: THREE.Quaternion;
+    } = {},
   ): Entity {
     const world = this.requireWorld();
     const e = world.spawn(Transform);
@@ -144,7 +167,12 @@ export class NetworkPlugin implements Plugin {
     return this.makeNetworked(e, prefab, data);
   }
 
-  /** 讓現有的實體變成同步實體（例如場景裡已經建立好的玩家角色） */
+  /**
+   * 讓現有的實體變成同步實體（例如場景裡已經建立好的玩家角色）
+   * @param entity 已經存在的實體
+   * @param prefab 預製物件名稱（遠端用它建立外觀）
+   * @param data 建立時的資料
+   */
   makeNetworked(entity: Entity, prefab: string, data: unknown = null): Entity {
     const world = this.requireWorld();
     if (!world.has(entity, Transform)) world.add(entity, Transform);
@@ -155,6 +183,9 @@ export class NetworkPlugin implements Plugin {
     return entity;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     const world = ecs.world;

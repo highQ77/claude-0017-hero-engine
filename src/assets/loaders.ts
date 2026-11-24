@@ -18,7 +18,11 @@ async function fetchOk(url: string): Promise<Response> {
   return res;
 }
 
-/** 內建載入器。three.js 的進階載入器用動態匯入，用到時才下載 */
+/**
+ * 內建載入器。three.js 的進階載入器用動態匯入，用到時才下載
+ * @param manager 資源管理器
+ * @param options Draco 解碼器路徑
+ */
 export function registerDefaultLoaders(manager: AssetManager, options: DefaultLoaderOptions = {}): void {
   manager.registerLoader('texture', {
     extensions: ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.bmp'],

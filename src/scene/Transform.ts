@@ -31,6 +31,9 @@ export interface TransformComponent extends ComponentType<TransformData> {
   /**
    * 指定位置的 Transform，給 world.spawn 用：world.spawn(Transform.at(0, 1, 0), MeshRenderer.with(…))
    * 也可以給 [x, y, z]：Transform.at([0, 1, 0])
+   * @param x X，或 [x, y, z]
+   * @param y Y
+   * @param z Z
    */
   at(
     x: number | readonly number[],
@@ -55,19 +58,29 @@ const _quat = new Quaternion();
 /**
  * 在自己的座標上旋轉（累加）：angles 是 [x, y, z] 弧度，依 X、Y、Z 順序。每幀轉一點用這個：
  *   math.rotate(t, [0, speed * time.delta, 0])
+ * @param t Transform 的資料
+ * @param angles [x, y, z] 弧度
  */
 export function rotate(t: TransformData, angles: readonly number[]): TransformData {
   t.rotation.multiply(_quat.setFromEuler(_euler.set(angles[0] ?? 0, angles[1] ?? 0, angles[2] ?? 0, 'XYZ')));
   return t;
 }
 
-/** 設定旋轉（取代原本的）：angles 是 [x, y, z] 弧度，依 X、Y、Z 順序 */
+/**
+ * 設定旋轉（取代原本的）：angles 是 [x, y, z] 弧度，依 X、Y、Z 順序
+ * @param t Transform 的資料
+ * @param angles [x, y, z] 弧度
+ */
 export function setRotation(t: TransformData, angles: readonly number[]): TransformData {
   t.rotation.setFromEuler(_euler.set(angles[0] ?? 0, angles[1] ?? 0, angles[2] ?? 0, 'XYZ'));
   return t;
 }
 
-/** 取得世界座標位置 */
+/**
+ * 取得世界座標位置
+ * @param t Transform 的資料
+ * @param out 存放結果的向量（省略時建立新的）
+ */
 export function getWorldPosition(t: TransformData, out = new Vector3()): Vector3 {
   return out.setFromMatrixPosition(t.worldMatrix);
 }
@@ -78,6 +91,9 @@ const _defaultUp = new Vector3(0, 1, 0);
 /**
  * 讓 -Z 方向朝向目標（攝影機、平行光、聚光燈的朝向慣例）。
  * target 與 position 都以父節點座標計算；沒有父節點時即世界座標。
+ * @param t Transform 的資料
+ * @param target 要看向的位置
+ * @param up 上方（預設 +Y）
  */
 export function lookAt(t: TransformData, target: Vector3, up: Vector3 = _defaultUp): void {
   _lookAtMatrix.lookAt(t.position, target, up);
@@ -87,6 +103,7 @@ export function lookAt(t: TransformData, target: Vector3, up: Vector3 = _default
 /**
  * 依父子層級計算所有世界矩陣。
  * 通常由 TransformSystem 自動執行；若在同一幀內需要最新的世界座標，可以手動呼叫。
+ * @param world ECS 世界
  */
 export function updateTransforms(world: World): void {
   const hierarchy = world.getResource(HierarchyKey);

@@ -57,13 +57,23 @@ export class Timers {
   private entries: Entry[] = [];
   private adding: Entry[] = [];
 
-  /** 幾秒後執行一次 */
+  /**
+   * 幾秒後執行一次
+   * @param seconds 幾秒後
+   * @param fn 要執行的函式
+   * @param options 是否用實際時間（不受暫停、時間縮放影響）、擁有者（cancelOwner 一起取消）
+   */
   after(seconds: number, fn: () => void, options: TimerOptions = {}): TimerHandle {
     if (!(seconds >= 0)) throw new Error(`timers.after：秒數要是 0 以上的數字，收到 ${seconds}`);
     return this.add({ remaining: seconds, interval: null, fn, options });
   }
 
-  /** 每隔幾秒執行一次（直到取消） */
+  /**
+   * 每隔幾秒執行一次（直到取消）
+   * @param seconds 間隔幾秒
+   * @param fn 要執行的函式
+   * @param options 是否立刻先執行一次、是否用實際時間、擁有者（cancelOwner 一起取消）
+   */
   every(seconds: number, fn: () => void, options: EveryOptions = {}): TimerHandle {
     if (!(seconds > 0)) throw new Error(`timers.every：間隔要大於 0 秒，收到 ${seconds}`);
     const handle = this.add({ remaining: seconds, interval: seconds, fn, options });
@@ -71,7 +81,10 @@ export class Timers {
     return handle;
   }
 
-  /** 取消某個擁有者（例如實體）的所有計時器 */
+  /**
+   * 取消某個擁有者（例如實體）的所有計時器
+   * @param owner 擁有者（建立計時器時給的 owner）
+   */
   cancelOwner(owner: unknown): void {
     for (const e of this.entries) if (e.owner === owner) e.cancelled = true;
     for (const e of this.adding) if (e.owner === owner) e.cancelled = true;
@@ -92,6 +105,8 @@ export class Timers {
   /**
    * 推進時間（引擎每幀自動呼叫；測試或自己的迴圈也可以呼叫）。
    * delta：遊戲時間（已套用 timeScale）；realDelta：不受 timeScale 影響的時間。
+   * @param delta 遊戲時間（秒，已套用時間縮放）
+   * @param realDelta 實際經過的時間（秒）
    */
   update(delta: number, realDelta: number = delta): void {
     // 這一幀新增的計時器下一幀才開始算（觸發時又新增的也一樣，不會在同一幀連鎖觸發）

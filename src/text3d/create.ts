@@ -5,6 +5,10 @@ import type { Font } from 'three/examples/jsm/loaders/FontLoader.js';
 /**
  * 文字的平面形狀（幾何）：用 3D 字型的輪廓產生，可以交給 create.mesh、spawn.mesh。
  * center 為 true（預設）時以文字中心為原點。
+ * @param font 字型（load.builtinFont() 或 load.font(網址)）
+ * @param text 文字
+ * @param size 字的大小（公尺）
+ * @param options 是否以中心為原點、曲線的分段數
  * @example
  * const geometry = create.textShape(await load.builtinFont(), 'HERO', 1);
  */
@@ -12,7 +16,12 @@ function createTextShape(
   font: Font,
   text: string,
   size = 1,
-  options: { center?: boolean; curveSegments?: number } = {},
+  options: {
+    /** true（預設）：以文字中心為原點 */
+    center?: boolean;
+    /** 每段曲線切成幾段：越多越圓滑，三角形也越多 */
+    curveSegments?: number;
+  } = {},
 ): THREE.BufferGeometry {
   const g = new THREE.ShapeGeometry(font.generateShapes(text, size), options.curveSegments ?? 8);
   if (options.center !== false) g.center();

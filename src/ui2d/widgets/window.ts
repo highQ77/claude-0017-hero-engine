@@ -20,6 +20,11 @@ export class UIWindow extends UIElement {
   /** 內容區 */
   readonly body: UILayout;
 
+  /**
+   * @param ctx 所屬介面的環境（排版引擎、樣式、圖片載入…；UI2D 建立元件時給）
+   * @param type 元件類型（XML 標籤名稱）
+   * @param raw XML 寫的屬性
+   */
   constructor(ctx: UIContext, type: string, raw: Attrs = {}, _text = '') {
     super(ctx, type, raw);
     this.header = new UILayout(ctx, 'UIWindowHeader', {
@@ -103,7 +108,11 @@ export class UIWindow extends UIElement {
     this.emit('close');
   }
 
-  /** 拖曳標題列移動（不改變排版，只改位移；不會被拖出畫面） */
+  /**
+   * 拖曳標題列移動（不改變排版，只改位移；不會被拖出畫面）
+   * @param px 指標 X（介面座標）
+   * @param py 指標 Y（介面座標）
+   */
   override pointerDown(px: number, py: number): PointerCapture | null {
     if (!bool(this.attrs.draggable)) return null;
     const h = this.header.absoluteRect;

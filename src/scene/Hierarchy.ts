@@ -19,6 +19,9 @@ export class Hierarchy {
   private readonly children = new Map<Entity, Entity[]>();
   private readonly offs: (() => void)[] = [];
 
+  /**
+   * @param world ECS 世界
+   */
   constructor(private readonly world: World) {
     this.offs.push(
       world.onAdd(Parent, (child, p) => this.link(p.entity, child)),
@@ -40,18 +43,28 @@ export class Hierarchy {
     if (this.world.getResource(HierarchyKey) === this) this.world.removeResource(HierarchyKey);
   }
 
-  /** 子實體 */
+  /**
+   * 子實體
+   * @param e 實體
+   */
   childrenOf(e: Entity): readonly Entity[] {
     return this.children.get(e) ?? EMPTY;
   }
 
-  /** 父實體（沒有時是 null） */
+  /**
+   * 父實體（沒有時是 null）
+   * @param e 實體
+   */
   parentOf(e: Entity): Entity | null {
     const p = this.world.get(e, Parent);
     return p && this.world.isAlive(p.entity) ? p.entity : null;
   }
 
-  /** 設定父節點；傳 null 代表脫離父節點 */
+  /**
+   * 設定父節點；傳 null 代表脫離父節點
+   * @param child 子實體
+   * @param parent 父實體；null 代表脫離父節點
+   */
   setParent(child: Entity, parent: Entity | null): void {
     if (parent !== null) {
       if (!this.world.isAlive(parent)) throw new Error('父節點已銷毀');
@@ -64,7 +77,11 @@ export class Hierarchy {
     if (parent !== null) this.world.add(child, Parent, { entity: parent });
   }
 
-  /** ancestor 是否為 e 的祖先 */
+  /**
+   * ancestor 是否為 e 的祖先
+   * @param ancestor 可能的祖先
+   * @param e 實體
+   */
   isAncestor(ancestor: Entity, e: Entity): boolean {
     let p = this.parentOf(e);
     while (p !== null) {
@@ -74,7 +91,11 @@ export class Hierarchy {
     return false;
   }
 
-  /** 走訪 e 的所有子孫（深度優先，不含 e 自己） */
+  /**
+   * 走訪 e 的所有子孫（深度優先，不含 e 自己）
+   * @param e 從這個實體往下找
+   * @param fn 每個子孫呼叫一次
+   */
   forEachDescendant(e: Entity, fn: (descendant: Entity) => void): void {
     for (const child of this.childrenOf(e)) {
       fn(child);

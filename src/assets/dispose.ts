@@ -3,6 +3,7 @@ import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.j
 
 /**
  * 釋放物件樹中所有幾何、材質、貼圖的 GPU 資源（共用的只會釋放一次）。
+ * @param root 要釋放的物件（連同子物件的幾何、材質、貼圖）
  */
 export function disposeObject3D(root: Object3D): void {
   const geometries = new Set<BufferGeometry>();
@@ -30,6 +31,7 @@ export function disposeObject3D(root: Object3D): void {
 /**
  * 複製模型以放進場景：幾何、材質與原始資源共用，骨架動畫的骨骼會正確重新綁定。
  * 複製品不需要個別釋放，原始資源參考計數歸零時一併釋放。
+ * @param source 要複製的物件（通常是載入的模型）
  */
 export function instantiate<T extends Object3D>(source: T): T {
   return skeletonClone(source) as T;

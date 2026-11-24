@@ -15,7 +15,15 @@ export class Text3DPlugin implements Plugin {
   private ecs: EcsPlugin | null = null;
   private offCodecs: () => void = () => {};
 
-  constructor(private readonly options: { createCanvas?: CanvasFactory } = {}) {}
+  /**
+   * @param options 建立畫布的方式（測試用）
+   */
+  constructor(
+    private readonly options: {
+      /** 建立畫布的方式（測試、沒有 DOM 的環境用）；省略時用 document.createElement('canvas') */
+      createCanvas?: CanvasFactory;
+    } = {},
+  ) {}
 
   /** 3D 文字的控制器 */
   get controller(): Text3DController {
@@ -23,6 +31,9 @@ export class Text3DPlugin implements Plugin {
     return this._controller;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     const assets = engine.getPlugin<AssetPlugin>('assets')!.assets;

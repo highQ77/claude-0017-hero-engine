@@ -73,6 +73,10 @@ export class ParticleController {
   private readonly pools = new Map<Entity, Pool>();
   private readonly off: () => void;
 
+  /**
+   * @param world ECS 世界
+   * @param scene three.js 場景（粒子加在這裡）
+   */
   constructor(
     private readonly world: World,
     private readonly scene: THREE.Scene,
@@ -87,13 +91,19 @@ export class ParticleController {
     return n;
   }
 
-  /** 立即清除某個發射器的所有粒子 */
+  /**
+   * 立即清除某個發射器的所有粒子
+   * @param e 發射器的實體
+   */
   clear(e: Entity): void {
     const pool = this.pools.get(e);
     if (pool) pool.count = 0;
   }
 
-  /** 推進模擬（受時間縮放影響） */
+  /**
+   * 推進模擬（受時間縮放影響）
+   * @param dt 這一幀的時間（秒）
+   */
   update(dt: number): void {
     this.world.query([ParticleEmitter, Transform]).each((e, em, t) => {
       let pool = this.pools.get(e);

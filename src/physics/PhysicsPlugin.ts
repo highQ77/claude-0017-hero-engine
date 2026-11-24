@@ -63,6 +63,9 @@ export class PhysicsPlugin implements Plugin {
     this._debug = options.debug ?? false;
   }
 
+  /**
+   * @param options 重力、是否平滑插值、是否顯示碰撞體（debug）
+   */
   static async create(options: PhysicsOptions = {}): Promise<PhysicsPlugin> {
     return new PhysicsPlugin(await initRapier(), options);
   }
@@ -83,6 +86,9 @@ export class PhysicsPlugin implements Plugin {
     if (!on && this.debugLines) this.debugLines.visible = false;
   }
 
+  /**
+   * @param engine 引擎
+   */
   install(engine: Engine): void {
     const ecs = engine.getPlugin<EcsPlugin>('ecs')!;
     this.ecs = ecs;
