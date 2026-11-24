@@ -329,6 +329,25 @@ export class UIElement {
   pointerDown?(x: number, y: number): PointerCapture | null;
 
   /**
+   * 滑鼠在元件上移動（沒有按住）：UI2D 對滑鼠下最近一個有這個方法的元件呼叫（例如畫布的 pointerhover 事件）
+   * @param x 指標 X（介面座標）
+   * @param y 指標 Y（介面座標）
+   */
+  pointerHover?(x: number, y: number): void;
+
+  /** 滑鼠離開元件（之前收過 pointerHover）：移到別的元件、離開畫面時呼叫 */
+  pointerLeave?(): void;
+
+  /**
+   * 滾輪：回傳 true 代表用掉了（不再捲動外層的列表）
+   * @param dx 橫向捲動量
+   * @param dy 縱向捲動量（往下為正）
+   * @param x 指標 X（介面座標）
+   * @param y 指標 Y（介面座標）
+   */
+  wheel?(dx: number, dy: number, x: number, y: number): boolean;
+
+  /**
    * XML 子節點的特殊處理（例如對話框的選項），回傳 true 代表已處理
    * @param node XML 子節點
    */
@@ -738,6 +757,15 @@ export class UIElement {
     if (!set) this.listeners.set(type, (set = new Set()));
     set.add(handler);
     return () => set!.delete(handler);
+  }
+
+  /**
+   * 是否有人收聽這個事件（XML 的 on… 屬性，或 on() 加的監聽）
+   * @param type 事件名稱（例如 'wheel'）
+   */
+  hasListener(type: string): boolean {
+    if (this.attrs[`on${type[0].toUpperCase()}${type.slice(1)}`]) return true;
+    return (this.listeners.get(type)?.size ?? 0) > 0;
   }
 
   /**

@@ -267,6 +267,8 @@ export class UI2D {
   private renderer: UIRenderer | null = null;
   /** 互動狀態 */
   private hover: UIElement | null = null;
+  /** 收到 pointerHover 的元件（滑鼠在它上面移動；移開時呼叫它的 pointerLeave） */
+  private hoverTarget: UIElement | null = null;
   private pressed: UIElement | null = null;
   private drag: {
     list: UIScrollView;
@@ -574,6 +576,7 @@ export class UI2D {
     });
     layer.destroy();
     this.hover = null;
+    this.hoverTarget = null;
     this.pressed = null;
     this.capture = null;
     this.damageAll = true;
@@ -954,6 +957,7 @@ export class UI2D {
    */
   handlePointer(type: 'down' | 'move' | 'up' | 'leave', x: number, y: number): boolean {
     if (type !== 'move') this.hideTooltip();
+    if (type === 'leave') this.setHoverTarget(null);
     // 上一次的拖曳沒收到放開（例如在視窗外放開）：先結束它，這次的按下照常處理
     if (type === 'down' && (this.capture || this.sliderDrag)) this.cancelPointer();
     // 元件接管中（拖曳搖桿、移動視窗、拖曳物品）
@@ -1000,6 +1004,10 @@ export class UI2D {
         if (d.moved) this.scrollTo(d.list, d.scrollLeft - dx, d.scrollTop - dy);
         return true;
       }
+      // 沒有按住時的移動：交給滑鼠下的元件（例如畫布的 pointerhover）
+      const target = this.hoverTargetAt(hit);
+      this.setHoverTarget(target);
+      target?.pointerHover?.(x, y);
       const hover = this.interactiveAt(hit);
       if (hover !== this.hover) {
         const old = this.hover;
@@ -1108,6 +1116,20 @@ export class UI2D {
     return true;
   }
 
+  /** 滑鼠下最近一個有 pointerHover 的元件（自己或祖先） */
+  private hoverTargetAt(hit: UIElement | null): UIElement | null {
+    for (let el = hit; el; el = el.parent) if (el.pointerHover) return el;
+    return null;
+  }
+
+  /** 換懸停的元件：舊的收到 pointerLeave */
+  private setHoverTarget(target: UIElement | null): void {
+    if (target === this.hoverTarget) return;
+    const old = this.hoverTarget;
+    this.hoverTarget = target;
+    old?.pointerLeave?.();
+  }
+
   /**
    * 處理滾輪：捲動滑鼠所在的列表。回傳 true 代表被介面用掉
    * @param dx 橫向捲動量
@@ -1128,6 +1150,8 @@ export class UI2D {
       return true;
     }
     const hit = this.hitTest(x, y);
+    // 元件自己處理滾輪（例如畫布有人收聽 wheel）：不再捲動外層的列表
+    for (let el: UIElement | null = hit; el; el = el.parent) if (el.wheel?.(dx, dy, x, y)) return true;
     const list = this.listAt(hit);
     if (list) {
       const axis = list.scrollAxis;

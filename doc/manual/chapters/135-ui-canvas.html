@@ -365,6 +365,43 @@ engine.start();
 </article>
 
 <article class="cv-api" data-native="false">
+  <div class="cv-sig">pointerhover · pointerleave · wheel</div>
+  <p>沒有按住時，滑鼠在畫布上移動觸發 <code>pointerhover</code>（<code>event.value</code> 是繪圖座標 <code>{ x, y }</code>），移開畫布或離開整個畫面觸發 <code>pointerleave</code>（<code>value</code> 是 <code>null</code>）：用來做懸停提示、高亮滑鼠下的資料點。拖曳中收到的是 <code>pointermove</code>，不會同時收到 <code>pointerhover</code>。</p>
+  <p>滾輪觸發 <code>wheel</code>（<code>event.value</code> 是 <code>{ x, y, dx, dy }</code>，<code>dy</code> 往下為正）。只有在<b>有人收聽 <code>wheel</code></b> 時畫布才會攔截滾輪；沒人收聽時，滾輪照常捲動外層的列表。這三個事件在 3D 面板（ui3d）裡的畫布一樣有效。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="懸停與滾輪" data-height="300">
+import type { UICanvas } from '@engine/ui2d';
+import { engine, ui } from './engine';
+
+ui.loadString(`<UI align="center" justify="center"><UICanvas id="c" width="360" height="240" radius="10"/></UI>`);
+const c = ui.require<UICanvas>('c');
+const ctx = c.getContext();
+type Point = { x: number; y: number };
+let mouse: Point | null = null;
+let size = 30;
+
+function draw(): void {
+  ctx.clearRect(0, 0, 360, 240);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.fillText('移過來試試，再捲動滾輪', 12, 22);
+  if (!mouse) return;
+  ctx.beginPath();
+  ctx.arc(mouse.x, mouse.y, size, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(61, 214, 198, 0.6)';
+  ctx.fill();
+}
+c.on('pointerhover', (e) => { mouse = e.value as Point; draw(); });
+c.on('pointerleave', () => { mouse = null; draw(); });
+c.on('wheel', (e) => {
+  size = Math.min(100, Math.max(8, size - (e.value as { dy: number }).dy * 0.05));
+  draw();
+});
+draw();
+engine.start();
+</script>
+</article>
+
+<article class="cv-api" data-native="false">
   <div class="cv-sig">uicanvas.texture <span class="cv-ret">→ THREE.Texture</span></div>
   <p>把畫布貼到 3D 物件上的貼圖。和一般圖片貼圖一樣（sRGB、未預乘 alpha），有透明的地方材質設 <code>transparent: true</code>。畫圖後自動上傳（下一幀 3D 就看得到）。</p>
 <script type="text/plain" class="example" data-lang="ts" data-title="畫布貼到旋轉的方塊上" data-height="300">
@@ -2323,6 +2360,59 @@ ctx.stroke(p);
 </script>
 </article>
       
+
+<h2 id="d3">d3.js 圖表（d3-chart 套件）</h2>
+<p><a href="https://d3js.org/" target="_blank">d3.js</a> 的比例尺、形狀（<code>line</code>、<code>area</code>、<code>arc</code>、<code>pie</code>…）、階層、力導向等模組不需要網頁元素，路徑產生器用 <code>.context(…)</code> 就能直接畫進畫布。<code>d3-chart</code> 套件註冊 <code>&lt;UID3Chart&gt;</code> 元件（繼承 UICanvas），把互動與重畫都包好：</p>
+<ul>
+  <li><b>懸停</b>：繪圖函式拿到的 <code>pointer</code> 是滑鼠的繪圖座標（離開時是 <code>null</code>），用來找最近的資料點；<code>drawTooltip(ctx, x, y, 文字陣列, { bounds })</code> 畫提示框。</li>
+  <li><b>縮放、平移</b>：<code>zoom="x"</code>（只縮放橫軸，例如時間序列）、<code>"y"</code>、<code>"xy"</code>；滾輪縮放、拖曳平移，<code>minZoom</code>／<code>maxZoom</code> 限制倍率。<code>transform</code> 是 d3 的 <code>ZoomTransform</code>：<code>transform.rescaleX(比例尺)</code> 就是縮放後的比例尺。縮放時觸發 <code>zoom</code> 事件，<code>chart.resetZoom()</code> 回到原狀。</li>
+  <li><b>點擊</b>：沒有拖動的按下→放開觸發 <code>chartclick</code> 事件（<code>event.value</code> 是繪圖座標）。</li>
+  <li><b>重畫</b>：懸停、縮放、尺寸改變時自動重畫；資料改了呼叫 <code>chart.redraw()</code>。</li>
+  <li>傳給 d3 的 <code>.context()</code> 用繪圖函式拿到的 <code>d3Context</code>（和 <code>ctx</code> 是同一個物件，型別換成 d3 要的型別）。</li>
+  <li>3D 面板（ui3d）的介面裡一樣可以放 <code>&lt;UID3Chart&gt;</code>，滑鼠在 3D 空間裡一樣能懸停、點擊。</li>
+  <li>d3 的 <code>d3-selection</code>、<code>d3-axis</code>（操作 SVG）和 <code>d3-zoom</code>、<code>d3-drag</code> 的事件綁定不能用：軸線用 <code>scale.ticks()</code> 自己畫，縮放、拖曳由元件處理。</li>
+</ul>
+<p>套件要在介面載入<b>之前</b>安裝（<code>UIPlugin.create({ scene })</code> 會馬上讀入介面檔），所以寫在 <code>engine.ts</code> 建立 2D 介面的那一行之前。完整的範例是 <code>projects/official-demo-008-d3</code>：折線圖（縮放、平移、十字線）、長條圖與 3D 看板上的甜甜圈圖（兩邊互相連動選取）。</p>
+<script type="text/plain" class="example" data-lang="ts" data-title="可以縮放的 d3 折線圖" data-height="320">
+import * as d3 from 'd3';
+import * as ui2d from '@engine/ui2d';
+import { PluginManager } from '@engine/plugins';
+import d3Chart, { drawTooltip, type UID3Chart } from '@engine/packages/d3-chart';
+import { engine, ui } from './engine';
+
+await new PluginManager(engine, { api: { ui2d } }).install(d3Chart);
+ui.loadString(`<UI align="center" justify="center">
+  <UID3Chart id="chart" width="420" height="240" zoom="x" maxZoom="10" radius="10"/>
+</UI>`);
+
+const data = d3.range(100).map((i) => ({ i, v: 50 + 30 * Math.sin(i / 8) + 10 * Math.sin(i / 2.3) }));
+ui.require<UID3Chart>('chart').draw((ctx, { width, height, transform, pointer, d3Context }) => {
+  const x = transform.rescaleX(d3.scaleLinear([0, 99], [32, width - 10]));
+  const y = d3.scaleLinear([0, 100], [height - 20, 10]);
+  ctx.fillStyle = '#8f9bbd';
+  ctx.font = '11px system-ui, sans-serif';
+  for (const t of x.ticks(6)) ctx.fillText(String(t), x(t) - 6, height - 5);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(32, 0, width - 42, height);
+  ctx.clip();
+  ctx.beginPath();
+  d3.line<{ i: number; v: number }>((d) => x(d.i), (d) => y(d.v)).curve(d3.curveMonotoneX).context(d3Context)(data);
+  ctx.strokeStyle = '#3dd6c6';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+  if (pointer) {
+    const d = data[Math.round(Math.min(99, Math.max(0, x.invert(pointer.x))))];
+    ctx.beginPath();
+    ctx.arc(x(d.i), y(d.v), 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffb35c';
+    ctx.fill();
+    drawTooltip(ctx, x(d.i), y(d.v), [`第 ${d.i} 筆`, `值 ${d.v.toFixed(1)}`], { bounds: { width, height } });
+  }
+});
+engine.start();
+</script>
 
 <h2 id="limits">限制與差異</h2>
 <ul>

@@ -1,0 +1,359 @@
+<!--
+  official-demo-008-d3 的介面：左邊是說明面板（四個分頁），右邊展示 d3 圖表（2D 介面的兩張圖，與 3D 空間裡的看板）。
+  <UID3Chart> 由 d3-chart 套件註冊（engine.ts 安裝），圖表內容在 src/main.ts 用 d3 畫。
+-->
+<UI width="auto" height="auto" dir="h">
+  <UISkin for="UIButton" radius="8" padding="7 12" background="#2a3124" hoverBackground="#37402f" color="#e9f6d2" fontSize="13"/>
+  <UIStyle name="tab" flex="1" padding="8 4" activeBackground="#9acd32" activeColor="#141a07" fontWeight="bold"/>
+  <UIStyle name="title" fontSize="17" fontWeight="bold" color="#c8f07a"/>
+  <UIStyle name="text" fontSize="13" color="#c6cdbb" lineHeight="1.5"/>
+  <UIStyle name="hint" fontSize="12" color="#8f9884" lineHeight="1.5"/>
+  <UIStyle name="field" fontSize="12" color="#e9f6d2"/>
+  <UIStyle name="codeBox" gap="3" padding="6 8" background="rgba(0,0,0,0.35)" radius="6"/>
+  <UIStyle name="codeLine" fontSize="12" color="#ffd166" fontFamily="monospace"/>
+  <UIStyle name="box" gap="4" padding="10" background="rgba(255,255,255,0.04)" radius="8"/>
+  <UIStyle name="stat" fontSize="18" fontWeight="bold" color="#ffd166"/>
+  <UIStyle name="hudCard" gap="8" padding="12 14" background="rgba(10,12,9,0.82)" radius="12" border="1 rgba(154,205,50,0.25)"/>
+  <UIStyle name="cardTitle" fontSize="14" fontWeight="bold" color="#ffffff"/>
+
+  <!-- ───────── 左：說明面板 ───────── -->
+  <UILayout id="panel" width="340" padding="16" gap="12" background="rgba(14,17,12,0.92)">
+    <UILayout gap="2">
+      <UILabel fontSize="11" color="#8f9884">OFFICIAL DEMO 008</UILabel>
+      <UILabel fontSize="22" fontWeight="bold" color="#ffffff">d3.js 互動圖表</UILabel>
+    </UILayout>
+
+    <UILayout gap="4">
+      <UILayout dir="h" gap="4">
+        <UIButton text="折線圖" style="tab" select="pages:pageLine"/>
+        <UIButton text="長條圖" style="tab" select="pages:pageBars"/>
+        <UIButton text="3D 看板" style="tab" select="pages:pageBoard"/>
+        <UIButton text="套件" style="tab" select="pages:pagePackage"/>
+      </UILayout>
+      <UILayout dir="h" gap="4">
+        <UIButton text="散佈圖" style="tab" select="pages:pageScatter"/>
+        <UIButton text="熱度圖" style="tab" select="pages:pageHeat"/>
+        <UIButton text="矩形樹圖" style="tab" select="pages:pageTree"/>
+        <UIButton text="力導向圖" style="tab" select="pages:pageForce"/>
+      </UILayout>
+      <UILayout dir="h" gap="4">
+        <UIButton text="雷達圖" style="tab" select="pages:pageRadar"/>
+        <UIButton text="河流圖" style="tab" select="pages:pageStream"/>
+        <UIButton text="弦圖" style="tab" select="pages:pageChord"/>
+        <UIButton text="密度圖" style="tab" select="pages:pageDensity"/>
+      </UILayout>
+    </UILayout>
+
+    <UIStackView id="pages" flex="1" transition="fade" onChange="tab">
+      <!-- ① 折線圖：縮放與平移 -->
+      <UIScrollView id="pageLine" gap="10">
+        <UILabel style="title">縮放與平移（zoom）</UILabel>
+        <UILabel style="text">在折線圖上捲動滾輪放大橫軸，按住拖曳左右平移；移過去會出現十字線和當天的數值。zoom="x" 只縮放橫軸，縱軸維持不動，適合時間序列。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">&lt;UID3Chart zoom="x" maxZoom="12"/&gt;</UILabel>
+          <UILabel style="codeLine">const x = transform.rescaleX(x0)</UILabel>
+          <UILabel style="codeLine">x.invert(pointer.x) // 滑鼠下的那一天</UILabel>
+        </UILayout>
+        <UILayout style="box">
+          <UILayout dir="h" gap="16">
+            <UILayout gap="2" flex="1">
+              <UILabel style="hint">顯示範圍</UILabel>
+              <UILabel id="range" style="stat">第 1～120 天</UILabel>
+            </UILayout>
+            <UILayout gap="2" flex="1">
+              <UILabel style="hint">縮放倍率 k</UILabel>
+              <UILabel id="zoomK" style="stat">1.0×</UILabel>
+            </UILayout>
+          </UILayout>
+        </UILayout>
+        <UIButton text="重設縮放（chart.resetZoom()）" onClick="resetZoom"/>
+        <UILabel style="hint">比例尺、曲線、面積都是 d3 本身（scaleLinear、line、area、curveMonotoneX），用 .context(d3Context) 直接畫進畫布；軸線刻度用 scale.ticks() 自己畫。</UILabel>
+      </UIScrollView>
+
+      <!-- ② 長條圖：懸停與點擊 -->
+      <UIScrollView id="pageBars" gap="10">
+        <UILabel style="title">懸停與點擊</UILabel>
+        <UILabel style="text">繪圖函式拿到滑鼠的位置（pointer），用比例尺換算出滑鼠下的長條，畫上外框與提示框。沒有拖動的按下→放開是點擊（chartclick）。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">chart.draw((ctx, { pointer }) =&gt; …)</UILabel>
+          <UILabel style="codeLine">chart.on('chartclick', (e) =&gt; …)</UILabel>
+          <UILabel style="codeLine">drawTooltip(ctx, x, y, lines)</UILabel>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="hint">目前選取（長條圖與 3D 甜甜圈圖共用）</UILabel>
+          <UILabel id="picked" style="stat">—</UILabel>
+        </UILayout>
+        <UIButton text="取消選取" onClick="clearPick"/>
+        <UILabel style="hint">選取改變時，對兩張圖呼叫 chart.redraw()：資料或狀態改了，圖表不會自己知道，要請它重畫。</UILabel>
+      </UIScrollView>
+
+      <!-- ③ 3D 看板 -->
+      <UIScrollView id="pageBoard" gap="10">
+        <UILabel style="title">3D 空間裡的圖表（UIPanel3D）</UILabel>
+        <UILabel style="text">右邊立著的看板是 3D 物件，上面的介面和 2D 介面是同一套 XML、同一個 &lt;UID3Chart&gt;。滑鼠移到扇形上會放大，點一下就選取那個地區，「長條圖」分頁也會跟著選取。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">UIPanel3D.with({</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">src: 'ui/panel3d.xml' })</UILabel>
+          <UILabel style="codeLine">ui3d.uiOf(entity).get('donut')</UILabel>
+          <UILabel style="codeLine">d3.pie()、d3.arc().context(d3Context)</UILabel>
+        </UILayout>
+        <UILabel style="hint">看板的介面是非同步載入的：等 UIPanel3D 的 status 變成 'ready'，才拿得到裡面的圖表（main.ts 用一個系統等它）。拖曳圖表以外的地方可以轉動視角，從側面看也一樣能點。</UILabel>
+      </UIScrollView>
+
+      <!-- ④ 套件 -->
+      <UIScrollView id="pagePackage" gap="10">
+        <UILabel style="title">以套件加入（PluginManager）</UILabel>
+        <UILabel style="text">d3-chart 是一個套件：安裝後註冊 &lt;UID3Chart&gt; 元件（繼承 UICanvas），移除套件時元件也一起移除。介面檔一讀入就要認得它，所以要在建立 2D 介面之前安裝（寫在 engine.ts）。右邊是最小的例子：十行程式畫出會隨滑鼠高亮的長條圖。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">import d3Chart from</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">'@engine/packages/d3-chart';</UILabel>
+          <UILabel style="codeLine">new PluginManager(engine,</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">{ api: { ui2d } }).install(d3Chart);</UILabel>
+        </UILayout>
+        <UILayout style="box">
+          <UILabel style="hint">能用</UILabel>
+          <UILabel style="field" lineHeight="1.6">比例尺、形狀（line、area、arc、pie）、顏色、階層、力導向、格式化…等不需要網頁元素的模組</UILabel>
+          <UILabel style="hint">不能用</UILabel>
+          <UILabel style="field" lineHeight="1.6">d3-selection、d3-axis（操作 SVG），d3-zoom、d3-drag 的事件綁定（由元件處理）</UILabel>
+        </UILayout>
+      </UIScrollView>
+      <UIScrollView id="pageScatter" gap="10">
+        <UILabel style="title">散佈圖與最近點（Delaunay）</UILabel>
+        <UILabel style="text">兩軸都能縮放（zoom="xy"）。滑鼠找的是「最近的點」，不用剛好壓在點上：d3.Delaunay 把畫面切成 Voronoi 格子，滑鼠落在哪一格就是哪個點。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">&lt;UID3Chart zoom="xy"/&gt;</UILabel>
+          <UILabel style="codeLine">d3.Delaunay.from(dots, x, y)</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">.find(pointer.x, pointer.y)</UILabel>
+          <UILabel style="codeLine">voronoi.renderCell(i, ctx)</UILabel>
+        </UILayout>
+        <UILabel style="hint">點越密，越需要這種找法：小圓點很難剛好點中。放大後點會稍微變大。</UILabel>
+      </UIScrollView>
+
+      <UIScrollView id="pageHeat" gap="10">
+        <UILabel style="title">熱度圖（連續色階）</UILabel>
+        <UILabel style="text">一週七天 × 24 小時的活躍度。顏色用連續色階表示數值大小；下方的圖例用畫布的 createLinearGradient 畫漸層。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">d3.scaleSequential([0, 100],</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">d3.interpolateViridis)</UILabel>
+          <UILabel style="codeLine">ctx.roundRect(x, y, w, h, 3)</UILabel>
+        </UILayout>
+        <UILabel style="hint">滑鼠移到格子上：那一天、那一小時的標籤會一起亮起來。</UILabel>
+      </UIScrollView>
+
+      <UIScrollView id="pageTree" gap="10">
+        <UILabel style="title">矩形樹圖（treemap）</UILabel>
+        <UILabel style="text">階層資料用面積表示比例：d3.hierarchy 加總數值，d3.treemap 算出每個方塊的位置。點方塊放大那個類別，再點一下回到全部。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">d3.hierarchy(data).sum((d) =&gt; d.value)</UILabel>
+          <UILabel style="codeLine">d3.treemap().paddingTop(22)(root)</UILabel>
+          <UILabel style="codeLine">root.leaves() // 每個方塊</UILabel>
+        </UILayout>
+        <UILabel style="hint">放大只是換一個根節點重新排版：資料不變，treemap 重新算一次位置。</UILabel>
+      </UIScrollView>
+
+      <UIScrollView id="pageForce" gap="10">
+        <UILabel style="title">力導向圖（forceSimulation）</UILabel>
+        <UILabel style="text">節點互相排斥、連線把它們拉近，模擬一下就自然排開。可以拖曳節點，放開後會彈回去；移過去看和誰相連。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">d3.forceSimulation(nodes).stop()</UILabel>
+          <UILabel style="codeLine">sim.tick() // 引擎每一幀算一步</UILabel>
+          <UILabel style="codeLine">sim.find(x, y, 20)</UILabel>
+        </UILayout>
+        <UILabel style="hint">模擬不用 d3 自己的計時器：先停掉，改由引擎每一幀呼叫 tick()，切到別的分頁就不再計算。拖曳用的是畫布的 pointerdown／pointermove／pointerup。</UILabel>
+      </UIScrollView>
+
+      <UIScrollView id="pageRadar" gap="10">
+        <UILabel style="title">雷達圖（lineRadial）</UILabel>
+        <UILabel style="text">每個角色六項能力，畫成閉合的多邊形。移到多邊形上看數值；點左上的圖例隱藏或顯示角色。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">d3.lineRadial()</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">.angle(a).radius(r)</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">.curve(d3.curveLinearClosed)</UILabel>
+          <UILabel style="codeLine">d3.polygonContains(points, p)</UILabel>
+        </UILayout>
+        <UILabel style="hint">重疊時取「包含滑鼠、面積最小」的多邊形，小的才不會被大的蓋住選不到。</UILabel>
+      </UIScrollView>
+
+      <UIScrollView id="pageStream" gap="10">
+        <UILabel style="title">河流圖（stack + wiggle）</UILabel>
+        <UILabel style="text">六個類型的每週玩家疊起來，以中線上下擺動（stackOffsetWiggle），一年裡誰多誰少一眼看出來。移到色帶上看那一週的數值。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">d3.stack().keys(keys)</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">.offset(d3.stackOffsetWiggle)</UILabel>
+          <UILabel style="codeLine">d3.area().curve(d3.curveBasis)</UILabel>
+        </UILayout>
+        <UILabel style="hint">名稱寫在每條色帶最粗的地方（d3.maxIndex）。</UILabel>
+      </UIScrollView>
+
+      <UIScrollView id="pageChord" gap="10">
+        <UILabel style="title">弦圖（chord + ribbon）</UILabel>
+        <UILabel style="text">矩陣資料的流向：玩家從一種遊戲類型轉去玩另一種。外圈是類型，帶子的粗細是人數，顏色是轉出的類型。移到圖上只看那個類型的流向。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">d3.chord().padAngle(0.05)(matrix)</UILabel>
+          <UILabel style="codeLine">d3.ribbon().radius(r).context(ctx)</UILabel>
+          <UILabel style="codeLine">d3.arc().innerRadius(r0)</UILabel>
+        </UILayout>
+        <UILabel style="hint">滑鼠的角度換算成類型：Math.atan2 算出角度，找落在哪個類型的 startAngle～endAngle 之間。</UILabel>
+      </UIScrollView>
+
+      <UIScrollView id="pageDensity" gap="10">
+        <UILabel style="title">密度等高線（contourDensity）</UILabel>
+        <UILabel style="text">上千個點疊在一起時，看密度比看點清楚。d3.contourDensity 算出等高線，d3.geoPath（不投影）畫進畫布。滾輪調整平滑程度，點一下顯示原始資料點。</UILabel>
+        <UILayout style="codeBox">
+          <UILabel style="codeLine">d3.contourDensity()</UILabel>
+          <UILabel style="codeLine" paddingLeft="14">.bandwidth(20)(points)</UILabel>
+          <UILabel style="codeLine">d3.geoPath(null, ctx)(contour)</UILabel>
+          <UILabel style="codeLine">chart.on('wheel', …)</UILabel>
+        </UILayout>
+        <UILabel style="hint">沒設 zoom 的圖表有人收聽 wheel 時才會攔截滾輪。等高線計算較慢，大小和頻寬沒變就重用，懸停時只重畫。</UILabel>
+      </UIScrollView>
+    </UIStackView>
+
+    <UILabel style="hint">拖曳圖表以外的地方轉動視角，滾輪縮放。</UILabel>
+  </UILayout>
+
+  <!-- ───────── 右：每個分頁的範例（跟著左邊的分頁切換） ───────── -->
+  <UIStackView id="stage" flex="1" transition="fade">
+    <!-- ① 折線圖 -->
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" gap="12" align="center">
+          <UILabel style="cardTitle">每日訪客與訂單</UILabel>
+          <UILayout dir="h" gap="4" align="center">
+            <UILayout width="10" height="3" background="#3dd6c6"/>
+            <UILabel style="hint">訪客</UILabel>
+            <UILayout width="10" height="3" background="#ffb35c"/>
+            <UILabel style="hint">訂單</UILabel>
+          </UILayout>
+          <UILayout flex="1"/>
+          <UILabel style="hint">滾輪縮放・拖曳平移</UILabel>
+        </UILayout>
+        <UID3Chart id="line" width="760" height="380" zoom="x" maxZoom="12" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+    <!-- ② 長條圖 -->
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" align="center">
+          <UILabel style="cardTitle">各區銷售（萬）</UILabel>
+          <UILayout flex="1"/>
+          <UILabel style="hint">移過去看數值・點擊選取</UILabel>
+        </UILayout>
+        <UID3Chart id="bars" width="760" height="340" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+    <!-- ③ 3D 看板（看板在 3D 場景裡，這裡只放提示） -->
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard" gap="2">
+        <UILabel style="cardTitle">各區銷售占比（3D 看板）</UILabel>
+        <UILabel style="hint">滑鼠移到扇形上放大・點擊選取・拖曳空白處轉動視角</UILabel>
+      </UILayout>
+    </UILayout>
+    <!-- ④ 套件：最小範例 -->
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard" dir="h" gap="16" align="start">
+        <UILayout gap="8">
+          <UILabel style="cardTitle">最小範例</UILabel>
+          <UILayout style="codeBox" padding="10 12">
+            <UILabel style="codeLine">const data = [4, 8, 15, 16, 23, 42];</UILabel>
+            <UILabel style="codeLine">chart.draw((ctx, { width, height, pointer }) =&gt; {</UILabel>
+            <UILabel style="codeLine" paddingLeft="14">const x = d3.scaleBand(d3.range(6), [0, width])</UILabel>
+            <UILabel style="codeLine" paddingLeft="28">.padding(0.2);</UILabel>
+            <UILabel style="codeLine" paddingLeft="14">const y = d3.scaleLinear([0, 42], [height, 0]);</UILabel>
+            <UILabel style="codeLine" paddingLeft="14">data.forEach((v, i) =&gt; {</UILabel>
+            <UILabel style="codeLine" paddingLeft="28">const over = pointer &amp;&amp; pointer.x &gt;= x(i)!</UILabel>
+            <UILabel style="codeLine" paddingLeft="42">&amp;&amp; pointer.x &lt; x(i)! + x.bandwidth();</UILabel>
+            <UILabel style="codeLine" paddingLeft="28">ctx.fillStyle = over ? '#ffd166' : '#9acd32';</UILabel>
+            <UILabel style="codeLine" paddingLeft="28">ctx.fillRect(x(i)!, y(v), x.bandwidth(), height - y(v));</UILabel>
+            <UILabel style="codeLine" paddingLeft="14">});</UILabel>
+            <UILabel style="codeLine">});</UILabel>
+          </UILayout>
+        </UILayout>
+        <UILayout gap="8">
+          <UILabel style="cardTitle">結果</UILabel>
+          <UID3Chart id="mini" width="300" height="240" background="#0e110cFF"/>
+        </UILayout>
+      </UILayout>
+    </UILayout>
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" align="center">
+          <UILabel style="cardTitle">三組玩家的分布</UILabel>
+          <UILayout flex="1"/>
+          <UILabel style="hint">滾輪縮放・拖曳平移・移過去看最近的點</UILabel>
+        </UILayout>
+        <UID3Chart id="scatter" width="760" height="460" zoom="xy" maxZoom="8" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" align="center">
+          <UILabel style="cardTitle">每小時活躍玩家</UILabel>
+          <UILayout flex="1"/>
+          <UILabel style="hint">移過去看數值</UILabel>
+        </UILayout>
+        <UID3Chart id="heat" width="760" height="460" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" align="center">
+          <UILabel style="cardTitle">各類型遊戲營收（萬）</UILabel>
+          <UILayout flex="1"/>
+          <UILabel style="hint">點方塊放大・再點一下回到全部</UILabel>
+        </UILayout>
+        <UID3Chart id="tree" width="760" height="460" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" align="center">
+          <UILabel style="cardTitle">團隊協作網路</UILabel>
+          <UILayout flex="1"/>
+          <UILabel style="hint">拖曳節點・移過去看合作對象</UILabel>
+        </UILayout>
+        <UID3Chart id="force" width="760" height="460" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" align="center">
+          <UILabel style="cardTitle">角色能力</UILabel>
+          <UILayout flex="1"/>
+          <UILabel style="hint">移過去看數值・點圖例隱藏角色</UILabel>
+        </UILayout>
+        <UID3Chart id="radar" width="760" height="460" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" align="center">
+          <UILabel style="cardTitle">各類型遊戲每週玩家（萬人）</UILabel>
+          <UILayout flex="1"/>
+          <UILabel style="hint">移過去看那一週</UILabel>
+        </UILayout>
+        <UID3Chart id="stream" width="760" height="460" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" align="center">
+          <UILabel style="cardTitle">玩家在遊戲類型之間的流動</UILabel>
+          <UILayout flex="1"/>
+          <UILabel style="hint">移到圖上看那個類型的流向</UILabel>
+        </UILayout>
+        <UID3Chart id="chord" width="760" height="460" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+    <UILayout padding="24" align="start">
+      <UILayout style="hudCard">
+        <UILayout dir="h" align="center">
+          <UILabel style="cardTitle">玩家位置的密度</UILabel>
+          <UILayout flex="1"/>
+          <UILabel style="hint">滾輪調整頻寬・點一下顯示資料點</UILabel>
+        </UILayout>
+        <UID3Chart id="density" width="760" height="460" background="#0e110cFF"/>
+      </UILayout>
+    </UILayout>
+  </UIStackView>
+</UI>

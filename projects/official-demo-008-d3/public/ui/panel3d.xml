@@ -1,0 +1,8 @@
+<!--
+  3D 空間裡的看板（UIPanel3D 的 src）：一樣的 XML、一樣的 <UID3Chart>，畫在 3D 平面上，
+  滑鼠一樣可以懸停、點擊。
+-->
+<UI width="340" height="380" padding="14" gap="8" background="#12160f" radius="14" border="2 #9acd32">
+  <UILabel fontSize="18" fontWeight="bold" color="#c8f07a">各區銷售占比</UILabel>
+  <UID3Chart id="donut" width="312" height="312" background="#12160fFF"/>
+</UI>

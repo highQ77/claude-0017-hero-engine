@@ -65,6 +65,52 @@ describe('UICanvas 畫布', () => {
     expect(events).toEqual(['pointerdown 50,20', 'pointermove 60,30', 'pointerup 70,40']);
   });
 
+  test('懸停：沒按住的移動觸發 pointerhover，移開、離開畫面觸發 pointerleave；拖曳中不觸發 pointerhover', async () => {
+    const ui = await makeUI(
+      '<UI padding="10" gap="10"><UICanvas id="c" width="200" height="100"/><UIButton id="b" text="x"/></UI>',
+    );
+    const c = ui.require<UICanvas>('c');
+    const events: string[] = [];
+    c.on('pointerhover', (e) => {
+      const p = e.value as { x: number; y: number };
+      events.push(`hover ${Math.round(p.x)},${Math.round(p.y)}`);
+    });
+    c.on('pointerleave', () => events.push('leave'));
+    c.on('pointermove', () => events.push('drag'));
+    ui.handlePointer('move', 10 + 5, 10 + 6);
+    ui.handlePointer('move', 10 + 7, 10 + 8);
+    ui.handlePointer('move', 400, 400); // 移到畫布外（空白處）
+    expect(events).toEqual(['hover 5,6', 'hover 7,8', 'leave']);
+    events.length = 0;
+    ui.handlePointer('move', 10 + 20, 10 + 20);
+    ui.handlePointer('leave', 0, 0); // 滑鼠離開整個畫面
+    expect(events).toEqual(['hover 20,20', 'leave']);
+    events.length = 0;
+    ui.handlePointer('down', 10 + 30, 10 + 30);
+    ui.handlePointer('move', 10 + 40, 10 + 40); // 拖曳中：pointermove，不是 pointerhover
+    ui.handlePointer('up', 10 + 40, 10 + 40);
+    ui.handlePointer('move', 10 + 41, 10 + 41); // 放開後繼續懸停
+    expect(events).toEqual(['drag', 'hover 41,41']);
+  });
+
+  test('滾輪：有人收聽 wheel 才攔截（不捲動外層列表），event.value 有繪圖座標與捲動量', async () => {
+    const ui = await makeUI(
+      '<UI><UIScrollView id="list" height="120"><UICanvas id="c" width="200" height="100"/><UILayout height="400"/></UIScrollView></UI>',
+    );
+    const c = ui.require<UICanvas>('c');
+    const list = ui.require('list') as unknown as { scrollTop: number };
+    // 沒人收聽：照常捲動列表
+    expect(ui.handleWheel(0, 30, 50, 50)).toBe(true);
+    expect(list.scrollTop).toBe(30);
+    // 有人收聽：畫布用掉，列表不動
+    const got: unknown[] = [];
+    c.on('wheel', (e) => got.push(e.value));
+    ui.handleWheel(0, 30, 50, 50);
+    expect(list.scrollTop).toBe(30);
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ dx: 0, dy: 30 });
+  });
+
   test('pointerEvents="none" 時滑鼠穿透', async () => {
     const ui = await makeUI('<UI><UICanvas id="c" pointerEvents="none"/></UI>');
     const c = ui.require<UICanvas>('c');

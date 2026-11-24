@@ -51,6 +51,8 @@ const MAX_PIXEL_RATIO = 4;
  * - 尺寸改變時畫布內容會清空，並觸發 resize 事件（onResize），在那裡重畫
  * - 滑鼠／觸控：按下、拖曳、放開觸發 pointerdown、pointermove、pointerup 事件
  *   （onPointerdown 等），event.value 是繪圖座標 { x, y }（已換算縮放，可以直接拿來畫）
+ * - 沒有按住時的移動觸發 pointerhover、移開觸發 pointerleave；有人收聽 wheel 時，滾輪觸發 wheel 事件
+ *   （event.value 是 { x, y, dx, dy }）。在 3D 面板（ui3d）裡一樣有效
  *
  * @example <UICanvas id="chart" width="320" height="200" background="#333333FF"/>
  */
@@ -283,6 +285,37 @@ export class UICanvas extends UIElement {
       up: (ux, uy) => this.emit('pointerup', { value: this.toCanvasPoint(ux, uy) }),
       cancel: () => this.emit('pointerup', { value: null }),
     };
+  }
+
+  /**
+   * 滑鼠在畫布上移動（沒有按住）：觸發 pointerhover 事件，event.value 是繪圖座標 { x, y }
+   * （懸停提示、高亮滑鼠下的資料點）
+   * @param x X（介面座標）
+   * @param y Y（介面座標）
+   */
+  override pointerHover(x: number, y: number): void {
+    if (this.attrs.pointerEvents === 'none') return;
+    this.emit('pointerhover', { value: this.toCanvasPoint(x, y) });
+  }
+
+  /** 滑鼠離開畫布：觸發 pointerleave 事件（event.value 是 null），例如收起懸停提示 */
+  override pointerLeave(): void {
+    if (this.attrs.pointerEvents === 'none') return;
+    this.emit('pointerleave', { value: null });
+  }
+
+  /**
+   * 滾輪：有人收聽 wheel 事件時觸發，event.value 是 { x, y, dx, dy }（x、y 為繪圖座標，dy 往下為正），
+   * 並且不再捲動外層的列表；沒人收聽時照常捲動列表
+   * @param dx 橫向捲動量
+   * @param dy 縱向捲動量
+   * @param x X（介面座標）
+   * @param y Y（介面座標）
+   */
+  override wheel(dx: number, dy: number, x: number, y: number): boolean {
+    if (this.attrs.pointerEvents === 'none' || !this.hasListener('wheel')) return false;
+    this.emit('wheel', { value: { ...this.toCanvasPoint(x, y), dx, dy } });
+    return true;
   }
 
   /**

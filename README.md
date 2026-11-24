@@ -33,7 +33,7 @@ HERO 遊戲引擎 = Threejs 繪圖引擎 x Claude 引擎實作 x William77 組�
 | `ui2d` / `ui3d`      | 2D 介面（XML、[Yoga](https://www.yogalayout.dev/) 排版、RWD、小地圖）與 3D 空間中的介面 |
 | `text3d`             | 3D 文字                                                                                 |
 | `network`            | 多人連線（WebSocket，搭配轉送伺服器）                                                   |
-| `plugins`            | 套件管理（`PluginManager`），例如 `@engine/packages/perf-monitor`                       |
+| `plugins`            | 套件管理（`PluginManager`），例如 `@engine/packages/perf-monitor`、`@engine/packages/d3-chart`（d3.js 互動圖表） |
 
 ## 需求
 
@@ -141,6 +141,7 @@ engine.use(new RenderPlugin({ shadows: true }));
 | `official-demo-005-postfx-shader` | 後製與著色器                   |
 | `official-demo-006-ai`            | AI                             |
 | `official-demo-007-network`       | 多人連線                       |
+| `official-demo-008-d3`            | d3.js 互動圖表：12 種圖（2D 介面與 3D 看板） |
 
 ## 目錄結構
 

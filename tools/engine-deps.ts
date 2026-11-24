@@ -16,6 +16,9 @@ export const ENGINE_DEPS = [
   'lil-gui',
   'tone',
   '@dimforge/rapier3d-compat',
+  // d3.js（套件 @engine/packages/d3-chart 與範例專案用的資訊視覺化）
+  'd3',
+  'd3-zoom',
   ...[
     'controls/OrbitControls.js',
     'controls/TransformControls.js',
